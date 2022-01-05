@@ -1,0 +1,29 @@
+name: Compile Typescript
+on: pull_request
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16
+      - run: npm install
+
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run build
+
+  docs:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run docs
+
+  commit:
+    needs: [build, docs]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: stefanzweifel/git-auto-commit-action@v4
