@@ -1,0 +1,51 @@
+name: Conda Actions
+description: Collection of GitHub Actions used by the conda org.
+author: Anaconda Inc.
+inputs:
+  github_token:
+    description: A GitHub token.
+    required: false
+    default: ${{ github.token }}
+  command:
+    description: The command to run (e.g. issue-in-project, members).
+    required: true
+  org:
+    description: >-
+      The organization (e.g. conda).
+      command ∈ [issue-in-project, members]
+    required: false
+  user:
+    description: >-
+      The user (e.g. conda-bot).
+      command ∈ [issue-in-project]
+    required: false
+  repo:
+    description: >-
+      The repository (e.g. conda/conda).
+      command ∈ [issue-in-project]
+    required: false
+    default: ${{ github.repository }}
+  project:
+    description: >-
+      The project, name (e.g. Triaging) or number (e.g. 5).
+      command ∈ [issue-in-project]
+    required: false
+  issue:
+    description: >-
+      The issue, number (e.g. conda/conda#1, conda#1, #1) or id (e.g. ).
+      command ∈ [issue-in-project]
+    required: false
+  team:
+    description: >-
+      The organization team.
+      command ∈ [members]
+    required: false
+outputs:
+  contains:
+    description: Whether the specified issue is contained in the org/user/repo project.
+runs:
+  using: node16
+  main: app/index.js
+branding:
+  icon: hash
+  color: green
