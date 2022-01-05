@@ -1,0 +1,41 @@
+<!DOCTYPE html><html class="default"><head><meta charSet="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>conda-actions</title><meta name="description" content="Documentation for conda-actions"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script async src="assets/search.js" id="search-script"></script></head><body><script>document.body.classList.add(localStorage.getItem("tsd-theme") || "os")</script><header><div class="tsd-page-toolbar"><div class="container"><div class="table-wrap"><div class="table-cell" id="tsd-search" data-base="."><div class="field"><label for="tsd-search-field" class="tsd-widget search no-caption">Search</label><input type="text" id="tsd-search-field"/></div><ul class="results"><li class="state loading">Preparing search index...</li><li class="state failure">The search index is not available</li></ul><a href="index.html" class="title">conda-actions</a></div><div class="table-cell" id="tsd-widgets"><div id="tsd-filter"><a href="#" class="tsd-widget options no-caption" data-toggle="options">Options</a><div class="tsd-filter-group"><div class="tsd-select" id="tsd-filter-visibility"><span class="tsd-select-label">All</span><ul class="tsd-select-list"><li data-value="public">Public</li><li data-value="protected">Public/Protected</li><li data-value="private" class="selected">All</li></ul></div> <input type="checkbox" id="tsd-filter-inherited" checked/><label class="tsd-widget" for="tsd-filter-inherited">Inherited</label><input type="checkbox" id="tsd-filter-externals" checked/><label class="tsd-widget" for="tsd-filter-externals">Externals</label></div></div><a href="#" class="tsd-widget menu no-caption" data-toggle="menu">Menu</a></div></div></div></div><div class="tsd-page-title"><div class="container"><h1>conda-actions</h1></div></div></header><div class="container container-main"><div class="row"><div class="col-8 col-content"><div class="tsd-panel tsd-typography">
+<a href="#conda-github-actions" id="conda-github-actions" style="color: inherit; text-decoration: none;">
+  <h1>Conda GitHub Actions</h1>
+</a>
+<p>A GitHub Action encapsulating a collection of GraphQL queries used across the conda org for issue and project automation.</p>
+
+<a href="#usage" id="usage" style="color: inherit; text-decoration: none;">
+  <h2>Usage</h2>
+</a>
+<p>This NodeJS package is designed to be both a GitHub Action and a CLI tool. The latter primarily being available for debugging and testing purposes.</p>
+
+<a href="#github-action" id="github-action" style="color: inherit; text-decoration: none;">
+  <h3>GitHub Action</h3>
+</a>
+<p>In your GitHub repository include this action in your workflows:</p>
+<pre><code class="language-yaml">
+</code></pre>
+
+<a href="#cli" id="cli" style="color: inherit; text-decoration: none;">
+  <h3>CLI</h3>
+</a>
+<p>From the terminal we can invoke this package as a NodeJS executable:</p>
+
+<a href="#one-time-setup" id="one-time-setup" style="color: inherit; text-decoration: none;">
+  <h4>One-time Setup</h4>
+</a>
+<pre><code class="language-bash"><span class="hl-0"># clone repository</span><br/><span class="hl-1">git clone git@github.com:conda/actions.git &lt;local directory&gt;</span><br/><span class="hl-2">cd</span><span class="hl-1"> &lt;local directory&gt;</span><br/><br/><span class="hl-0"># create development/testing environment</span><br/><span class="hl-1">conda create -n conda-actions nodejs</span><br/><span class="hl-1">npm install</span>
+</code></pre>
+
+<a href="#standard-cli-usage" id="standard-cli-usage" style="color: inherit; text-decoration: none;">
+  <h4>Standard CLI Usage</h4>
+</a>
+<pre><code class="language-bash"><span class="hl-0"># can invoke the TypeScript code (dev) or the compiled JS code (app)</span><br/><span class="hl-1">npm run [dev|app] -- --help</span><br/><br/><span class="hl-0"># list issues in orgs/conda/projects/5</span><br/><span class="hl-1">npm run [dev|app] -- issue-in-project --org conda 5</span><br/><br/><span class="hl-0"># list issues in user/conda-bot/projects/5</span><br/><span class="hl-1">npm run [dev|app] -- issue-in-project --user conda 5</span><br/><br/><span class="hl-0"># list issues in conda/conda/projects/5</span><br/><span class="hl-1">npm run [dev|app] -- issue-in-project --repo conda/conda 5</span>
+</code></pre>
+
+<a href="#miming-github-action-usage" id="miming-github-action-usage" style="color: inherit; text-decoration: none;">
+  <h4>Miming GitHub Action Usage</h4>
+</a>
+<pre><code class="language-bash"><span class="hl-0"># can invoke the TypeScript code (dev) or the compiled JS code (app)</span><br/><span class="hl-1">npm run [dev|app]</span><br/><br/><span class="hl-0"># list issues in orgs/conda/projects/5</span><br/><span class="hl-1">INPUT_SUBCOMMAND=issue-in-project \</span><br/><span class="hl-1">    INPUT_ORG=conda \</span><br/><span class="hl-1">    INPUT_PROJECT=5 \</span><br/><span class="hl-1">    npm run [dev|app]</span><br/><br/><span class="hl-0"># list issues in user/conda-bot/projects/5</span><br/><span class="hl-1">INPUT_SUBCOMMAND=issue-in-project \</span><br/><span class="hl-1">    INPUT_USER=conda-bot \</span><br/><span class="hl-1">    INPUT_PROJECT=5 \</span><br/><span class="hl-1">    npm run [dev|app]</span><br/><br/><span class="hl-0"># list issues in conda/conda/projects/5</span><br/><span class="hl-1">INPUT_SUBCOMMAND=issue-in-project \</span><br/><span class="hl-1">    INPUT_REPO=conda/conda \</span><br/><span class="hl-1">    INPUT_PROJECT=5 \</span><br/><span class="hl-1">    npm run [dev|app]</span>
+</code></pre>
+</div></div><div class="col-4 col-menu menu-sticky-wrap menu-highlight"><nav class="tsd-navigation primary"><ul><li class="current"><a href="modules.html">Exports</a></li><li class=" tsd-kind-namespace"><a href="modules/api.html">api</a></li><li class=" tsd-kind-namespace"><a href="modules/queries.html">queries</a></li><li class=" tsd-kind-namespace"><a href="modules/types.html">types</a></li><li class=" tsd-kind-namespace"><a href="modules/utils.html">utils</a></li></ul></nav><nav class="tsd-navigation secondary menu-sticky"><ul><li class="tsd-kind-function"><a href="modules.html#cli" class="tsd-kind-icon">cli</a></li><li class="tsd-kind-function"><a href="modules.html#gha" class="tsd-kind-icon">gha</a></li></ul></nav></div></div></div><footer class="with-border-bottom"><div class="container"><h2>Settings</h2><p>Theme <select id="theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></p></div></footer><div class="container tsd-generator"><p>Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></div><div class="overlay"></div><script src="assets/main.js"></script></body></html>
