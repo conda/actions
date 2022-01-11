@@ -3,7 +3,7 @@ name: issue-in-project
 on:
   pull_request:
     paths:
-      - issue-in-project/**
+      - issue-in-project/src/**
 
 jobs:
   build:
