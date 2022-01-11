@@ -3,7 +3,7 @@ name: user-in-team
 on:
   pull_request:
     paths:
-      - user-in-team/**
+      - user-in-team/src/**
 
 jobs:
   build:
