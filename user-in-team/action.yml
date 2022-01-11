@@ -1,0 +1,28 @@
+name: User in Team
+description: Detect whether a user is part of the specified team.
+author: Anaconda Inc.
+inputs:
+  github_token:
+    description: A GitHub token.
+    required: true
+    default: ${{ github.token }}
+  org:
+    description: The organization (e.g. conda).
+    required: true
+  team:
+    description: The organization team (e.g. conda-core).
+    required: true
+  user:
+    description: The user (e.g. conda-bot).
+    required: false
+outputs:
+  contains:
+    description: >-
+      If `user` is defined return whether they are in the specified team otherwise
+      returns list of users in the team.
+runs:
+  using: node16
+  main: dist/index.js
+branding:
+  icon: hash
+  color: green
