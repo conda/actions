@@ -21,3 +21,6 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: Rebuild issue-in-project
+          commit_user_name: Conda Bot
+          commit_user_email: conda-bot@users.noreply.github.com
+          commit_author: Conda Bot <conda-bot@users.noreply.github.com>
