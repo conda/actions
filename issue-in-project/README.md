@@ -8,7 +8,7 @@ In your GitHub repository include this action in your workflows:
 
 ```yaml
 - id: in_project
-  uses: conda/actions/issue-in-project@v1
+  uses: conda/actions/issue-in-project
   with:
     # [required]
     # the project owner (org, user, or repo)
