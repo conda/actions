@@ -8,7 +8,7 @@ In your GitHub repository include this action in your workflows:
 
 ```yaml
 - id: in_team
-  uses: conda/actions/user-in-team@v1
+  uses: conda/actions/user-in-team
   with:
     # [required]
     # the team org
