@@ -36,7 +36,7 @@ exports.api = __importStar(__nccwpck_require__(8229));
 exports.utils = __importStar(__nccwpck_require__(1314));
 if (require.main === require.cache[eval('__filename')]) {
     try {
-        (process.argv.length > 2) ? (0, cli_1.cli)() : (0, gha_1.gha)();
+        process.argv.length > 2 ? (0, cli_1.cli)() : (0, gha_1.gha)();
     }
     catch (err) {
         if (err instanceof Error)
@@ -8354,7 +8354,7 @@ async function* getProjectIssues(owner, project) {
     const qowner = formatOwner(owner);
     (0, core_1.info)(`project: ${project}`);
     let hasNext = true;
-    let cursor = "";
+    let cursor = '';
     while (hasNext) {
         const resp = await octokit.graphql(`{
         ${qowner} {
@@ -8383,7 +8383,8 @@ async function* getProjectIssues(owner, project) {
           }
         }
       }`);
-        const rcolumns = (resp?.organization || resp?.user || resp?.repository)?.project?.columns;
+        const rcolumns = (resp?.organization || resp?.user || resp?.repository)
+            ?.project?.columns;
         if (!rcolumns?.nodes)
             break;
         hasNext = rcolumns.pageInfo.hasNextPage;
@@ -8406,7 +8407,7 @@ async function issueInProject(owner, project, issue = undefined) {
     const issues = getProjectIssues(owner, project);
     if (!issue)
         return await (0, utils_1.flatten)(issues);
-    return !!await (0, utils_1.contains)(issues, { id: issue });
+    return !!(await (0, utils_1.contains)(issues, { id: issue }));
 }
 exports.issueInProject = issueInProject;
 
@@ -8425,13 +8426,15 @@ const api_1 = __nccwpck_require__(8229);
 const core_1 = __nccwpck_require__(2186);
 async function cli(argv, exceptionError) {
     const program = new commander_1.Command()
-        .name("issue-in-project")
+        .name('issue-in-project')
         .showSuggestionAfterError()
         .showHelpAfterError();
     if (exceptionError)
-        program.exitOverride(err => { throw err; });
+        program.exitOverride(err => {
+            throw err;
+        });
     program
-        .description("detect if an issue is found within a given project, if no issue defined simply list all issues")
+        .description('detect if an issue is found within a given project, if no issue defined simply list all issues')
         .option('-o, --org <org>', 'the organization to search (e.g. conda)')
         .option('-u, --user <user>', 'the user to search (e.g. conda-bot)')
         .option('-r, --repo, --repository <repo>', 'the repository to search (e.g. conda/conda)')
@@ -8441,7 +8444,7 @@ async function cli(argv, exceptionError) {
         console.log(await (0, api_1.issueInProject)(owner, project, issue));
     });
     if (argv)
-        program.parseAsync(argv, { from: "user" });
+        program.parseAsync(argv, { from: 'user' });
     else
         program.parseAsync();
 }
@@ -8533,9 +8536,9 @@ function getToken() {
             return (0, fs_1.readFileSync)((0, path_1.join)((0, os_1.homedir)(), '.github_token'), 'utf8').trim();
         }
         catch (e2) {
-            if (e2 instanceof Error
-                && "code" in e2
-                && e2.code == 'ENOENT')
+            if (e2 instanceof Error &&
+                'code' in e2 &&
+                e2.code == 'ENOENT')
                 throw e1;
             else
                 throw e2;
