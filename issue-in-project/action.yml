@@ -20,7 +20,7 @@ inputs:
     description: The project (e.g. 5).
     required: true
   issue:
-    description: The issue id (e.g. ${{ github.event.issue.id }}).
+    description: The issue id (e.g. github.event.issue.id).
     required: false
 outputs:
   contains:
