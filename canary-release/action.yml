@@ -31,38 +31,50 @@ runs:
     - uses: conda-incubator/setup-miniconda@v2
 
     - name: Create URL to the run output
-      id: vars
+      id: run-url
       shell: bash -l {0}
       run: echo ::set-output name=run-url::https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
 
-    - name: Find Comment
+    - name: Create status table head
+      id: status-tablehead
+      shell: bash -l {0}
+      run: echo "::set-output name=content::| Run | Outcome | User | Matrix | "
+
+    - name: Create status comment
+      id: status-comment
+      shell: bash -l {0}
+      run: echo "::set-output name=content::<!-- Status updates for PR following (do not delete) -->"
+
+    - name: Find Comment with status
       uses: peter-evans/find-comment@v1
       if: inputs.comment-token != ''
-      id: find-comment
+      id: before-build
       with:
         issue-number: ${{ inputs.pr }}
         comment-author: ${{ inputs.comment-author }}
-        body-includes: The canary build for
+        body-includes: ${{ steps.status-comment.outputs.content }}
         direction: last
 
-    - name: Create comment
+    - name: Create comment if there is no status update
       uses: peter-evans/create-or-update-comment@v1
       if: |
-        steps.find-comment.outputs.comment-id == '' &&
-        inputs.comment-token != ''
+        inputs.comment-token != '' &&
+        steps.before-build.outputs.comment-id == ''
       id: create-comment
       with:
         issue-number: ${{ inputs.pr }}
         body: |
-          The canary build for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [has started][1]!
+          # Canary release status
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.run-url.outputs.run-url }}) in #${{ inputs.pr }} by ${{ github.actor }}!
 
-          Once it's done, use this command to try it out in an empty conda environment:
+          Once it's done, use this command to try it out in a new conda environment:
 
           ```
           conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}
           ```
 
-          [1]: ${{ steps.vars.outputs.run-url }}
+          ------
+          ${{ steps.status-comment.outputs.content }}
         reactions: 'rocket'
         token: ${{ inputs.comment-token }}
 
@@ -102,15 +114,40 @@ runs:
         echo "Use this command to try out the build:"
         echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
 
-    - name: Leave comment on failure
+    - name: Find Comment after build
+      uses: peter-evans/find-comment@v1
+      if: inputs.comment-token != ''
+      id: after-build
+      with:
+        issue-number: ${{ inputs.pr }}
+        comment-author: ${{ inputs.comment-author }}
+        body-includes: ${{ steps.status-comment.outputs.content }}
+        direction: last
+
+    - name: Leave comment after build (append to status table)
       if: |
-        steps.build.outcome == 'failure' &&
-        inputs.comment-token != ''
+        steps.after-build.output.comment-id != '' &&
+        inputs.comment-token != '' &&
+        contains(steps.after-build.output.comment-body, steps.status-tablehead.outputs.content)
       uses: peter-evans/create-or-update-comment@v1
       with:
+        comment-id: ${{ steps.after-build.output.comment-id }}
         body: |
-          The canary build failed! Please check the [workflow run][1] for errors.
+          | [${{ github.run_id }}](${{ steps.run-url.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
+        reactions: 'eyes'
+        token: ${{ inputs.comment-token }}
 
-          [1]: ${{ steps.vars.outputs.run-url }}
+    - name: Leave comment after build (add status table)
+      if: |
+        steps.after-build.output.comment-id != '' &&
+        inputs.comment-token != '' &&
+        !contains(steps.after-build.output.comment-body, steps.status-tablehead.outputs.content)
+      uses: peter-evans/create-or-update-comment@v1
+      with:
+        comment-id: ${{ steps.after-build.output.comment-id }}
+        body: |
+          ${{ steps.status-tablehead.outputs.content }}
+          |---|---|---|---|
+          | [${{ github.run_id }}](${{ steps.run-url.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
         reactions: 'eyes'
         token: ${{ inputs.comment-token }}
