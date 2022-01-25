@@ -117,8 +117,8 @@ runs:
       id: after-build
       with:
         issue-number: ${{ inputs.pr }}
-        comment-author: "${{ inputs.comment-author }}"
-        body-includes: "${{ steps.vars.outputs.status-header }}"
+        comment-author: '${{ inputs.comment-author }}'
+        body-includes: '${{ steps.vars.outputs.status-header }}'
 
     - name: Leave comment after build
       if: |
