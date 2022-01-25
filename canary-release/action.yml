@@ -122,9 +122,9 @@ runs:
 
     - shell: bash -l {0}
       run: |
-        echo ${{ steps.after-build.outputs.comment-id }}
-        echo ${{ steps.after-build.outputs.comment-body }}
-        echo ${{ steps.after-build.outputs.comment-author }}
+        echo "${{ contains(steps.after-build.output.comment-body, steps.vars.outputs.status-tablehead) }}"
+        echo "${{ inputs.comment-token == '' }}"
+        echo "${{ steps.after-build.output.comment-id == '' }}"
 
     - name: Leave comment after build (append to status table)
       if: |
