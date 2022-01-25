@@ -34,20 +34,13 @@ runs:
   steps:
     - uses: conda-incubator/setup-miniconda@v2
 
-    - name: Create URL to the run output
-      id: run-url
+    - name: Set output variables
+      id: vars
       shell: bash -l {0}
-      run: echo ::set-output name=run-url::https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-
-    - name: Create status table head
-      id: status-tablehead
-      shell: bash -l {0}
-      run: echo "::set-output name=content::| Run | Outcome | User | Matrix | "
-
-    - name: Create status comment
-      id: status-comment
-      shell: bash -l {0}
-      run: echo "::set-output name=content::<!-- Status updates for PR following (do not delete) -->"
+      run: |
+        echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        echo ::set-output name=status-tablehead::"| Run | Outcome | User | Matrix |"
+        echo ::set-output name=status-comment::"<!-- Status updates for PR following (do not delete) -->"
 
     - name: Find Comment with status
       uses: peter-evans/find-comment@v1
@@ -56,7 +49,7 @@ runs:
       with:
         issue-number: ${{ inputs.pr }}
         comment-author: "${{ inputs.comment-author }}"
-        body-includes: "${{ steps.status-comment.outputs.content }}"
+        body-includes: "${{ steps.vars.outputs.status-comment }}"
         direction: last
 
     - name: Create comment if there is no status update
@@ -69,7 +62,7 @@ runs:
         issue-number: ${{ inputs.pr }}
         body: |
           # ${{ inputs.comment-headline }}
-          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.run-url.outputs.run-url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run-url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
 
           Once it's done, use this command to try it out in a new conda environment:
 
@@ -78,7 +71,7 @@ runs:
           ```
 
           ------
-          ${{ steps.status-comment.outputs.content }}
+          ${{ steps.vars.outputs.status-comment }}
         reactions: 'rocket'
         token: ${{ inputs.comment-token }}
 
@@ -125,19 +118,19 @@ runs:
       with:
         issue-number: ${{ inputs.pr }}
         comment-author: "${{ inputs.comment-author }}"
-        body-includes: "${{ steps.status-comment.outputs.content }}"
+        body-includes: "${{ steps.vars.outputs.status-comment }}"
         direction: last
 
     - name: Leave comment after build (append to status table)
       if: |
         steps.after-build.output.comment-id != '' &&
         inputs.comment-token != '' &&
-        contains(steps.after-build.output.comment-body, steps.status-tablehead.outputs.content)
+        contains(steps.after-build.output.comment-body, steps.vars.outputs.status-tablehead)
       uses: peter-evans/create-or-update-comment@v1
       with:
         comment-id: ${{ steps.after-build.output.comment-id }}
         body: |
-          | [${{ github.run_id }}](${{ steps.run-url.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
+          | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
         reactions: 'eyes'
         token: ${{ inputs.comment-token }}
 
@@ -145,13 +138,13 @@ runs:
       if: |
         steps.after-build.output.comment-id != '' &&
         inputs.comment-token != '' &&
-        !contains(steps.after-build.output.comment-body, steps.status-tablehead.outputs.content)
+        !contains(steps.after-build.output.comment-body, steps.vars.outputs.status-tablehead)
       uses: peter-evans/create-or-update-comment@v1
       with:
         comment-id: ${{ steps.after-build.output.comment-id }}
         body: |
-          ${{ steps.status-tablehead.outputs.content }}
+          ${{ steps.vars.outputs.status-tablehead }}
           |---|---|---|---|
-          | [${{ github.run_id }}](${{ steps.run-url.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
+          | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
         reactions: 'eyes'
         token: ${{ inputs.comment-token }}
