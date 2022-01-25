@@ -41,24 +41,11 @@ runs:
         echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
         echo ::set-output name=status-header::"Status updates for builds"
 
-    - name: Find Comment with status
-      uses: peter-evans/find-comment@v1
-      if: inputs.comment-token != ''
-      id: before-build
-      with:
-        issue-number: ${{ inputs.pr }}
-        comment-author: "${{ inputs.comment-author }}"
-        body-includes: "${{ steps.vars.outputs.status-header }}"
-        direction: last
-
     - name: Create comment if there is no status update
-      uses: peter-evans/create-or-update-comment@v1
-      if: |
-        inputs.comment-token != '' &&
-        steps.before-build.outputs.comment-id == ''
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: inputs.comment-token != ''
       with:
-        issue-number: ${{ inputs.pr }}
-        body: |
+        message: |
           # ${{ inputs.comment-headline }}
           > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run-url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
 
@@ -70,10 +57,9 @@ runs:
 
           ------
           ### ${{ steps.vars.outputs.status-header }}
-          | Run | Outcome | User | Matrix |
+          | Run | Outcome | User | Runner |
           |---|---|---|---|
-        reactions: 'rocket'
-        token: ${{ inputs.comment-token }}
+        GITHUB_TOKEN: ${{ inputs.comment-token }}
 
     - name: Build & upload package
       # make sure we don't run on forks
@@ -111,22 +97,11 @@ runs:
         echo "Use this command to try out the build:"
         echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
 
-    - name: Find Comment after build
-      uses: peter-evans/find-comment@v1
-      if: inputs.comment-token != ''
-      id: after-build
-      with:
-        issue-number: ${{ inputs.pr }}
-        comment-author: '${{ inputs.comment-author }}'
-        body-includes: '${{ steps.vars.outputs.status-header }}'
-
     - name: Leave comment after build
       if: inputs.comment-token != ''
-      uses: peter-evans/create-or-update-comment@v1
+      uses: marocchino/sticky-pull-request-comment@v2
       with:
-        issue-number: ${{ inputs.pr }}
-        comment-id: ${{ steps.after-build.output.comment-id }}
-        body: |
-          | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
-        reactions: 'eyes'
-        token: ${{ inputs.comment-token }}
+        append: true
+        message: |
+          | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ runner.os }} ${{ runner.arch }} |
+        GITHUB_TOKEN: ${{ inputs.comment-token }}
