@@ -56,9 +56,7 @@ runs:
           ```
 
           ------
-          ### ${{ steps.vars.outputs.status-header }}
-          | Run | Outcome | User | Runner |
-          |---|---|---|---|
+
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
     - name: Build & upload package
@@ -98,10 +96,19 @@ runs:
         echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
 
     - name: Leave comment after build
-      if: inputs.comment-token != ''
+      if: inputs.comment-token != '' && success()
       uses: marocchino/sticky-pull-request-comment@v2
       with:
         append: true
         message: |
-          | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ runner.os }} ${{ runner.arch }} |
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) succeeded on ${{ runner.os }}/${{ runner.arch }}
+        GITHUB_TOKEN: ${{ inputs.comment-token }}
+
+    - name: Leave comment after build
+      if: inputs.comment-token != '' && failure()
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        append: true
+        message: |
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) failed on ${{ runner.os }}/${{ runner.arch }}
         GITHUB_TOKEN: ${{ inputs.comment-token }}
