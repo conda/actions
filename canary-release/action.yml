@@ -31,9 +31,7 @@ runs:
     - name: Set output variables
       id: vars
       shell: bash -l {0}
-      run: |
-        echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-        echo ::set-output name=status-header::"Status updates for builds"
+      run: echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
     - name: Create comment if there is no status update
       uses: marocchino/sticky-pull-request-comment@v2
@@ -95,7 +93,7 @@ runs:
       with:
         append: true
         message: |
-          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) succeeded on ${{ runner.os }}/${{ runner.arch }}
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) succeeded on ${{ runner.os }} (${{ runner.arch }})
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
     - name: Leave comment after build
@@ -104,5 +102,5 @@ runs:
       with:
         append: true
         message: |
-          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) failed on ${{ runner.os }}/${{ runner.arch }}
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) failed on ${{ runner.os }} (${{ runner.arch }})
         GITHUB_TOKEN: ${{ inputs.comment-token }}
