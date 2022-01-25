@@ -1,0 +1,46 @@
+name: Read URL YAML
+description: Reads in YAML file from URL.
+author: Anaconda Inc.
+inputs:
+  path:
+    description: Path to YAML file in this repo to read.
+    required: true
+  scope:
+    description: Path of keys to the value to extract from file (e.g. foo.bar).
+    required: false
+outputs:
+  data:
+    description: Data read from YAML file.
+    value: ${{ steps.read_yaml.outputs.data }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v2
+      with:
+        node-version: 16
+    - run: npm install js-yaml
+      shell: bash -l {0}
+    - id: read_yaml
+      uses: actions/github-script@v5
+      with:
+        script: |
+          const yaml = require('js-yaml');
+
+          const path = core.getInput('path', { required: true });
+          const scopes = (core.getInput('scope') || "").split(".");
+          const url = `/repos/${context.repo.owner}/${context.repo.repo}/contents/${path}`;
+
+          const resp = await github.request(`GET ${url}`);
+          let data = yaml.load(
+            Buffer.from(
+              resp["data"]["content"],
+              resp["data"]["encoding"]
+            ).toString('utf-8')
+          );
+          for (const key of scopes)
+            data = data instanceof Array ? data[parseInt(key)] : data[key];
+
+          core.setOutput('data', data);
+branding:
+  icon: book-open
+  color: green
