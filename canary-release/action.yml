@@ -125,7 +125,7 @@ runs:
       if: inputs.comment-token != ''
       uses: peter-evans/create-or-update-comment@v1
       with:
-        comment-id: ${{ steps.after_build.output.comment-id }}
+        comment-id: '${{ steps.after_build.output.comment-id }}'
         body: |
           | [${{ github.run_id }}](${{ steps.vars.outputs.run_url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
         reactions: 'eyes'
