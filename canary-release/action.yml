@@ -1,18 +1,12 @@
 name: 'Canary releases'
 description: 'This builds and uploads canary releases of conda to the provided channel and label on anaconda.org.'
 inputs:
-  pr:
-    description: 'Pull request ID'
-    required: true
   package-name:
     description: 'Name of package on anaconda.org, needs to match build file name.'
     required: true
   subdir:
     description: 'Subdirectory'
     required: true
-  comment-author:
-    description: 'Author for build comment'
-    required: false
   comment-headline:
     description: 'Headline for build comment'
     required: false
@@ -47,7 +41,7 @@ runs:
       with:
         message: |
           # ${{ inputs.comment-headline }}
-          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run-url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run-url }}) by @${{ github.actor }}!
 
           Once it's done, use this command to try it out in a new conda environment:
 
