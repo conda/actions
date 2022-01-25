@@ -122,9 +122,7 @@ runs:
         body-includes: "${{ steps.vars.outputs.status_comment }}"
 
     - name: Leave comment after build
-      if: |
-        inputs.comment-token != '' &&
-        steps.after_build.output.comment-id != ''
+      if: inputs.comment-token != ''
       uses: peter-evans/create-or-update-comment@v1
       with:
         comment-id: ${{ steps.after_build.output.comment-id }}
