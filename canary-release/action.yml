@@ -65,7 +65,7 @@ runs:
         issue-number: ${{ inputs.pr }}
         body: |
           # Canary release status
-          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.run-url.outputs.run-url }}) in #${{ inputs.pr }} by ${{ github.actor }}!
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.run-url.outputs.run-url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
 
           Once it's done, use this command to try it out in a new conda environment:
 
