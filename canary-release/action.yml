@@ -119,7 +119,12 @@ runs:
         issue-number: ${{ inputs.pr }}
         comment-author: "${{ inputs.comment-author }}"
         body-includes: "${{ steps.vars.outputs.status-comment }}"
-        direction: last
+
+    - shell: bash -l {0}
+      run: |
+        echo ${{ steps.after-build.outputs.comment-id }}
+        echo ${{ steps.after-build.outputs.comment-body }}
+        echo ${{ steps.after-build.outputs.comment-author }}
 
     - name: Leave comment after build (append to status table)
       if: |
