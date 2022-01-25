@@ -11,8 +11,12 @@ inputs:
     description: 'Subdirectory'
     required: true
   comment-author:
-    description: 'Author for commenting build'
+    description: 'Author for build comment'
     required: false
+  comment-headline:
+    description: 'Headline for build comment'
+    required: false
+    default: 'Canary release status'
   comment-token:
     description: 'Token for commenting build'
     required: false
@@ -64,7 +68,7 @@ runs:
       with:
         issue-number: ${{ inputs.pr }}
         body: |
-          # Canary release status
+          # ${{ inputs.comment-headline }}
           > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.run-url.outputs.run-url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
 
           Once it's done, use this command to try it out in a new conda environment:
