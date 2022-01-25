@@ -16,7 +16,10 @@ In your GitHub repository include this action in your workflows:
 
     # [optional]
     # the keys/indices scope to extract
-    scope: foo.bar.2.baz
+    scopes: |
+      value1: foo.bar.2.baz
+      value2: foo.bar.5.qux
 
-- run: echo ${{ steps.read_yaml.outputs.data }}
+- run: echo ${{ steps.read_yaml.outputs.value1 }}
+- run: echo ${{ steps.read_yaml.outputs.value2 }}
 ```

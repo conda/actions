@@ -5,13 +5,14 @@ inputs:
   path:
     description: Path to YAML file in this repo to read.
     required: true
-  scope:
+  scopes:
     description: Path of keys to the value to extract from file (e.g. foo.bar).
     required: false
-outputs:
-  data:
-    description: Data read from YAML file.
-    value: ${{ steps.read_yaml.outputs.data }}
+# cannot set outputs since they are dynamic based on the scopes value
+# outputs:
+#   data:
+#     description: Data read from YAML file.
+#     value: ${{ steps.read_yaml.outputs.data }}
 runs:
   using: composite
   steps:
@@ -27,7 +28,7 @@ runs:
           const yaml = require('js-yaml');
 
           const path = core.getInput('path', { required: true });
-          const scopes = (core.getInput('scope') || "").split(".");
+          const scopes = yaml.load(core.getInput('scopes') || ''));
           const url = `/repos/${context.repo.owner}/${context.repo.repo}/contents/${path}`;
 
           const resp = await github.request(`GET ${url}`);
@@ -37,10 +38,12 @@ runs:
               resp["data"]["encoding"]
             ).toString('utf-8')
           );
-          for (const key of scopes)
-            data = data instanceof Array ? data[parseInt(key)] : data[key];
-
-          core.setOutput('data', data);
+          for (const scope of scopes) {
+            let value = data;
+            for (const key of scopes[scope].split('.'))
+              value = value instanceof Array ? value[parseInt(key)] : value[key];
+            core.setOutput(scope, value);
+          }
 branding:
   icon: book-open
   color: green
