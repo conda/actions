@@ -40,7 +40,7 @@ runs:
       run: |
         echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
         echo ::set-output name=status-tablehead::"| Run | Outcome | User | Matrix |"
-        echo ::set-output name=status-comment::"<!-- Status updates for PR following (do not delete) -->"
+        echo ::set-output name=status-comment::"Status updates for PR following"
 
     - name: Find Comment with status
       uses: peter-evans/find-comment@v1
@@ -71,7 +71,7 @@ runs:
           ```
 
           ------
-          ${{ steps.vars.outputs.status-comment }}
+          <!-- ${{ steps.vars.outputs.status-comment }} -->
         reactions: 'rocket'
         token: ${{ inputs.comment-token }}
 
