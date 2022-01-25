@@ -38,29 +38,29 @@ runs:
       id: vars
       shell: bash -l {0}
       run: |
-        echo ::set-output name=run_url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-        echo ::set-output name=status_comment::"Status updates for builds"
+        echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        echo ::set-output name=status-header::"Status updates for builds"
 
     - name: Find Comment with status
       uses: peter-evans/find-comment@v1
       if: inputs.comment-token != ''
-      id: before_build
+      id: before-build
       with:
         issue-number: ${{ inputs.pr }}
         comment-author: "${{ inputs.comment-author }}"
-        body-includes: "${{ steps.vars.outputs.status_comment }}"
+        body-includes: "${{ steps.vars.outputs.status-header }}"
         direction: last
 
     - name: Create comment if there is no status update
       uses: peter-evans/create-or-update-comment@v1
       if: |
         inputs.comment-token != '' &&
-        steps.before_build.outputs.comment-id == ''
+        steps.before-build.outputs.comment-id == ''
       with:
         issue-number: ${{ inputs.pr }}
         body: |
           # ${{ inputs.comment-headline }}
-          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run_url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run-url }}) in #${{ inputs.pr }} by @${{ github.actor }}!
 
           Once it's done, use this command to try it out in a new conda environment:
 
@@ -69,8 +69,7 @@ runs:
           ```
 
           ------
-          ## ${{ steps.vars.outputs.status_comment }}
-
+          ### ${{ steps.vars.outputs.status-header }}
           | Run | Outcome | User | Matrix |
           |---|---|---|---|
         reactions: 'rocket'
@@ -115,18 +114,21 @@ runs:
     - name: Find Comment after build
       uses: peter-evans/find-comment@v1
       if: inputs.comment-token != ''
-      id: after_build
+      id: after-build
       with:
         issue-number: ${{ inputs.pr }}
         comment-author: "${{ inputs.comment-author }}"
-        body-includes: "${{ steps.vars.outputs.status_comment }}"
+        body-includes: "${{ steps.vars.outputs.status-header }}"
 
     - name: Leave comment after build
-      if: inputs.comment-token != ''
+      if: |
+        steps.after-build.output.comment-id != '' &&
+        inputs.comment-token != '' &&
       uses: peter-evans/create-or-update-comment@v1
       with:
-        comment-id: '${{ steps.after_build.output.comment-id }}'
+        issue-number: ${{ inputs.pr }}
+        comment-id: ${{ steps.after-build.output.comment-id }}
         body: |
-          | [${{ github.run_id }}](${{ steps.vars.outputs.run_url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
+          | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
         reactions: 'eyes'
         token: ${{ inputs.comment-token }}
