@@ -73,5 +73,5 @@ jobs:
           # comment-token: ${{ secrets.CANARY_ACTION_COMMENT_TOKEN }}
           # [optional]
           # the GitHub user account that comment with
-          # comment-author: conda-bot
+          # comment-headline: Canary release status
 ```
