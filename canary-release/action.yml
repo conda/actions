@@ -39,7 +39,6 @@ runs:
       shell: bash -l {0}
       run: |
         echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-        echo ::set-output name=status-tablehead::"| Run | Outcome | User | Matrix |"
         echo ::set-output name=status-comment::"Status updates for PR following"
 
     - name: Find Comment with status
@@ -72,6 +71,8 @@ runs:
 
           ------
           <!-- ${{ steps.vars.outputs.status-comment }} -->
+          | Run | Outcome | User | Matrix |
+          |---|---|---|---|
         reactions: 'rocket'
         token: ${{ inputs.comment-token }}
 
@@ -120,36 +121,14 @@ runs:
         comment-author: "${{ inputs.comment-author }}"
         body-includes: "${{ steps.vars.outputs.status-comment }}"
 
-    - shell: bash -l {0}
-      run: |
-        echo "${{ contains(steps.after-build.output.comment-body, steps.vars.outputs.status-tablehead) }}"
-        echo "${{ inputs.comment-token == '' }}"
-        echo "${{ steps.after-build.output.comment-id == '' }}"
-
-    - name: Leave comment after build (append to status table)
+    - name: Leave comment after build
       if: |
         steps.after-build.output.comment-id != '' &&
         inputs.comment-token != '' &&
-        contains(steps.after-build.output.comment-body, steps.vars.outputs.status-tablehead)
       uses: peter-evans/create-or-update-comment@v1
       with:
         comment-id: ${{ steps.after-build.output.comment-id }}
         body: |
-          | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
-        reactions: 'eyes'
-        token: ${{ inputs.comment-token }}
-
-    - name: Leave comment after build (add status table)
-      if: |
-        steps.after-build.output.comment-id != '' &&
-        inputs.comment-token != '' &&
-        !contains(steps.after-build.output.comment-body, steps.vars.outputs.status-tablehead)
-      uses: peter-evans/create-or-update-comment@v1
-      with:
-        comment-id: ${{ steps.after-build.output.comment-id }}
-        body: |
-          ${{ steps.vars.outputs.status-tablehead }}
-          |---|---|---|---|
           | [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) | ${{ steps.build.outcome }} | @${{ github.actor }} | ${{ matrix }} |
         reactions: 'eyes'
         token: ${{ inputs.comment-token }}
