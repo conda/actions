@@ -123,7 +123,7 @@ runs:
     - name: Leave comment after build
       if: |
         steps.after-build.output.comment-id != '' &&
-        inputs.comment-token != '' &&
+        inputs.comment-token != ''
       uses: peter-evans/create-or-update-comment@v1
       with:
         issue-number: ${{ inputs.pr }}
