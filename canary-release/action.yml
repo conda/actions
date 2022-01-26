@@ -47,8 +47,6 @@ runs:
           conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}
           ```
 
-          ------
-
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
     - name: Build & upload package
