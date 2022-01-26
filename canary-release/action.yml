@@ -1,0 +1,106 @@
+name: 'Canary releases'
+description: 'This builds and uploads canary releases of conda to the provided channel and label on anaconda.org.'
+inputs:
+  package-name:
+    description: 'Name of package on anaconda.org, needs to match build file name.'
+    required: true
+  subdir:
+    description: 'Subdirectory'
+    required: true
+  comment-headline:
+    description: 'Headline for build comment'
+    required: false
+    default: 'Canary release status'
+  comment-token:
+    description: 'Token for commenting build'
+    required: false
+  anaconda-org-channel:
+    description: 'Channel on anaconda.org'
+    required: true
+  anaconda-org-label:
+    description: 'Label to use on anaconda.org'
+    required: true
+  anaconda-org-token:
+    description: 'Upload token for anaconda.org'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: conda-incubator/setup-miniconda@v2
+
+    - name: Set output variables
+      id: vars
+      shell: bash -l {0}
+      run: echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+    - name: Create comment if there is no status update
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: inputs.comment-token != ''
+      with:
+        message: |
+          # ${{ inputs.comment-headline }}
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run-url }}) by @${{ github.actor }}!
+
+          Once it's done, use this command to try it out in a new conda environment:
+
+          ```
+          conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}
+          ```
+
+          ------
+
+        GITHUB_TOKEN: ${{ inputs.comment-token }}
+
+    - name: Build & upload package
+      # make sure we don't run on forks
+      if: github.repository_owner == 'conda'
+      id: build
+      shell: bash -l {0}
+      run: |
+        echo "::group::Setting up environment"
+        set -euo pipefail
+        conda activate
+        conda update --yes --quiet conda
+        conda install --yes --quiet conda-build anaconda-client git
+        echo "::endgroup::"
+
+        echo "::group::Debugging information"
+        conda info
+        conda config --show-sources
+        conda list
+        echo "::endgroup::"
+
+        echo "::group::Building package"
+        conda build --croot=./pkgs conda.recipe
+        echo "::endgroup::"
+
+        echo "::group::Uploading package"
+        anaconda --token ${{ inputs.anaconda-org-token }} upload \
+          --force --register --no-progress \
+          --user ${{ inputs.anaconda-org-channel }} \
+          --label ${{ inputs.anaconda-org-label }} \
+          ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2
+        echo "Uploaded the following files:"
+        ls ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2 | cut -d/ -f3- | tr ' ' $'\n'
+        echo "::endgroup::"
+
+        echo "Use this command to try out the build:"
+        echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
+
+    - name: Leave comment after build
+      if: inputs.comment-token != '' && success()
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        append: true
+        message: |
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) succeeded on ${{ runner.os }} (${{ runner.arch }})
+        GITHUB_TOKEN: ${{ inputs.comment-token }}
+
+    - name: Leave comment after build
+      if: inputs.comment-token != '' && failure()
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        append: true
+        message: |
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) failed on ${{ runner.os }} (${{ runner.arch }})
+        GITHUB_TOKEN: ${{ inputs.comment-token }}
