@@ -51,7 +51,7 @@ runs:
 
     - name: Build & upload package
       # make sure we don't run on forks
-      if: github.repository_owner == 'conda'
+      if: github.repository_owner == 'conda' || github.repository_owner == 'conda-incubator'
       id: build
       shell: bash -l {0}
       run: |
