@@ -23,6 +23,9 @@ inputs:
   anaconda-org-token:
     description: 'Upload token for anaconda.org'
     required: true
+  conda-build-arguments:
+    description: 'Command line arguments for conda-build, inserted before recipe path with no processing.'
+    required: false
 runs:
   using: "composite"
   steps:
@@ -69,7 +72,7 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Building package"
-        conda build --croot=./pkgs conda.recipe
+        conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} conda.recipe
         echo "::endgroup::"
 
         echo "::group::Uploading package"
