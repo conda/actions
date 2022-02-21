@@ -27,23 +27,38 @@ runs:
         script: |
           const yaml = require('js-yaml');
 
-          const path = core.getInput('path', { required: true });
-          const scopes = yaml.load(core.getInput('scopes') || ''));
-          const url = `/repos/${context.repo.owner}/${context.repo.repo}/contents/${path}`;
+          async function read_yaml() {
+            const path = core.getInput('path', { required: true });
+            const scopes = yaml.load(core.getInput('scopes') || '{}');
+            const url = `/repos/${context.repo.owner}/${context.repo.repo}/contents/${path}`;
 
-          const resp = await github.request(`GET ${url}`);
-          let data = yaml.load(
-            Buffer.from(
-              resp["data"]["content"],
-              resp["data"]["encoding"]
-            ).toString('utf-8')
-          );
-          for (const scope of scopes) {
-            let value = data;
-            for (const key of scopes[scope].split('.'))
-              value = value instanceof Array ? value[parseInt(key)] : value[key];
-            core.setOutput(scope, value);
+            try {
+              const resp = await github.request(`GET ${url}`, {ref: context.sha});
+            } catch (err) {
+              throw new Error(`Failed to fetch ${path} (${err.message})`);
+            }
+            let data = yaml.load(
+              Buffer.from(
+                resp["data"]["content"],
+                resp["data"]["encoding"]
+              ).toString('utf-8')
+            );
+            for (const scope in scopes) {
+              let value = data;
+              try {
+                for (const key of scopes[scope].split('.'))
+                  value = value instanceof Array ? value[parseInt(key)] : value[key];
+              } catch (err) {
+                throw new Error(`Failed to read ${scopes[scope]} (${err.message})`);
+              }
+              core.setOutput(scope, value);
+            }
           }
+
+          read_yaml().catch(err => {
+            if (err instanceof Error) core.setFailed(err);
+            else throw err;
+          });
 branding:
   icon: book-open
   color: green

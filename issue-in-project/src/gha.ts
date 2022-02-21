@@ -30,10 +30,8 @@ export async function gha(): Promise<void> {
 }
 
 if (require.main === module) {
-  try {
-    gha()
-  } catch (err) {
+  gha().catch(err => {
     if (err instanceof Error) setFailed(err)
     else throw err
-  }
+  })
 }
