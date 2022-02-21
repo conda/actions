@@ -14,6 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
+          token: ${{ secrets.PUSH_CHANGES_TOKEN }}
           # checkout repo where the branch is coming from (i.e. forks) that
           # way we commit build changes to the correct repo/branch
           repository: ${{ github.event.pull_request.head.repo.full_name }}
@@ -23,9 +24,10 @@ jobs:
           node-version: 16
       - run: npm install
       - run: npm run build
-      - uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: Rebuild user-in-team
-          commit_user_name: Conda Bot
-          commit_user_email: conda-bot@users.noreply.github.com
-          commit_author: Conda Bot <conda-bot@users.noreply.github.com>
+      - run: git add --all
+      - run: >-
+          git
+          -c user.name="Conda Bot"
+          -c user.email="conda-bot@users.noreply.github.com"
+          commit -m "Rebuild user-in-team"
+      - run: git push
