@@ -7,8 +7,8 @@ export * as utils from '@src/utils'
 
 if (require.main === module) {
   // make a guess as to whether running as CLI tool or GitHub Action
-  const func=process.argv.length > 2 ? cli : gha
-  func().catch(err=>{
+  const func = process.argv.length > 2 ? cli : gha
+  func().catch(err => {
     if (err instanceof Error) setFailed(err)
     else throw err
   })
