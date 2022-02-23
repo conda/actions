@@ -8356,9 +8356,9 @@ async function cli(argv, exceptionError) {
         console.log(await (0, api_1.userInTeam)(org, team, user));
     });
     if (argv)
-        program.parseAsync(argv, { from: 'user' });
+        await program.parseAsync(argv, { from: 'user' });
     else
-        program.parseAsync();
+        await program.parseAsync();
 }
 exports.cli = cli;
 if (false) {}
@@ -8431,15 +8431,12 @@ Object.defineProperty(exports, "gha", ({ enumerable: true, get: function () { re
 exports.api = __importStar(__nccwpck_require__(8229));
 exports.utils = __importStar(__nccwpck_require__(1314));
 if (require.main === require.cache[eval('__filename')]) {
-    try {
-        process.argv.length > 2 ? (0, cli_1.cli)() : (0, gha_1.gha)();
-    }
-    catch (err) {
+    (process.argv.length > 2 ? (0, cli_1.cli)() : (0, gha_1.gha)()).catch(err => {
         if (err instanceof Error)
             (0, core_1.setFailed)(err);
         else
             throw err;
-    }
+    });
 }
 
 
