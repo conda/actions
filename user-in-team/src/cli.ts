@@ -31,15 +31,13 @@ export async function cli(
       console.log(await userInTeam(org, team, user))
     })
 
-  if (argv) program.parseAsync(argv, { from: 'user' })
-  else program.parseAsync()
+  if (argv) await program.parseAsync(argv, { from: 'user' })
+  else await program.parseAsync()
 }
 
 if (require.main === module) {
-  try {
-    cli()
-  } catch (err) {
-    if (err instanceof Error) setFailed(err.message)
+  cli().catch(err => {
+    if (err instanceof Error) setFailed(err)
     else throw err
-  }
+  })
 }
