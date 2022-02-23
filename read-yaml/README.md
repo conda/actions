@@ -11,8 +11,9 @@ In your GitHub repository include this action in your workflows:
   uses: conda/actions/read-yaml
   with:
     # [required]
-    # the relative path to the YAML file to read
+    # the relative path (or URL) to the YAML file to read
     path: path/to/yaml.yml
+    path: https://raw.githubusercontent.com/owner/repo/ref/path/to/yaml.yml
 
     # [optional]
     # the keys/indices scope to extract

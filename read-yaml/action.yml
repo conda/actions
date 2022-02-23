@@ -3,7 +3,7 @@ description: Reads in YAML file from URL.
 author: Anaconda Inc.
 inputs:
   path:
-    description: Path to YAML file in this repo to read.
+    description: Local path (or remote URL) to YAML file to read.
     required: true
   scopes:
     description: Path of keys to the value to extract from file (e.g. foo.bar).
@@ -19,31 +19,103 @@ runs:
     - uses: actions/setup-node@v2
       with:
         node-version: 16
-    - run: npm install js-yaml
-      shell: bash -l {0}
+    - run: npm install js-yaml axios
     - id: read_yaml
       uses: actions/github-script@v5
       with:
         script: |
           const yaml = require('js-yaml');
+          const axios = require('axios');
+          const fs = require('fs');
 
-          const path = core.getInput('path', { required: true });
-          const scopes = yaml.load(core.getInput('scopes') || ''));
-          const url = `/repos/${context.repo.owner}/${context.repo.repo}/contents/${path}`;
-
-          const resp = await github.request(`GET ${url}`);
-          let data = yaml.load(
-            Buffer.from(
-              resp["data"]["content"],
-              resp["data"]["encoding"]
-            ).toString('utf-8')
-          );
-          for (const scope of scopes) {
-            let value = data;
-            for (const key of scopes[scope].split('.'))
-              value = value instanceof Array ? value[parseInt(key)] : value[key];
-            core.setOutput(scope, value);
+          // borrowed from https://github.com/EndBug/label-sync/blob/main/src/index.ts
+          function isUrl(str) {
+            const pattern = new RegExp(
+              '^(https?:\\/\\/)?' + // protocol
+                '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|' + // domain name
+                '((\\d{1,3}\\.){3}\\d{1,3}))' + // OR ip (v4) address
+                '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*' + // port and path
+                '(\\?[;&a-z\\d%_.~+=-]*)?' + // query string
+                '(\\#[-a-z\\d_]*)?$',
+              'i'
+            ); // fragment locator
+            return !!pattern.test(str);
           }
+
+          // borrowed from https://github.com/EndBug/label-sync/blob/main/src/index.ts
+          async function readUrl(url) {
+            // attempt to read remotely
+            try {
+              return yaml.load((await axios.get(url)).data);
+            } catch (err) {
+              throw new Error(`Failed to fetch ${url} (${err.message})`);
+            }
+          }
+
+          function readPath(path) {
+            // attempt to read locally
+            try {
+              return yaml.load(fs.readFileSync(path, { encoding: 'utf-8' }));
+            } catch (err) {
+              throw new Error(`Failed to read ${path} (${err.message})`);
+            }
+          }
+
+          async function readYaml(path) {
+            if (isUrl(path)) {
+              // looks like URL, fallback to path
+              try {
+                return await readUrl(path);
+              } catch (err) {
+                try {
+                  return readPath(path);
+                } catch (_) {
+                  // squash this error
+                }
+                throw err
+              }
+            } else {
+              // looks like path, fallback to URL
+              try {
+                return readPath(path);
+              } catch (err) {
+                try {
+                  return await readUrl(`https://raw.githubusercontent.com/${context.repo.owner}/${context.repo.repo}/${context.sha}/${path}`);
+                } catch (_) {
+                  // squash this error
+                }
+                throw err
+              }
+            }
+          }
+
+          async function main() {
+            const path = core.getInput('path', { required: true });
+            const data = await readYaml(path);
+
+            const scopes = yaml.load(core.getInput('scopes') || "{}");
+            if (!Object.keys(scopes).length) {
+              core.setOutput("scopes", data);
+            } else {
+              for (const scope in scopes) {
+                let value = data;
+                try {
+                  for (const key of scopes[scope].split('.'))
+                    value = value instanceof Array ? value[parseInt(key)] : value[key];
+                } catch (err) {
+                  throw new Error(`Failed to read ${scopes[scope]} (${err.message})`);
+                }
+                core.setOutput(scope, value);
+              }
+            }
+          }
+
+          main().catch(err => {
+            if (err instanceof Error) core.setFailed(err);
+            else throw err;
+          });
+
+
 branding:
   icon: book-open
   color: green
