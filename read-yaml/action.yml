@@ -100,7 +100,6 @@ runs:
               core.setOutput("scopes", data);
             } else {
               for (const scope in scopes) {
-                core.info(`loading \u001b[36;1m${scopes[scope]}\u001b[m as \u001b[36;1m${scope}\u001b[m ("${value.split(/\r?\n/)[0].slice(0, 10)}...")`);
                 let value = data;
                 try {
                   for (const key of scopes[scope].split('.'))
@@ -108,6 +107,7 @@ runs:
                 } catch (err) {
                   throw new Error(`Failed to read ${scopes[scope]} (${err.message})`);
                 }
+                core.info(`loading \u001b[36;1m${scopes[scope]}\u001b[m as \u001b[36;1m${scope}\u001b[m ("${value.split(/\r?\n/)[0].slice(0, 10)}...")`);
                 core.setOutput(scope, value);
               }
             }
