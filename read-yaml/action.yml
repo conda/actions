@@ -94,11 +94,13 @@ runs:
             const path = "${{ inputs.path }}";
             const data = await readYaml(path);
 
-            const scopes = yaml.load(`${{ inputs.scopes }}` || "{}");
+            const scopes = yaml.load(`${{ inputs.scopes }}`.trim() || "{}");
             if (!Object.keys(scopes).length) {
+              core.info("loading \u001b[36;1mYAML\u001b[m as \u001b[36;1mscopes\u001b[m");
               core.setOutput("scopes", data);
             } else {
               for (const scope in scopes) {
+                core.info(`loading \u001b[36;1m${scopes[scope]}\u001b[m as \u001b[36;1m${scope}\u001b[m ("${value.split(/\r?\n/)[0].slice(0, 10)}...")`);
                 let value = data;
                 try {
                   for (const key of scopes[scope].split('.'))
