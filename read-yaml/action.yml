@@ -115,6 +115,9 @@ runs:
             if (err instanceof Error) core.setFailed(err);
             else throw err;
           });
+        path: ${{ inputs.path }}
+        scopes: ${{ inputs.scopes }}
+
 
 branding:
   icon: book-open
