@@ -5,14 +5,13 @@ inputs:
   path:
     description: Local path (or remote URL) to YAML file to read.
     required: true
-  scopes:
-    description: Path of keys to the value to extract from file (e.g. foo.bar).
+  key:
+    description: Keys to the value to extract from file (e.g. foo.bar).
     required: false
-# cannot set outputs since they are dynamic based on the scopes value
-# outputs:
-#   data:
-#     description: Data read from YAML file.
-#     value: ${{ steps.read_yaml.outputs.data }}
+outputs:
+  value:
+    description: Entire YAML file (if key is undefined) or the value for the provided key.
+    value: ${{ steps.read_yaml.outputs.value }}
 runs:
   using: composite
   steps:
@@ -92,25 +91,21 @@ runs:
 
           async function main() {
             const path = "${{ inputs.path }}";
-            const data = await readYaml(path);
+            const key = `${{ inputs.key }}`.trim();
 
-            const scopes = yaml.load(`${{ inputs.scopes }}`.trim() || "{}");
-            if (!Object.keys(scopes).length) {
-              core.info("loading \u001b[36;1mYAML\u001b[m as \u001b[36;1mscopes\u001b[m");
-              core.setOutput("scopes", data);
-            } else {
-              for (const scope in scopes) {
-                let value = data;
-                try {
-                  for (const key of scopes[scope].split('.'))
-                    value = value instanceof Array ? value[parseInt(key)] : value[key];
-                } catch (err) {
-                  throw new Error(`Failed to read ${scopes[scope]} (${err.message})`);
-                }
-                core.info(`loading \u001b[36;1m${scopes[scope]}\u001b[m as \u001b[36;1m${scope}\u001b[m ("${value.split(/\r?\n/)[0].slice(0, 10)}...")`);
-                core.setOutput(scope, value);
+            let value = await readYaml(path);
+            if (key) {
+              core.info(`loading \u001b[36;1m${key}\u001b[m`);
+              try {
+                for (const k of key.split('.'))
+                  value = value instanceof Array ? value[parseInt(k)] : value[k];
+              } catch (err) {
+                throw new Error(`Failed to read ${key} (${err.message})`);
               }
+            } else {
+              core.info("loading \u001b[36;1mentire YAML\u001b[m");
             }
+            core.setOutput("value", value);
           }
 
           main().catch(err => {
