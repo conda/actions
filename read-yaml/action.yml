@@ -94,7 +94,7 @@ runs:
             const path = "${{ inputs.path }}";
             const data = await readYaml(path);
 
-            const scopes = yaml.load("${{ inputs.scopes }}" || "{}");
+            const scopes = yaml.load(`${{ inputs.scopes }}` || "{}");
             if (!Object.keys(scopes).length) {
               core.setOutput("scopes", data);
             } else {
