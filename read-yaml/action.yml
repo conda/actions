@@ -20,6 +20,7 @@ runs:
       with:
         node-version: 16
     - run: npm install js-yaml axios
+      shell: bash -l {0}
     - id: read_yaml
       uses: actions/github-script@v5
       with:
@@ -114,7 +115,6 @@ runs:
             if (err instanceof Error) core.setFailed(err);
             else throw err;
           });
-
 
 branding:
   icon: book-open
