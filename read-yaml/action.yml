@@ -91,10 +91,10 @@ runs:
           }
 
           async function main() {
-            const path = core.getInput('path', { required: true });
+            const path = "${{ inputs.path }}";
             const data = await readYaml(path);
 
-            const scopes = yaml.load(core.getInput('scopes') || "{}");
+            const scopes = yaml.load("${{ inputs.scopes }}" || "{}");
             if (!Object.keys(scopes).length) {
               core.setOutput("scopes", data);
             } else {
@@ -115,9 +115,6 @@ runs:
             if (err instanceof Error) core.setFailed(err);
             else throw err;
           });
-        path: ${{ inputs.path }}
-        scopes: ${{ inputs.scopes }}
-
 
 branding:
   icon: book-open
