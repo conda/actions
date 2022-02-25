@@ -16,11 +16,12 @@ In your GitHub repository include this action in your workflows:
     path: https://raw.githubusercontent.com/owner/repo/ref/path/to/yaml.yml
 
     # [optional]
-    # the keys/indices scope to extract
-    scopes: |
-      value1: foo.bar.2.baz
-      value2: foo.bar.5.qux
+    # the keys to the valye to extract
+    key: foo.bar.2.baz
 
-- run: echo ${{ steps.read_yaml.outputs.value1 }}
-- run: echo ${{ steps.read_yaml.outputs.value2 }}
+# if key provided get the value itself
+- run: echo ${{ steps.read_yaml.outputs.value }}
+
+# if no key provided get the entire YAML
+- run: echo ${{ fromJSON(steps.read_yaml.outputs.value)['key'] }}
 ```
