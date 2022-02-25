@@ -23,6 +23,10 @@ In your GitHub repository include this action in your workflows:
     # if not provided return list of user in team
     user: conda-bot
 
+    # [required]
+    # the github token with read:org access
+    github_token: ${{ secrets.PROJECT_TOKEN }}
+
 # if user was provided we get a boolean
 - if: steps.in_team.outputs.contains == 'true'
   ...

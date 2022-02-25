@@ -25,6 +25,10 @@ In your GitHub repository include this action in your workflows:
     # if not provided return list of issues for the project
     issue: ${{ github.event.issue.id }}
 
+    # [required]
+    # the github token with read:org access
+    github_token: ${{ secrets.PROJECT_TOKEN }}
+
 # if issue was provided we get a boolean
 - if: steps.in_project.outputs.contains == 'true'
   ...
