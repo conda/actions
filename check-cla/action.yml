@@ -1,0 +1,39 @@
+name: 'CLA bot'
+description: 'This action can be used to react to new pull requests and checks if the actor has previously signed the conda contributor license agreement.'
+inputs:
+  comment-token:
+    description: 'Token for commenting'
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set output variables
+      id: vars
+      shell: bash -l {0}
+      run: |
+        SIGNATURES=$(curl -s https://raw.githubusercontent.com/conda/clabot-config/master/.clabot | jq .contributors)
+
+        echo ::set-output name=has-signed::$(echo $SIGNATURES | jq '.contributors|any(.=="${{ github.actor }}")')
+
+    # add cla-signed label if actor has already signed
+    - uses: actions-ecosystem/action-add-labels@v1.1.0
+      if: >-
+        steps.vars.outputs.has-signed == 'true'
+        && !contains(github.event.pull_request.labels.*.name, 'cla-signed')
+      with:
+        labels: cla-signed
+        github_token: ${{ secrets.PROJECT_TOKEN }}
+
+    # create sticky comment if not signed
+    - name: Create comment if there is no status update
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: >-
+        inputs.comment-token != ''
+        && steps.vars.outputs.has-signed == 'false'
+      with:
+        message: |
+          > We require contributors to sign our Contributor License Agreement, and we don't have one on file for ${{ github.actor }}.
+
+          In order for us to review and merge your code, please e-sign the PDF at https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement. We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
+        GITHUB_TOKEN: ${{ inputs.comment-token }}
