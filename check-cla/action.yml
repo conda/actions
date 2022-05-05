@@ -1,4 +1,4 @@
-name: 'CLA bot'
+name: 'CLA check'
 description: 'This action can be used to react to new pull requests and checks if the actor has previously signed the conda contributor license agreement.'
 inputs:
   token:
@@ -11,30 +11,77 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Set output variables
-      id: vars
-      shell: bash -l {0}
-      run: |
-        SIGNATURES=$(curl -s https://raw.githubusercontent.com/conda/clabot-config/master/.clabot | jq .contributors)
-
-        echo ::set-output name=has-signed::$(echo $SIGNATURES | jq '.contributors|any(.=="${{ github.actor }}")')
+    - name: Check if current actor has signed
+      uses: actions/github-script@v6
+      id: contributors
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const getContributors = async () => {
+            try {
+              const results = (
+                await github.rest.repos.getContent({
+                  owner: 'conda',
+                  repo: 'clabot-config',
+                  path: '.clabot'
+                })
+              );
+              return JSON.parse(Buffer.from(results.data.content, results.data.encoding).toString('utf-8')).contributors;
+            } catch (err) {
+              core.error(`Could not retrieve contributors, returning undefined. Reason: ${err}`)
+              return undefined;
+            }
+          }
+          const contributors = await getContributors();
+          const creator = context.payload.pull_request.user.login;
+          const hasSigned = contributors.includes(creator);
+          console.log(context);
+          console.log(contributors);
+          console.log(hasSigned);
+          core.setOutput('contributors', contributors);
+          core.setOutput('hasSigned', hasSigned);
 
     # add cla-signed label if actor has already signed
-    - uses: actions-ecosystem/action-add-labels@v1.1.0
-      if: >-
-        steps.vars.outputs.has-signed == 'true'
-        && !contains(github.event.pull_request.labels.*.name, github.event.inputs.label)
+    - name: Add label
+      uses: actions/github-script@v6
+      if: steps.contributors.outputs.hasSigned == 'true'
       with:
-        labels: ${{ inputs.label }}
-        github_token: ${{ inputs.token }}
+        github-token: ${{ inputs.token }}
+        script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.issue.number,
+            })
+            const label = '${{ inputs.label }}'
+            const labels = pullRequest.labels.map(label => label.name)
+            const hasLabel = labels.includes(label)
+            console.log(label);
+            console.log(labels);
+            console.log(hasLabel);
+
+            if (!hasLabel) {
+                await github.rest.issues.addLabels({
+                  ...context.repo,
+                  issue_number: context.issue.number,
+                  labels: [label]
+                })
+            }
 
     # create sticky comment if not signed
     - name: Create comment if there is no status update
       uses: marocchino/sticky-pull-request-comment@v2
-      if: steps.vars.outputs.has-signed == 'false'
+      if: steps.contributors.outputs.hasSigned == 'false'
       with:
         message: |
-          > We require contributors to sign our Contributor License Agreement, and we don't have one on file for ${{ github.actor }}.
+          We require contributors to sign our [Contributor License Agreement](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement) and we don't have one on file for @${{ github.event.pull_request.user.login }}.
 
-          In order for us to review and merge your code, please e-sign the PDF at https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement. We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
+          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
         GITHUB_TOKEN: ${{ inputs.token }}
+
+    # set the workflow run to failed and leave a message
+    - name: Setting workflow run
+      if: steps.contributors.outputs.hasSigned == 'false'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ inputs.token }}
+        script: core.setFailed('CLA not signed!')

@@ -8,7 +8,7 @@ for checking the conda contributor license agreement.
 In your GitHub repository include the action in your workflows:
 
 ```yaml
-name: Check CLA
+name: Contributor license agreement (CLA)
 
 on:
   issue_comment:
@@ -22,7 +22,7 @@ on:
       - synchronize
 
 jobs:
-  check-cla:
+  check:
     if: >-
       !github.event.repository.fork
       && (
