@@ -35,6 +35,9 @@ jobs:
         uses: conda/actions/check-cla@check-cla
         with:
           # [required]
-          # the GitHub Personal Access Token to comment with
-          comment-token: ${{ secrets.CLA_COMMENT_TOKEN }}
+          # label to add when actor has signed the CLA
+          label: cla-signed
+          # [required]
+          # the GitHub Personal Access Token to comment and label with
+          token: ${{ secrets.CLA_TOKEN }}
 ```
