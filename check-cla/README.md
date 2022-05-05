@@ -14,7 +14,7 @@ on:
   issue_comment:
     types:
       - created
-  pull_request:
+  pull_request_target:
     types:
       - reopened
       - opened
@@ -27,7 +27,7 @@ jobs:
       !github.event.repository.fork
       && (
         github.event.comment.body == '@conda-bot check'
-        || github.event_name == 'pull_request'
+        || github.event_name == 'pull_request_target'
       )
     runs-on: ubuntu-latest
     steps:
@@ -39,5 +39,5 @@ jobs:
           label: cla-signed
           # [required]
           # the GitHub Personal Access Token to comment and label with
-          token: ${{ secrets.CLA_TOKEN }}
+          token: ${{ secrets.CLA_ACTION_TOKEN }}
 ```
