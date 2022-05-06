@@ -11,6 +11,21 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Get PR SHA
+      id: sha
+      uses: actions/github-script@v6
+      with:
+        result-encoding: string
+        script: |
+          const { owner, repo, number } = context.issue;
+          const pr = await github.pulls.get({
+            owner,
+            repo,
+            pull_number: number,
+          });
+          const sha = pr.data.head.sha;
+          console(sha);
+          return sha
     - name: Set commit status with pending
       uses: Sibz/github-status-action@v1
       with:
@@ -18,7 +33,7 @@ runs:
         context: "CLA check"
         description: Checking conda CLA...
         state: "pending"
-        sha: ${{ github.event.issue.pull_request.head.sha || github.event.pull_request.head.sha || github.sha }}
+        sha: ${{ steps.sha.outputs.result || github.sha }}
     - name: Check if current actor has signed
       uses: actions/github-script@v6
       id: contributors
@@ -96,7 +111,7 @@ runs:
         context: CLA check
         description: conda CLA not signed. Please follow the details link to sign it.
         state: error
-        sha: ${{ github.event.issue.pull_request.head.sha || github.event.pull_request.head.sha || github.sha }}
+        sha: ${{ steps.sha.outputs.result || github.sha }}
         target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
     - name: Set commit status to success
@@ -107,4 +122,4 @@ runs:
         context: CLA check
         description: CLA signed, thank you!
         state: success
-        sha: ${{ github.event.issue.pull_request.head.sha || github.event.pull_request.head.sha || github.sha }}
+        sha: ${{ steps.sha.outputs.result || github.sha }}
