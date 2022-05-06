@@ -11,6 +11,18 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve commit sha
+      id: commit
+      run: |
+        echo "::set-output name=sha::$(git rev-parse HEAD)"
+    - name: Set commit status with pending
+      uses: Sibz/github-status-action@v1
+      with:
+        authToken: ${{ inputs.token }}
+        context: "CLA check"
+        state: "pending"
+        sha: ${{ steps.commit.outputs.sha }}
     - name: Check if current actor has signed
       uses: actions/github-script@v6
       id: contributors
@@ -68,7 +80,7 @@ runs:
             }
 
     # create sticky comment if not signed
-    - name: Create comment if there is no status update
+    - name: Create comment
       uses: marocchino/sticky-pull-request-comment@v2
       if: steps.contributors.outputs.hasSigned == 'false'
       with:
@@ -78,20 +90,22 @@ runs:
           In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
         GITHUB_TOKEN: ${{ inputs.token }}
 
-    - name: Set commit status to pending
+    - name: Set commit status to error
       if: steps.contributors.outputs.hasSigned == 'false'
       uses: Sibz/github-status-action@v1
       with:
         authToken: ${{ inputs.token }}
-        context: ${{ github.workflow }}
+        context: CLA check
         description: CLA not signed
         state: error
+        sha: ${{ steps.commit.outputs.sha }}
 
     - name: Set commit status to pending
       if: steps.contributors.outputs.hasSigned == 'true'
       uses: Sibz/github-status-action@v1
       with:
         authToken: ${{ inputs.token }}
-        context: ${{ github.workflow }}
+        context: CLA check
         description: CLA signed
         state: success
+        sha: ${{ steps.commit.outputs.sha }}
