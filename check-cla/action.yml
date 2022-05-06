@@ -11,19 +11,13 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - uses: actions/checkout@v3
-    - name: Retrieve commit sha
-      id: commit
-      shell: bash -l {0}
-      run: |
-        echo "::set-output name=sha::$(git rev-parse HEAD)"
     - name: Set commit status with pending
       uses: Sibz/github-status-action@v1
       with:
         authToken: ${{ inputs.token }}
         context: "CLA check"
         state: "pending"
-        sha: ${{ steps.commit.outputs.sha }}
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
     - name: Check if current actor has signed
       uses: actions/github-script@v6
       id: contributors
@@ -99,7 +93,7 @@ runs:
         context: CLA check
         description: CLA not signed
         state: error
-        sha: ${{ steps.commit.outputs.sha }}
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
 
     - name: Set commit status to pending
       if: steps.contributors.outputs.hasSigned == 'true'
@@ -109,4 +103,4 @@ runs:
         context: CLA check
         description: CLA signed
         state: success
-        sha: ${{ steps.commit.outputs.sha }}
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
