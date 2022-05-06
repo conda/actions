@@ -27,7 +27,7 @@ runs:
           console.log(sha);
           core.setOutput('sha', sha);
 
-          const labels = pullRequest.labels.map(label => label.name)
+          const labels = pullRequest.data.labels.map(label => label.name)
           console.log(labels);
           core.setOutput('labels', labels);
 
