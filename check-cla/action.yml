@@ -80,7 +80,7 @@ runs:
 
     - name: Set commit status to pending
       if: steps.contributors.outputs.hasSigned == 'false'
-      uses: Sibz/github-status-action
+      uses: Sibz/github-status-action@v1
       with:
         authToken: ${{ inputs.token }}
         context: ${{ github.workflow }}
@@ -89,7 +89,7 @@ runs:
 
     - name: Set commit status to pending
       if: steps.contributors.outputs.hasSigned == 'true'
-      uses: Sibz/github-status-action
+      uses: Sibz/github-status-action@v1
       with:
         authToken: ${{ inputs.token }}
         context: ${{ github.workflow }}
