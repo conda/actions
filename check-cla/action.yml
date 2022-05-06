@@ -86,7 +86,7 @@ runs:
             await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: context.issue.number,
-              labels: [label]
+              labels: ['${{ inputs.label }}']
             })
 
     # remove cla-signed label if actor has not signed yet
