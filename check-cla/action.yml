@@ -16,10 +16,12 @@ runs:
       uses: actions/github-script@v6
       with:
         script: |
-          const { data: pullRequest } = await github.rest.pulls.get({
-            ...context.repo,
-            pull_number: context.issue.number,
-          })
+          const { owner, repo, number } = context.issue;
+          const pullRequest = await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: number,
+          });
           const sha = pullRequest.data.head.sha;
           console.log(sha);
           core.setOutput('sha', sha);
