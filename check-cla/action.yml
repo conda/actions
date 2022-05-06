@@ -22,6 +22,7 @@ runs:
             repo,
             pull_number: number,
           });
+          console.log(pullRequest);
           const sha = pullRequest.data.head.sha;
           console.log(sha);
           core.setOutput('sha', sha);
