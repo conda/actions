@@ -11,21 +11,27 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Get PR SHA
-      id: sha
+    - name: Get PR metadata
+      id: pr
       uses: actions/github-script@v6
       with:
-        result-encoding: string
         script: |
-          const { owner, repo, number } = context.issue;
-          const pr = await github.rest.pulls.get({
-            owner,
-            repo,
-            pull_number: number,
-          });
-          const sha = pr.data.head.sha;
+          const { data: pullRequest } = await github.rest.pulls.get({
+            ...context.repo,
+            pull_number: context.issue.number,
+          })
+          const sha = pullRequest.data.head.sha;
           console.log(sha);
-          return sha
+          core.setOutput('sha', sha);
+
+          const labels = pullRequest.labels.map(label => label.name)
+          console.log(labels);
+          core.setOutput('labels', labels);
+
+          const hasLabel = labels.includes('${{ inputs.label }}')
+          console.log(hasLabel);
+          core.setOutput('hasLabel', hasLabel);
+
     - name: Set commit status with pending
       uses: Sibz/github-status-action@v1
       with:
@@ -33,7 +39,8 @@ runs:
         context: "CLA check"
         description: Checking conda CLA...
         state: "pending"
-        sha: ${{ steps.sha.outputs.result || github.sha }}
+        sha: ${{ steps.pr.outputs.sha || github.sha }}
+
     - name: Check if current actor has signed
       uses: actions/github-script@v6
       id: contributors
@@ -69,28 +76,28 @@ runs:
     # add cla-signed label if actor has already signed
     - name: Add label
       uses: actions/github-script@v6
-      if: steps.contributors.outputs.hasSigned == 'true'
+      if: steps.contributors.outputs.hasSigned == 'true' && steps.pr.outputs.hasLabel == 'true'
       with:
         github-token: ${{ inputs.token }}
         script: |
-            const { data: pullRequest } = await github.rest.pulls.get({
+            await github.rest.issues.addLabels({
               ...context.repo,
-              pull_number: context.issue.number,
+              issue_number: context.issue.number,
+              labels: [label]
             })
-            const label = '${{ inputs.label }}'
-            const labels = pullRequest.labels.map(label => label.name)
-            const hasLabel = labels.includes(label)
-            console.log(label);
-            console.log(labels);
-            console.log(hasLabel);
 
-            if (!hasLabel) {
-                await github.rest.issues.addLabels({
-                  ...context.repo,
-                  issue_number: context.issue.number,
-                  labels: [label]
-                })
-            }
+    # remove cla-signed label if actor has not signed yet
+    - name: Remove label
+      uses: actions/github-script@v6
+      if: steps.contributors.outputs.hasSigned == 'false' && steps.pr.outputs.hasLabel == 'true'
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+            await github.rest.issues.removeLabel({
+              ...context.repo,
+              issue_number: context.issue.number,
+              name: '${{ inputs.label }}'
+            })
 
     # create sticky comment if not signed
     - name: Create comment
@@ -111,7 +118,7 @@ runs:
         context: CLA check
         description: conda CLA not signed. Please follow the details link to sign it.
         state: error
-        sha: ${{ steps.sha.outputs.result || github.sha }}
+        sha: ${{ steps.pr.outputs.sha || github.sha }}
         target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
     - name: Set commit status to success
@@ -122,4 +129,4 @@ runs:
         context: CLA check
         description: CLA signed, thank you!
         state: success
-        sha: ${{ steps.sha.outputs.result || github.sha }}
+        sha: ${{ steps.pr.outputs.sha || github.sha }}
