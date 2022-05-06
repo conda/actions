@@ -47,6 +47,10 @@ jobs:
         uses: conda/actions/canary-release
         with:
           # [required]
+          # the pull request ID
+          pr: ${{ github.event.number }}
+
+          # [required]
           # the package name to be build and released
           package-name: conda
 
