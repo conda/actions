@@ -24,7 +24,7 @@ runs:
             pull_number: number,
           });
           const sha = pr.data.head.sha;
-          console(sha);
+          console.log(sha);
           return sha
     - name: Set commit status with pending
       uses: Sibz/github-status-action@v1
