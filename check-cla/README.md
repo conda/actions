@@ -18,7 +18,6 @@ on:
     types:
       - reopened
       - opened
-      - closed
       - synchronize
 
 jobs:
