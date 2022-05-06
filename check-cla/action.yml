@@ -16,6 +16,7 @@ runs:
       with:
         authToken: ${{ inputs.token }}
         context: "CLA check"
+        description: Checking conda CLA...
         state: "pending"
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
     - name: Check if current actor has signed
@@ -93,16 +94,17 @@ runs:
       with:
         authToken: ${{ inputs.token }}
         context: CLA check
-        description: CLA not signed
+        description: conda CLA not signed. Please follow the details link to sign it.
         state: error
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
+        target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
-    - name: Set commit status to pending
+    - name: Set commit status to success
       if: steps.contributors.outputs.hasSigned == 'true'
       uses: Sibz/github-status-action@v1
       with:
         authToken: ${{ inputs.token }}
         context: CLA check
-        description: CLA signed
+        description: CLA signed, thank you!
         state: success
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
