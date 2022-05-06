@@ -78,10 +78,20 @@ runs:
           In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
         GITHUB_TOKEN: ${{ inputs.token }}
 
-    # set the workflow run to failed and leave a message
-    - name: Setting workflow run
+    - name: Set commit status to pending
       if: steps.contributors.outputs.hasSigned == 'false'
-      uses: actions/github-script@v6
+      uses: Sibz/github-status-action
       with:
-        github-token: ${{ inputs.token }}
-        script: core.setFailed('CLA not signed!')
+        authToken: ${{ inputs.token }}
+        context: ${{ github.workflow }}
+        description: CLA not signed
+        state: failure
+
+    - name: Set commit status to pending
+      if: steps.contributors.outputs.hasSigned == 'true'
+      uses: Sibz/github-status-action
+      with:
+        authToken: ${{ inputs.token }}
+        context: ${{ github.workflow }}
+        description: CLA signed
+        state: success
