@@ -27,6 +27,7 @@ jobs:
       !github.event.repository.fork
       && (
         github.event.comment.body == '@conda-bot check'
+        && github.event.issue.pull_request
         || github.event_name == 'pull_request_target'
       )
     runs-on: ubuntu-latest
