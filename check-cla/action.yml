@@ -18,7 +18,7 @@ runs:
         context: "CLA check"
         description: Checking conda CLA...
         state: "pending"
-        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+        sha: ${{ github.event.issue.pull_request.head.sha || github.event.pull_request.head.sha || github.sha }}
     - name: Check if current actor has signed
       uses: actions/github-script@v6
       id: contributors
@@ -96,7 +96,7 @@ runs:
         context: CLA check
         description: conda CLA not signed. Please follow the details link to sign it.
         state: error
-        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+        sha: ${{ github.event.issue.pull_request.head.sha || github.event.pull_request.head.sha || github.sha }}
         target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
     - name: Set commit status to success
@@ -107,4 +107,4 @@ runs:
         context: CLA check
         description: CLA signed, thank you!
         state: success
-        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+        sha: ${{ github.event.issue.pull_request.head.sha || github.event.pull_request.head.sha || github.sha }}
