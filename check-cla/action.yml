@@ -85,7 +85,7 @@ runs:
         authToken: ${{ inputs.token }}
         context: ${{ github.workflow }}
         description: CLA not signed
-        state: failure
+        state: error
 
     - name: Set commit status to pending
       if: steps.contributors.outputs.hasSigned == 'true'
