@@ -79,7 +79,7 @@ runs:
     # add cla-signed label if actor has already signed
     - name: Add label
       uses: actions/github-script@v6
-      if: steps.contributors.outputs.hasSigned == 'true' && steps.pr.outputs.hasLabel == 'true'
+      if: steps.contributors.outputs.hasSigned == 'true' && steps.pr.outputs.hasLabel == 'false'
       with:
         github-token: ${{ inputs.token }}
         script: |
