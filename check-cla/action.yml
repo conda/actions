@@ -24,6 +24,7 @@ runs:
       with:
         github-token: ${{ inputs.token }}
         script: |
+          console.log(context);
           const getContributors = async () => {
             try {
               const results = (
@@ -40,10 +41,11 @@ runs:
             }
           }
           const contributors = await getContributors();
-          const creator = context.payload.pull_request.user.login;
-          const hasSigned = contributors.includes(creator);
-          console.log(context);
           console.log(contributors);
+          const pull_request = (context.payload.issue || context.payload.pull_request || context.payload);
+          const creator = pull_request.user.login;
+          console.log(creator);
+          const hasSigned = contributors.includes(creator);
           console.log(hasSigned);
           core.setOutput('contributors', contributors);
           core.setOutput('hasSigned', hasSigned);
