@@ -1,0 +1,136 @@
+name: 'CLA check'
+description: 'This action can be used to react to new pull requests and checks if the actor has previously signed the conda contributor license agreement.'
+inputs:
+  token:
+    description: 'Token for commenting and labelling'
+    required: true
+  label:
+    description: 'Label to use'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get PR metadata
+      id: pr
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const { owner, repo, number } = context.issue;
+          const pullRequest = await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: number,
+          });
+          console.log(pullRequest);
+          const sha = pullRequest.data.head.sha;
+          console.log(sha);
+          core.setOutput('sha', sha);
+
+          const labels = pullRequest.data.labels.map(label => label.name)
+          console.log(labels);
+          core.setOutput('labels', labels);
+
+          const hasLabel = labels.includes('${{ inputs.label }}')
+          console.log(hasLabel);
+          core.setOutput('hasLabel', hasLabel);
+
+    - name: Set commit status with pending
+      uses: Sibz/github-status-action@v1
+      with:
+        authToken: ${{ inputs.token }}
+        context: "CLA check"
+        description: Checking conda CLA...
+        state: "pending"
+        sha: ${{ steps.pr.outputs.sha || github.sha }}
+
+    - name: Check if current actor has signed
+      uses: actions/github-script@v6
+      id: contributors
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          console.log(context);
+          const getContributors = async () => {
+            try {
+              const results = (
+                await github.rest.repos.getContent({
+                  owner: 'conda',
+                  repo: 'clabot-config',
+                  path: '.clabot'
+                })
+              );
+              return JSON.parse(Buffer.from(results.data.content, results.data.encoding).toString('utf-8')).contributors;
+            } catch (err) {
+              core.error(`Could not retrieve contributors, returning undefined. Reason: ${err}`)
+              return undefined;
+            }
+          }
+          const contributors = await getContributors();
+          console.log(contributors);
+          const pull_request = (context.payload.issue || context.payload.pull_request || context.payload);
+          const creator = pull_request.user.login;
+          console.log(creator);
+          const hasSigned = contributors.includes(creator);
+          console.log(hasSigned);
+          core.setOutput('contributors', contributors);
+          core.setOutput('hasSigned', hasSigned);
+
+    # add cla-signed label if actor has already signed
+    - name: Add label
+      uses: actions/github-script@v6
+      if: steps.contributors.outputs.hasSigned == 'true' && steps.pr.outputs.hasLabel == 'false'
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: context.issue.number,
+              labels: ['${{ inputs.label }}']
+            })
+
+    # remove cla-signed label if actor has not signed yet
+    - name: Remove label
+      uses: actions/github-script@v6
+      if: steps.contributors.outputs.hasSigned == 'false' && steps.pr.outputs.hasLabel == 'true'
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+            await github.rest.issues.removeLabel({
+              ...context.repo,
+              issue_number: context.issue.number,
+              name: '${{ inputs.label }}'
+            })
+
+    # create sticky comment if not signed
+    - name: Create comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: steps.contributors.outputs.hasSigned == 'false'
+      with:
+        number: context.issue.number
+        message: |
+          We require contributors to sign our [Contributor License Agreement](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement) and we don't have one on file for @${{ github.event.pull_request.user.login }}.
+
+          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
+        GITHUB_TOKEN: ${{ inputs.token }}
+
+    - name: Set commit status to error
+      if: steps.contributors.outputs.hasSigned == 'false'
+      uses: Sibz/github-status-action@v1
+      with:
+        authToken: ${{ inputs.token }}
+        context: CLA check
+        description: Please follow the details link to sign the conda CLA. →
+        state: error
+        sha: ${{ steps.pr.outputs.sha || github.sha }}
+        target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
+
+    - name: Set commit status to success
+      if: steps.contributors.outputs.hasSigned == 'true'
+      uses: Sibz/github-status-action@v1
+      with:
+        authToken: ${{ inputs.token }}
+        context: CLA check
+        description: CLA signed, thank you!
+        state: success
+        sha: ${{ steps.pr.outputs.sha || github.sha }}
