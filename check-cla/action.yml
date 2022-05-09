@@ -107,6 +107,7 @@ runs:
       uses: marocchino/sticky-pull-request-comment@v2
       if: steps.contributors.outputs.hasSigned == 'false'
       with:
+        number: context.issue.number
         message: |
           We require contributors to sign our [Contributor License Agreement](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement) and we don't have one on file for @${{ github.event.pull_request.user.login }}.
 
