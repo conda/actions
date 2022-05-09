@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check CLA
-        uses: conda/actions/check-cla@check-cla
+        uses: conda/actions/check-cla
         with:
           # [required]
           # label to add when actor has signed the CLA
