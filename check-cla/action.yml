@@ -119,7 +119,7 @@ runs:
       with:
         authToken: ${{ inputs.token }}
         context: CLA check
-        description: conda CLA not signed. Please follow the details link to sign it.
+        description: Please follow the details link to sign the conda CLA. →
         state: error
         sha: ${{ steps.pr.outputs.sha || github.sha }}
         target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
