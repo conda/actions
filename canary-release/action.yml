@@ -62,8 +62,8 @@ runs:
         set -euo pipefail
         conda activate
         conda update --yes --quiet conda
-        conda install --yes --quiet conda-build anaconda-client git
-        conda install --yes --quiet --force-reinstall git
+        conda install --yes --quiet conda-build anaconda-client
+        conda install --yes --quiet git
         echo "::endgroup::"
 
         echo "::group::Debugging information"
