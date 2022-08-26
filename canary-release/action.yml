@@ -62,7 +62,11 @@ runs:
         set -euo pipefail
         conda activate
         conda update --yes --quiet conda
-        conda install --yes --quiet conda-build anaconda-client git
+        conda install --yes --quiet conda-build anaconda-client
+        # git needs to be installed after conda-build
+        # see https://github.com/conda/conda/issues/11758
+        # see https://github.com/conda/actions/pull/47
+        conda install --yes --quiet git
         echo "::endgroup::"
 
         echo "::group::Debugging information"
