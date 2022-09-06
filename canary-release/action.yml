@@ -26,6 +26,10 @@ inputs:
   conda-build-arguments:
     description: 'Command line arguments for conda-build, inserted before recipe path with no processing.'
     required: false
+  conda-build-path:
+    description: 'The path to the conda recipe passed to conda-build.'
+    required: false
+    default: recipe
 runs:
   using: "composite"
   steps:
@@ -76,7 +80,7 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Building package"
-        conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} conda.recipe
+        conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
         echo "::endgroup::"
 
         echo "::group::Uploading package"
