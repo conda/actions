@@ -36,7 +36,7 @@ runs:
           core.setOutput('hasLabel', hasLabel);
 
     - name: Set commit status with pending
-      uses: Sibz/github-status-action@v1
+      uses: Sibz/github-status-action@v1.1.6
       with:
         authToken: ${{ inputs.token }}
         context: "CLA check"
@@ -116,7 +116,7 @@ runs:
 
     - name: Set commit status to error
       if: steps.contributors.outputs.hasSigned == 'false'
-      uses: Sibz/github-status-action@v1
+      uses: Sibz/github-status-action@v1.1.6
       with:
         authToken: ${{ inputs.token }}
         context: CLA check
@@ -127,7 +127,7 @@ runs:
 
     - name: Set commit status to success
       if: steps.contributors.outputs.hasSigned == 'true'
-      uses: Sibz/github-status-action@v1
+      uses: Sibz/github-status-action@v1.1.6
       with:
         authToken: ${{ inputs.token }}
         context: CLA check
