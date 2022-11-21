@@ -84,7 +84,7 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Uploading package"
-        anaconda
+        anaconda \
           --token="${{ inputs.anaconda-org-token }}" \
           upload \
           --force \
