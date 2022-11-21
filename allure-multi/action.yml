@@ -64,8 +64,3 @@ runs:
       run: |
         export ALLURE_PATH=$RUNNER_TEMP/allure-2.20.0/bin/allure
         python $GITHUB_ACTION_PATH/action.py
-
-        # generate index.html
-        cd gh-pages
-        echo "<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css'><div class='container'><h1>Test reports</h1>" > index.html
-        find . -name index.html -exec echo "<a href='"{}"'>{}</a><br>" \; >> index.html

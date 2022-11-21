@@ -18,7 +18,7 @@ REPOSITORY = os.environ.get("INPUT_REPOSITORY")
 # glob pattern used to download some artifacts
 PATTERN = os.environ.get("INPUT_ARTIFACT_PATTERN")
 # regex matching the group part of an artifact
-GROUP_REGEX = os.environ.get("INPUT_ARTIFACT_GROUP", "allure-(\d.*)")
+GROUP_REGEX = os.environ.get("INPUT_ARTIFACT_GROUP", r"allure-(\d.*)")
 
 
 def list_runs(repository):
@@ -42,6 +42,7 @@ def download_run(repository, run_id, pattern=PATTERN):
     """
     Download artifacts for a single run.
     """
+    assert pattern, "pattern is required"
     workdir = Path(run_id)
     try:
         workdir.mkdir()
@@ -117,7 +118,28 @@ def report_run(
         subprocess.run(command)
 
 
-if __name__ == "__main__":
+def index_html(outdir="gh-pages"):
+    """
+    Link to all the reports.
+    """
+    outdir = Path(outdir)
+    outfile = outdir / "index.html"
+    indexes = [
+        index.relative_to(outdir) for index in Path(outdir).glob("*/**/index.html")
+    ]
+
+    page = """\
+<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css'>
+<div class='container'>
+<h1>Test reports</h1>
+""" + "\n".join(
+        (f"""<a href="{index}">{index}</a><br>""" for index in indexes)
+    )
+
+    outfile.write_text(page)
+
+
+def go():
     repository = REPOSITORY
     assert repository, "no repository!"
     # group multiple assets together
@@ -132,3 +154,8 @@ if __name__ == "__main__":
             continue
         print(f"Report {run}")
         report_run(repository, run, pattern=pattern)
+        index_html()
+
+
+if __name__ == "__main__":
+    go()
