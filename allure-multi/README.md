@@ -32,7 +32,7 @@ Artifacts are grouped into reports based on regular expression matching, or ever
 
 ```yaml
 - name: Call allure-multi action
-  uses: dholth/allure-multi@main
+  uses: conda/actions/allure-multi@<branch>
   with:
     repository: your/public-repository
     pattern: allure-*
