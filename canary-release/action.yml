@@ -84,10 +84,14 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Uploading package"
-        anaconda --token ${{ inputs.anaconda-org-token }} upload \
-          --force --register --no-progress \
-          --user ${{ inputs.anaconda-org-channel }} \
-          --label ${{ inputs.anaconda-org-label }} \
+        anaconda
+          --token="${{ inputs.anaconda-org-token }}" \
+          upload \
+          --force \
+          --register \
+          --no-progress \
+          --user="${{ inputs.anaconda-org-channel }}" \
+          --label="${{ inputs.anaconda-org-label }}" \
           ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2
         echo "Uploaded the following files:"
         ls ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2 | cut -d/ -f3- | tr ' ' $'\n'
