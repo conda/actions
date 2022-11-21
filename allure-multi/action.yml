@@ -1,0 +1,71 @@
+name: "Allure Multi"
+description: "Generate multiple allure reports from artifacts and publish to gh-pages."
+author: "dholth"
+branding:
+  icon: 'book'
+  color: 'green'
+
+# from actions/checkout
+inputs:
+  repository:
+    description: 'Repository name with owner. For example, actions/checkout'
+    default: ${{ github.repository }}
+  ref:
+    description: >
+      The branch, tag or SHA to checkout. When checking out the repository that
+      triggered a workflow, this defaults to the reference or SHA for that
+      event.  Otherwise, uses the default branch.
+  token:
+    description: >
+      Personal access token (PAT) used to fetch the repository. The PAT is configured
+      with the local git config, which enables your scripts to run authenticated git
+      commands. The post-job step removes the PAT.
+      We recommend using a service account with the least permissions necessary.
+      Also when generating a new PAT, select the least scopes necessary.
+      [Learn more about creating and using encrypted secrets](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/creating-and-using-encrypted-secrets)
+    default: ${{ github.token }}
+  pattern:
+    description: >
+      Glob pattern to limit artifact downloads.
+    default: allure-*
+  group:
+    description: >
+      Regex matching common part of multiple-artifacts for a single report.
+    default: allure-(.*)
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-java@v3
+      with:
+        # Don't know which Java is the best.
+        distribution: 'temurin'
+        java-version: '17'
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Download allure
+      shell: bash
+      run: |
+        cd $RUNNER_TEMP
+        curl -L -O https://github.com/allure-framework/allure2/releases/download/2.20.0/allure-2.20.0.tgz
+        tar -xf allure-2.20.0.tgz
+
+    - name: Make reports
+      shell: bash
+      env:
+        # necessary to run gh cli
+        GH_TOKEN: ${{ github.token }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_ARTIFACT_PATTERN: ${{ inputs.pattern }}
+        INPUT_ARTIFACT_GROUP: ${{ inputs.group }}
+      run: |
+        export ALLURE_PATH=$RUNNER_TEMP/allure-2.20.0/bin/allure
+        python $GITHUB_ACTION_PATH/action.py
+
+        # generate index.html
+        cd gh-pages
+        echo "<link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css'><div class='container'><h1>Test reports</h1>" > index.html
+        find . -name index.html -exec echo "<a href='"{}"'>{}</a><br>" \; >> index.html
