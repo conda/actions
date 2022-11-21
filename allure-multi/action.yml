@@ -63,4 +63,4 @@ runs:
         INPUT_ARTIFACT_GROUP: ${{ inputs.group }}
       run: |
         export ALLURE_PATH=$RUNNER_TEMP/allure-2.20.0/bin/allure
-        python $GITHUB_ACTION_PATH/action.py
+        python $GITHUB_ACTION_PATH/allure-multi/action.py
