@@ -161,7 +161,7 @@ def go():
         report_run(repository, run, pattern=pattern)
         index_html()
         seen_ids.add(run["databaseId"])
-    seen.write_text("\n".join(token for token in seen_ids if token))
+    seen.write_text("\n".join(str(token) for token in seen_ids if token))
 
 
 if __name__ == "__main__":
