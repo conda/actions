@@ -133,7 +133,7 @@ def index_html(outdir="gh-pages"):
     indexes = [index.relative_to(outdir) for index in outdir.glob("*/**/index.html")]
 
     page = TEMPLATE + "\n".join(
-        (f"""<a href="{index}">{index}</a><br>""" for index in indexes)
+        (f"""<a href="{index}">{index}</a><br>""" for index in sorted(indexes))
     )
 
     outfile.write_text(page)
