@@ -133,7 +133,7 @@ def index_html(outdir="gh-pages"):
     indexes = [index.relative_to(outdir) for index in outdir.glob("*/**/index.html")]
 
     page = TEMPLATE + "\n".join(
-        (f"""<a href="{index}">{index}</a><br>""" for index in indexes)
+        (f"""<a href="{index}">{index}</a><br>""" for index in sorted(indexes))
     )
 
     outfile.write_text(page)
@@ -161,7 +161,7 @@ def go():
         report_run(repository, run, pattern=pattern)
         index_html()
         seen_ids.add(run["databaseId"])
-    seen.write_text("\n".join(token for token in seen_ids if token))
+    seen.write_text("\n".join(str(token) for token in seen_ids if token))
 
 
 if __name__ == "__main__":
