@@ -102,6 +102,34 @@ runs:
               name: '${{ inputs.label }}'
             })
 
+    # checkout conda/infrastructure to update .clabot
+    - uses: actions/checkout@v3
+      if: steps.contributors.outputs.hasSigned == 'false'
+      with:
+        repository: conda/infrastructure
+
+    # update .clabot
+    - shell: python
+      if: steps.contributors.outputs.hasSigned == 'false'
+      run: |
+        import json
+        from pathlib import Path
+
+        path = Path(".clabot")
+        clabot = json.loads(path.read_text())
+        clabot["contributors"].append("${{ github.actor }}")
+        path.write_text(json.dumps(clabot))
+
+    # create PR
+    - uses: peter-evans/create-pull-request@v4
+      id: cla-pr
+      if: steps.contributors.outputs.hasSigned == 'false'
+      with:
+        branch: cla-${{ github.actor }}
+        commit-message: Adding CLA singee ${{ github.actor }}
+        title: Adding CLA singee ${{ github.actor }}
+        body: Adding CLA signee @${{ github.actor }}
+
     # create sticky comment if not signed
     - name: Create comment
       uses: marocchino/sticky-pull-request-comment@v2
@@ -111,7 +139,7 @@ runs:
         message: |
           We require contributors to sign our [Contributor License Agreement](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement) and we don't have one on file for @${{ github.event.pull_request.user.login }}.
 
-          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
+          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature (${{ steps.cla-pr.outputs.pull-request-url }}) and ping the bot to refresh the PR.
         GITHUB_TOKEN: ${{ inputs.token }}
 
     - name: Set commit status to error
