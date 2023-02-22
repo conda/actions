@@ -56,7 +56,7 @@ runs:
               const results = (
                 await github.rest.repos.getContent({
                   owner: 'conda',
-                  repo: 'infra',
+                  repo: 'infrastructure',
                   path: '.clabot'
                 })
               );
