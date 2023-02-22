@@ -2,7 +2,7 @@ name: 'CLA check'
 description: 'This action can be used to react to new pull requests and checks if the actor has previously signed the conda contributor license agreement.'
 inputs:
   token:
-    description: 'Token for commenting and labelling'
+    description: 'Token for commenting and labeling'
     required: true
   label:
     description: 'Label to use'
