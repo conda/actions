@@ -1,11 +1,14 @@
-name: 'CLA check'
-description: 'This action can be used to react to new pull requests and checks if the actor has previously signed the conda contributor license agreement.'
+name: CLA check
+description: Reacts to new PRs and check if the contributor has previously signed the conda contributor license agreement (CLA).
 inputs:
   token:
-    description: 'Token for commenting and labelling'
+    description: Token for commenting and labeling on contributor's PR
+    required: true
+  infrastructure_token:
+    description: Token for opening singee PR in conda/infrastructure
     required: true
   label:
-    description: 'Label to use'
+    description: Label to apply to contributor's PR once CLA is singed
     required: true
 
 runs:
@@ -56,7 +59,7 @@ runs:
               const results = (
                 await github.rest.repos.getContent({
                   owner: 'conda',
-                  repo: 'infra',
+                  repo: 'infrastructure',
                   path: '.clabot'
                 })
               );
@@ -102,6 +105,39 @@ runs:
               name: '${{ inputs.label }}'
             })
 
+    # checkout conda/infrastructure to update .clabot
+    - uses: actions/checkout@v3
+      if: steps.contributors.outputs.hasSigned == 'false'
+      with:
+        repository: conda/infrastructure
+
+    # update .clabot
+    - shell: python
+      if: steps.contributors.outputs.hasSigned == 'false'
+      run: |
+        import json
+        from pathlib import Path
+
+        path = Path(".clabot")
+        clabot = json.loads(path.read_text())
+        clabot["contributors"].append("${{ github.actor }}")
+        clabot["contributors"].sort()
+        path.write_text(json.dumps(clabot))
+
+    # create PR
+    - uses: peter-evans/create-pull-request@v4
+      id: cla-pr
+      if: steps.contributors.outputs.hasSigned == 'false'
+      with:
+        token: ${{ inputs.infrastructure_token }}
+        branch: cla-${{ github.actor }}
+        commit-message: Adding CLA singee ${{ github.actor }}
+        title: Adding CLA singee ${{ github.actor }}
+        body: |
+            Adding CLA signee @${{ github.actor }}
+
+            Xref ${{ github.event.pull_request.url }}
+
     # create sticky comment if not signed
     - name: Create comment
       uses: marocchino/sticky-pull-request-comment@v2
@@ -111,7 +147,7 @@ runs:
         message: |
           We require contributors to sign our [Contributor License Agreement](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement) and we don't have one on file for @${{ github.event.pull_request.user.login }}.
 
-          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature. We will ping the bot to refresh the PR status when we have confirmed your signature.
+          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature, merge the PR (${{ steps.cla-pr.outputs.pull-request-url }}), and ping the bot to refresh the PR.
         GITHUB_TOKEN: ${{ inputs.token }}
 
     - name: Set commit status to error
