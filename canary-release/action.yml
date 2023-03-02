@@ -38,7 +38,7 @@ runs:
     - name: Set output variables
       id: vars
       shell: bash -l {0}
-      run: echo "name=run-url::https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+      run: echo "RUN_URL=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
 
     - name: Create comment if there is no status update
       uses: marocchino/sticky-pull-request-comment@v2
