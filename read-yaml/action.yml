@@ -21,7 +21,7 @@ runs:
     - run: npm install js-yaml axios
       shell: bash -l {0}
     - id: read_yaml
-      uses: actions/github-script@v5
+      uses: actions/github-script@v6
       with:
         script: |
           const yaml = require('js-yaml');
