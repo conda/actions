@@ -1,44 +1,45 @@
-name: 'Canary releases'
-description: 'This builds and uploads canary releases of conda to the provided channel and label on anaconda.org.'
+---
+name: Canary releases
+description: This builds and uploads canary releases of conda to the provided channel and label on anaconda.org.
 inputs:
   package-name:
-    description: 'Name of package on anaconda.org, needs to match build file name.'
+    description: Name of package on anaconda.org, needs to match build file name.
     required: true
   subdir:
-    description: 'Subdirectory'
+    description: Subdirectory
     required: true
   comment-headline:
-    description: 'Headline for build comment'
+    description: Headline for build comment
     required: false
-    default: 'Canary release status'
+    default: Canary release status
   comment-token:
-    description: 'Token for commenting build'
+    description: Token for commenting build
     required: false
   anaconda-org-channel:
-    description: 'Channel on anaconda.org'
+    description: Channel on anaconda.org
     required: true
   anaconda-org-label:
-    description: 'Label to use on anaconda.org'
+    description: Label to use on anaconda.org
     required: true
   anaconda-org-token:
-    description: 'Upload token for anaconda.org'
+    description: Upload token for anaconda.org
     required: true
   conda-build-arguments:
-    description: 'Command line arguments for conda-build, inserted before recipe path with no processing.'
+    description: Command line arguments for conda-build, inserted before recipe path with no processing.
     required: false
   conda-build-path:
-    description: 'The path to the conda recipe passed to conda-build.'
+    description: The path to the conda recipe passed to conda-build.
     required: false
     default: recipe
 runs:
-  using: "composite"
+  using: composite
   steps:
     - uses: conda-incubator/setup-miniconda@v2
 
     - name: Set output variables
       id: vars
       shell: bash -l {0}
-      run: echo ::set-output name=run-url::"https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      run: echo "RUN_URL=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
 
     - name: Create comment if there is no status update
       uses: marocchino/sticky-pull-request-comment@v2
@@ -46,7 +47,7 @@ runs:
       with:
         message: |
           # ${{ inputs.comment-headline }}
-          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run-url }}) by @${{ github.actor }}!
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.RUN_URL }}) by @${{ github.actor }}!
 
           Once it's done, use this command to try it out in a new conda environment:
 
@@ -106,7 +107,7 @@ runs:
       with:
         append: true
         message: |
-          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) succeeded on ${{ runner.os }} (${{ runner.arch }})
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.RUN_URL }}) succeeded on ${{ runner.os }} (${{ runner.arch }})
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
     - name: Leave comment after build
@@ -115,5 +116,5 @@ runs:
       with:
         append: true
         message: |
-          - build [${{ github.run_id }}](${{ steps.vars.outputs.run-url }}) failed on ${{ runner.os }} (${{ runner.arch }})
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.RUN_URL }}) failed on ${{ runner.os }} (${{ runner.arch }})
         GITHUB_TOKEN: ${{ inputs.comment-token }}
