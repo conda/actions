@@ -80,31 +80,21 @@ runs:
           core.setOutput('contributors', contributors);
           core.setOutput('hasSigned', hasSigned);
 
-    # add cla-signed label if actor has already signed
+    # add [cla-signed] label if actor has already signed
     - name: Add label
-      uses: actions/github-script@v6
+      uses: actions-ecosystem/action-add-labels@v1.1.0
       if: steps.contributors.outputs.hasSigned == 'true' && steps.pr.outputs.hasLabel == 'false'
       with:
-        github-token: ${{ inputs.token }}
-        script: |
-          await github.rest.issues.addLabels({
-            ...context.repo,
-            issue_number: context.issue.number,
-            labels: ['${{ inputs.label }}']
-          })
+        github_token: ${{ inputs.token }}
+        labels: ${{ inputs.label }}
 
-    # remove cla-signed label if actor has not signed yet
+    # remove [cla-signed] label if actor has not signed yet
     - name: Remove label
-      uses: actions/github-script@v6
+      uses: actions-ecosystem/action-remove-labels@v1.3.0
       if: steps.contributors.outputs.hasSigned == 'false' && steps.pr.outputs.hasLabel == 'true'
       with:
-        github-token: ${{ inputs.token }}
-        script: |
-          await github.rest.issues.removeLabel({
-            ...context.repo,
-            issue_number: context.issue.number,
-            name: '${{ inputs.label }}'
-          })
+        github_token: ${{ inputs.token }}
+        labels: ${{ inputs.label }}
 
     # checkout conda/infrastructure to update .clabot
     - uses: actions/checkout@v3
