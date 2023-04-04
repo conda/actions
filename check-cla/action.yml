@@ -3,7 +3,7 @@ name: CLA check
 description: Reacts to new PRs and check if the contributor has previously signed the conda contributor license agreement (CLA).
 inputs:
   token:
-    description: The GitHub token (`statuses: write` and `pull_request: write`) used to create an authenticated client
+    description: 'A token with ability to comment, label, and modify the commit status (`pull_request: write` and `statuses: write`)'
     default: ${{ github.token }}
     required: true
   label:
@@ -12,15 +12,15 @@ inputs:
   cla_repo:
     description: Upstream repository in which to create PR
     default: conda/infrastructure
+  cla_path:
+    description: Path to the CLA signees file within the provided `cla_repo`
+    default: .clabot
   cla_fork:
     description: Fork of cla_repo in which to create branch
     default: conda-bot/infrastructure
   cla_token:
-    description: Token for opening singee PR in the provided `cla_repo`
+    description: Token for opening singee PR in `cla_fork`
     required: true
-  cla_path:
-    description: Path to the CLA signees file within the provided `cla_repo`
-    default: .clabot
 
 runs:
   using: composite

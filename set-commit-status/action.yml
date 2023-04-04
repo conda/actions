@@ -1,8 +1,9 @@
+---
 name: Set Commit Status
 description: Modifies the commit status of the most recent commit.
 inputs:
   token:
-    description: "The GitHub token (`statuses: write`) used to create an authenticated client"
+    description: 'The GitHub token (`statuses: write`) used to create an authenticated client'
     default: ${{ github.token }}
     required: true
   context:
@@ -52,4 +53,3 @@ runs:
           } catch (error) {
             throw new Error(`error while setting commit status: ${(error as Error).message}`);
           }
-

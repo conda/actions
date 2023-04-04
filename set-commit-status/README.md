@@ -8,7 +8,7 @@ status.
 In your GitHub repository include the action in your workflows:
 
 ```yaml
-name: Set commit status
+name: Set Commit Status
 
 on: pull_request_target
 
@@ -22,15 +22,18 @@ jobs:
       - uses: conda/actions/set-commit-status
         with:
           # [required]
-          # The GitHub token (`statuses: write`) used to create an authenticated client
+          # A token with the ability to modify the commit status
+          # (`statuses: write`)
           # (default: secrets.GITHUB_TOKEN)
           token:
+
           # [required]
           # The name of the commit status
           context:
           # [required]
-          # The commit status to set, either success, error, failure, or pending
+          # The commit status to set; either success, error, failure, or pending
           state:
+
           # A short text explaining the commit status
           # (default: '')
           description:
