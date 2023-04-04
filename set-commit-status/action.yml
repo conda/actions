@@ -27,11 +27,9 @@ runs:
       with:
         script: |
           try {
-            core.debug('owner: ${{ github.repository }}');
             const [owner, repo] = '${{ github.repository }}'.split('/', 1);
             core.debug(`owner: ${owner}`);
             core.debug(`repo: ${repo}`);
-            core.debug('sha: ${{ github.sha }}');
 
             await github.rest.repos.createCommitStatus({
               context: '${{ inputs.context }}',
