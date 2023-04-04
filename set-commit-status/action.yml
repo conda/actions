@@ -28,17 +28,17 @@ runs:
         script: |
           try {
             const octokit = getOctokit('${{ inputs.token }}');
-            core.debug("Successfully authenticated Octokit");
+            core.debug('Successfully authenticated Octokit');
           } catch (error) {
-            throw new Error(`error while authenticating Octokit: ${(error as Error).message}`);
+            throw new Error(`error while authenticating Octokit: ${error}`);
           }
 
           try {
-            core.debug(`owner: ${{ github.repository }}`);
-            const [owner, repo] = '${{ github.repository }}'.split("/", 1);
+            core.debug('owner: ${{ github.repository }}');
+            const [owner, repo] = '${{ github.repository }}'.split('/', 1);
             core.debug(`owner: ${owner}`);
             core.debug(`repo: ${repo}`);
-            core.debug(`sha: ${{ github.sha }}`);
+            core.debug('sha: ${{ github.sha }}');
 
             await octokit.rest.repos.createCommitStatus({
               context: '${{ inputs.context }}',
@@ -49,7 +49,7 @@ runs:
               state: '${{ inputs.state }}',
               target_url: '${{ inputs.target_url }}'
             });
-            core.info(`Updated build status: ${{ inputs.state }}`);
+            core.info('Updated build status: ${{ inputs.state }}');
           } catch (error) {
-            throw new Error(`error while setting commit status: ${(error as Error).message}`);
+            throw new Error(`error while setting commit status: ${error}`);
           }
