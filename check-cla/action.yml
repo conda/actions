@@ -3,7 +3,8 @@ name: CLA check
 description: Reacts to new PRs and check if the contributor has previously signed the conda contributor license agreement (CLA).
 inputs:
   token:
-    description: Token for commenting and labeling on contributor's PR
+    description: The GitHub token (`statuses: write` and `pull_request: write`) used to create an authenticated client
+    default: ${{ github.token }}
     required: true
   label:
     description: Label to apply to contributor's PR once CLA is singed
@@ -50,14 +51,14 @@ runs:
           console.log(hasLabel);
           core.setOutput('hasLabel', hasLabel);
 
+    # commit status → pending
     - name: Set commit status with pending
-      uses: dholth/github-status-action@runs-using-node16
+      uses: conda/actions/set-commit-status@customize-cla-repo
       with:
-        authToken: ${{ inputs.token }}
+        token: ${{ inputs.token }}
         context: CLA check
-        description: Checking conda CLA...
         state: pending
-        sha: ${{ steps.pr.outputs.sha || github.sha }}
+        description: Checking conda CLA...
 
     # contributors, hasSigned
     - name: Check if current actor has signed
@@ -157,23 +158,23 @@ runs:
           In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature, merge the PR (${{ steps.cla-pr.outputs.pull-request-url }}), and ping the bot to refresh the PR.
         GITHUB_TOKEN: ${{ inputs.token }}
 
+    # commit status → error
     - name: Set commit status to error
       if: steps.contributors.outputs.hasSigned == 'false'
-      uses: dholth/github-status-action@runs-using-node16
+      uses: conda/actions/set-commit-status@customize-cla-repo
       with:
-        authToken: ${{ inputs.token }}
+        token: ${{ inputs.token }}
         context: CLA check
-        description: Please follow the details link to sign the conda CLA. →
         state: error
-        sha: ${{ steps.pr.outputs.sha || github.sha }}
+        description: Please follow the details link to sign the conda CLA. →
         target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
+    # commit status → success
     - name: Set commit status to success
       if: steps.contributors.outputs.hasSigned == 'true'
-      uses: dholth/github-status-action@runs-using-node16
+      uses: conda/actions/set-commit-status@customize-cla-repo
       with:
-        authToken: ${{ inputs.token }}
+        token: ${{ inputs.token }}
         context: CLA check
-        description: CLA signed, thank you!
         state: success
-        sha: ${{ steps.pr.outputs.sha || github.sha }}
+        description: CLA signed, thank you!

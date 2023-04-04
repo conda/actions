@@ -1,0 +1,55 @@
+name: Set Commit Status
+description: Modifies the commit status of the most recent commit.
+inputs:
+  token:
+    description: "The GitHub token (`statuses: write`) used to create an authenticated client"
+    default: ${{ github.token }}
+    required: true
+  context:
+    description: The name of the commit status
+    required: true
+  state:
+    description: The commit status to set, either success, error, failure, or pending
+    required: true
+  description:
+    description: A short text explaining the commit status
+    default: ''
+    required: false
+  target_url:
+    description: URL/URI linking to further details
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v6
+      with:
+        script: |
+          try {
+            const octokit = getOctokit('${{ inputs.token }}');
+            core.debug("Successfully authenticated Octokit");
+          } catch (error) {
+            throw new Error(`error while authenticating Octokit: ${(error as Error).message}`);
+          }
+
+          try {
+            core.debug(`owner: ${{ github.repository }}`);
+            const [owner, repo] = '${{ github.repository }}'.split("/", 1);
+            core.debug(`owner: ${owner}`);
+            core.debug(`repo: ${repo}`);
+            core.debug(`sha: ${{ github.sha }}`);
+
+            await octokit.rest.repos.createCommitStatus({
+              context: '${{ inputs.context }}',
+              description: '${{ inputs.description }}',
+              owner: owner,
+              repo: repo,
+              sha: '${{ github.sha }}',
+              state: '${{ inputs.state }}',
+              target_url: '${{ inputs.target_url }}'
+            });
+            core.info(`Updated build status: ${{ inputs.state }}`);
+          } catch (error) {
+            throw new Error(`error while setting commit status: ${(error as Error).message}`);
+          }
+
