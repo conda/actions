@@ -26,12 +26,12 @@ runs:
     - uses: actions/github-script@v6
       with:
         script: |
-          try {
-            const [owner, repo] = '${{ github.repository }}'.split('/', 2);
-            core.debug(`owner: ${owner}`);
-            core.debug(`repo: ${repo}`);
+          const [owner, repo] = '${{ github.repository }}'.split('/');
+          core.debug(`owner: ${owner}`);
+          core.debug(`repo: ${repo}`);
 
-            await github.rest.repos.createCommitStatus({
+          try {
+            var raw = await github.rest.repos.createCommitStatus({
               context: '${{ inputs.context }}',
               description: '${{ inputs.description }}',
               owner: owner,
@@ -40,7 +40,7 @@ runs:
               state: '${{ inputs.state }}',
               target_url: '${{ inputs.target_url }}'
             });
-            core.info('Updated build status: ${{ inputs.state }}');
           } catch (error) {
             throw new Error(`error while setting commit status: ${error}`);
           }
+          core.info(`${raw.data.context} is ${raw.data.state}`);

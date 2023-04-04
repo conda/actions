@@ -25,31 +25,38 @@ inputs:
 runs:
   using: composite
   steps:
-    # sha, labels, hasLabel
+    # sha, labels, has_label
     - name: Get PR metadata
       id: pr
       uses: actions/github-script@v6
       with:
         script: |
           const { owner, repo, number } = context.issue;
-          const pullRequest = await github.rest.pulls.get({
-            owner,
-            repo,
-            pull_number: number,
-          });
-          console.log(pullRequest);
+          core.debug(`owner: ${owner}`);
+          core.debug(`repo: ${repo}`);
+          core.debug(`number: ${number}`);
 
-          const sha = pullRequest.data.head.sha;
-          console.log(sha);
+          try {
+            var raw = await github.rest.pulls.get({
+              owner: owner,
+              repo: repo,
+              pull_number: number
+            });
+          } catch (error) {
+            throw new Error(`error retrieving PR: ${error}`);
+          }
+
+          const sha = raw.data.head.sha;
           core.setOutput('sha', sha);
+          core.debug(`sha: ${sha}`);
 
-          const labels = pullRequest.data.labels.map(label => label.name)
-          console.log(labels);
+          const labels = raw.data.labels.map(label => label.name)
           core.setOutput('labels', labels);
+          core.debug(`labels: ${labels}`);
 
-          const hasLabel = labels.includes('${{ inputs.label }}')
-          console.log(hasLabel);
-          core.setOutput('hasLabel', hasLabel);
+          const has_label = labels.includes('${{ inputs.label }}')
+          core.setOutput('has_label', has_label);
+          core.debug(`has_label: ${has_label}`);
 
     # commit status → pending
     - name: Set commit status with pending
@@ -60,46 +67,51 @@ runs:
         state: pending
         description: Checking conda CLA...
 
-    # contributors, hasSigned
+    # contributors, has_signed
     - name: Check if current actor has signed
       uses: actions/github-script@v6
       id: contributors
       with:
         github-token: ${{ inputs.token }}
         script: |
-          console.log(context);
-          const [owner, repo] = '${{ inputs.cla_repo }}'.split("/", 1);
-          const getContributors = async () => {
-            try {
-              const results = (
-                await github.rest.repos.getContent({
-                  owner: owner,
-                  repo: repo,
-                  path: '${{ inputs.cla_path }}'
-                })
-              );
-              return JSON.parse(Buffer.from(results.data.content, results.data.encoding).toString('utf-8')).contributors;
-            } catch (err) {
-              core.error(`Could not retrieve contributors, returning undefined. Reason: ${err}`)
-              return undefined;
-            }
+          const [owner, repo] = '${{ inputs.cla_repo }}'.split('/');
+          core.debug(`owner: ${owner}`);
+          core.debug(`repo: ${repo}`);
+
+          try {
+            var raw = await github.rest.repos.getContent({
+              owner: owner,
+              repo: repo,
+              path: '${{ inputs.cla_path }}'
+            });
+          } catch (error) {
+            throw new Error(`error retrieving contributors: ${error}`)
           }
-          const contributors = await getContributors();
-          console.log(contributors);
+
+          const contributors = JSON.parse(
+            Buffer.from(
+              raw.data.content,
+              raw.data.encoding
+            ).toString('utf-8')
+          ).contributors;
           core.setOutput('contributors', contributors);
+          core.debug(`contributors: ${contributors}`);
 
-          const pull_request = (context.payload.issue || context.payload.pull_request || context.payload);
-          const creator = pull_request.user.login;
-          console.log(creator);
+          const creator = (
+            context.payload.issue
+            || context.payload.pull_request
+            || context.payload
+          ).user.login;
+          core.debug(`creator: ${creator}`);
 
-          const hasSigned = contributors.includes(creator);
-          console.log(hasSigned);
-          core.setOutput('hasSigned', hasSigned);
+          const has_signed = contributors.includes(creator);
+          core.setOutput('has_signed', has_signed);
+          core.debug(`has_signed: ${has_signed}`);
 
     # add [cla-signed] label if actor has already signed
     - name: Add label
       uses: actions-ecosystem/action-add-labels@v1.1.0
-      if: steps.contributors.outputs.hasSigned == 'true' && steps.pr.outputs.hasLabel == 'false'
+      if: steps.contributors.outputs.has_signed == 'true' && steps.pr.outputs.has_label == 'false'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -107,20 +119,20 @@ runs:
     # remove [cla-signed] label if actor has not signed yet
     - name: Remove label
       uses: actions-ecosystem/action-remove-labels@v1.3.0
-      if: steps.contributors.outputs.hasSigned == 'false' && steps.pr.outputs.hasLabel == 'true'
+      if: steps.contributors.outputs.has_signed == 'false' && steps.pr.outputs.has_label == 'true'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
 
     # checkout cla_repo to update cla_path
     - uses: actions/checkout@v3
-      if: steps.contributors.outputs.hasSigned == 'false'
+      if: steps.contributors.outputs.has_signed == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
 
     # update cla_path
     - shell: python
-      if: steps.contributors.outputs.hasSigned == 'false'
+      if: steps.contributors.outputs.has_signed == 'false'
       run: |
         import json
         from pathlib import Path
@@ -134,7 +146,7 @@ runs:
     # create PR
     - uses: peter-evans/create-pull-request@v4
       id: cla-pr
-      if: steps.contributors.outputs.hasSigned == 'false'
+      if: steps.contributors.outputs.has_signed == 'false'
       with:
         push-to-fork: ${{ inputs.cla_fork }}
         token: ${{ inputs.cla_token }}
@@ -149,7 +161,7 @@ runs:
     # create sticky comment if not signed
     - name: Create comment
       uses: marocchino/sticky-pull-request-comment@v2
-      if: steps.contributors.outputs.hasSigned == 'false'
+      if: steps.contributors.outputs.has_signed == 'false'
       with:
         number: context.issue.number
         message: |
@@ -160,7 +172,7 @@ runs:
 
     # commit status → error
     - name: Set commit status to error
-      if: steps.contributors.outputs.hasSigned == 'false'
+      if: steps.contributors.outputs.has_signed == 'false'
       uses: conda/actions/set-commit-status@customize-cla-repo
       with:
         token: ${{ inputs.token }}
@@ -171,7 +183,7 @@ runs:
 
     # commit status → success
     - name: Set commit status to success
-      if: steps.contributors.outputs.hasSigned == 'true'
+      if: steps.contributors.outputs.has_signed == 'true'
       uses: conda/actions/set-commit-status@customize-cla-repo
       with:
         token: ${{ inputs.token }}
