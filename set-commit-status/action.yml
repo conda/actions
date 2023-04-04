@@ -25,22 +25,21 @@ runs:
   steps:
     - uses: actions/github-script@v6
       with:
+        github-token: ${{ inputs.token }}
         script: |
           const [owner, repo] = '${{ github.repository }}'.split('/');
+          const sha = context.payload?.pull_request?.head?.sha;
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
+          core.debug(`sha: ${sha}`);
 
-          try {
-            var raw = await github.rest.repos.createCommitStatus({
-              context: '${{ inputs.context }}',
-              description: '${{ inputs.description }}',
-              owner: owner,
-              repo: repo,
-              sha: '${{ github.sha }}',
-              state: '${{ inputs.state }}',
-              target_url: '${{ inputs.target_url }}'
-            });
-          } catch (error) {
-            throw new Error(`error while setting commit status: ${error}`);
-          }
+          const raw = await github.rest.repos.createCommitStatus({
+            context: '${{ inputs.context }}',
+            description: '${{ inputs.description }}',
+            owner: owner,
+            repo: repo,
+            sha: sha,
+            state: '${{ inputs.state }}',
+            target_url: '${{ inputs.target_url }}'
+          });
           core.info(`${raw.data.context} is ${raw.data.state}`);
