@@ -151,7 +151,10 @@ runs:
         push-to-fork: ${{ inputs.cla_fork }}
         token: ${{ inputs.cla_token }}
         branch: cla-${{ github.actor }}
+        delete-branch: true
         commit-message: Adding CLA singee ${{ github.actor }}
+        author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+        committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         title: Adding CLA singee ${{ github.actor }}
         body: |
           Adding CLA signee @${{ github.actor }}
