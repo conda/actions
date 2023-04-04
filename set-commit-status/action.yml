@@ -27,20 +27,13 @@ runs:
       with:
         script: |
           try {
-            const octokit = getOctokit('${{ inputs.token }}');
-            core.debug('Successfully authenticated Octokit');
-          } catch (error) {
-            throw new Error(`error while authenticating Octokit: ${error}`);
-          }
-
-          try {
             core.debug('owner: ${{ github.repository }}');
             const [owner, repo] = '${{ github.repository }}'.split('/', 1);
             core.debug(`owner: ${owner}`);
             core.debug(`repo: ${repo}`);
             core.debug('sha: ${{ github.sha }}');
 
-            await octokit.rest.repos.createCommitStatus({
+            await github.rest.repos.createCommitStatus({
               context: '${{ inputs.context }}',
               description: '${{ inputs.description }}',
               owner: owner,
