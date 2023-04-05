@@ -28,17 +28,16 @@ runs:
         github-token: ${{ inputs.token }}
         script: |
           const { owner, repo, number } = context.issue;
-          const raw = await github.rest.pulls.get({
+          const sha = (await github.rest.pulls.get({
             owner: owner,
             repo: repo,
             pull_number: number,
-          });
-          const sha = raw.data.head.sha;
+          })).data.head.sha;
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
           core.debug(`sha: ${sha}`);
 
-          const raw = await github.rest.repos.createCommitStatus({
+          const { context: name, state } = (await github.rest.repos.createCommitStatus({
             context: '${{ inputs.context }}',
             description: '${{ inputs.description }}',
             owner: owner,
@@ -46,5 +45,5 @@ runs:
             sha: sha,
             state: '${{ inputs.state }}',
             target_url: '${{ inputs.target_url }}'
-          });
-          core.info(`${raw.data.context} is ${raw.data.state}`);
+          })).data;
+          core.info(`${name} is ${state}`);

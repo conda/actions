@@ -71,16 +71,13 @@ runs:
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
 
-          const raw = await github.rest.repos.getContent({
+          const { content, encoding } = (await github.rest.repos.getContent({
             owner: owner,
             repo: repo,
             path: '${{ inputs.cla_path }}'
-          });
+          })).data;
           const contributors = JSON.parse(
-            Buffer.from(
-              raw.data.content,
-              raw.data.encoding
-            ).toString('utf-8')
+            Buffer.from(content, encoding).toString('utf-8')
           ).contributors;
           core.debug(`contributors: ${contributors}`);
 
