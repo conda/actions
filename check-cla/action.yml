@@ -21,6 +21,9 @@ inputs:
   cla_token:
     description: Token for opening singee PR in `cla_fork`
     required: true
+  cla_author:
+    description: Git-format author/committer to use for pull request commits
+    default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
 
 runs:
   using: composite
@@ -137,8 +140,8 @@ runs:
         branch: cla-${{ github.actor }}
         delete-branch: true
         commit-message: Adding CLA singee ${{ github.actor }}
-        author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
-        committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+        author: ${{ inputs.cla_author }}
+        committer: ${{ inputs.cla_author }}
         title: Adding CLA singee ${{ github.actor }}
         body: |
           Adding CLA signee @${{ github.actor }}

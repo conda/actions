@@ -49,4 +49,7 @@ jobs:
           # [required]
           # Token for opening singee PR in the provided `cla_repo`
           cla_token:
+          # Git-format author/committer to use for pull request commits
+          # (default: Conda Bot <18747875+conda-bot@users.noreply.github.com>)
+          cla_author:
 ```
