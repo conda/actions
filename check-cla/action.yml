@@ -156,7 +156,7 @@ runs:
         body: |
           Adding CLA signee @${{ github.actor }}
 
-          Xref ${{ github.event.pull_request.html_url }}
+          Xref ${{ (github.event.issue || github.event.pull_request || github.event).html_url }}
 
     # create sticky comment if not signed
     - name: Create comment
@@ -171,7 +171,7 @@ runs:
 
 
           We require contributors to sign our [Contributor License Agreement][cla] and we don't
-          have one on file for @${{ github.event.pull_request.user.login }}.
+          have one on file for @${{ (github.event.issue || github.event.pull_request || github.event).user.login }}.
 
 
           In order for us to review and merge your code, please e-sign the
