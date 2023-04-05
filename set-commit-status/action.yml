@@ -28,7 +28,7 @@ runs:
         github-token: ${{ inputs.token }}
         script: |
           const [owner, repo] = '${{ github.repository }}'.split('/');
-          const sha = context.payload?.pull_request?.head?.sha;
+          const sha = context.payload?.pull_request?.head?.sha || '${{ github.sha }}';
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
           core.debug(`sha: ${sha}`);
