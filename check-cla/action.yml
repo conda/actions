@@ -25,12 +25,14 @@ inputs:
 runs:
   using: composite
   steps:
-    # sha, labels, has_label
-    - name: Get PR metadata
+    # has_label
+    - name: Get PR labels
       id: pr
       uses: actions/github-script@v6
       with:
         script: |
+          console.log(context.payload);
+
           const { owner, repo, number } = context.issue;
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
@@ -42,12 +44,7 @@ runs:
             pull_number: number
           });
 
-          const sha = raw.data.head.sha;
-          core.setOutput('sha', sha);
-          core.debug(`sha: ${sha}`);
-
           const labels = raw.data.labels.map(label => label.name)
-          core.setOutput('labels', labels);
           core.debug(`labels: ${labels}`);
 
           const has_label = labels.includes('${{ inputs.label }}')
