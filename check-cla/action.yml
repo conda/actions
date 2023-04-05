@@ -27,12 +27,10 @@ runs:
   steps:
     # has_label
     - name: Get PR labels
-      id: pr
+      id: labels
       uses: actions/github-script@v6
       with:
         script: |
-          console.log(context.payload);
-
           const { owner, repo, number } = context.issue;
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
@@ -43,7 +41,6 @@ runs:
             repo: repo,
             pull_number: number
           });
-
           const labels = raw.data.labels.map(label => label.name)
           core.debug(`labels: ${labels}`);
 
@@ -60,7 +57,7 @@ runs:
         state: pending
         description: Checking conda CLA...
 
-    # contributors, has_signed
+    # has_signed
     - name: Check if current actor has signed
       uses: actions/github-script@v6
       id: contributors
@@ -82,7 +79,6 @@ runs:
               raw.data.encoding
             ).toString('utf-8')
           ).contributors;
-          core.setOutput('contributors', contributors);
           core.debug(`contributors: ${contributors}`);
 
           const creator = (
@@ -99,7 +95,7 @@ runs:
     # add [cla-signed] label if actor has already signed
     - name: Add label
       uses: actions-ecosystem/action-add-labels@v1.1.0
-      if: steps.contributors.outputs.has_signed == 'true' && steps.pr.outputs.has_label == 'false'
+      if: steps.contributors.outputs.has_signed == 'true' && steps.labels.outputs.has_label == 'false'
       with:
         github-token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -107,7 +103,7 @@ runs:
     # remove [cla-signed] label if actor has not signed yet
     - name: Remove label
       uses: actions-ecosystem/action-remove-labels@v1.3.0
-      if: steps.contributors.outputs.has_signed == 'false' && steps.pr.outputs.has_label == 'true'
+      if: steps.contributors.outputs.has_signed == 'false' && steps.labels.outputs.has_label == 'true'
       with:
         github-token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -133,7 +129,7 @@ runs:
 
     # create PR
     - uses: peter-evans/create-pull-request@v4
-      id: cla-pr
+      id: pull
       if: steps.contributors.outputs.has_signed == 'false'
       with:
         push-to-fork: ${{ inputs.cla_fork }}
@@ -158,7 +154,7 @@ runs:
         message: |
           We require contributors to sign our [Contributor License Agreement](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement) and we don't have one on file for @${{ github.event.pull_request.user.login }}.
 
-          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature, merge the PR (${{ steps.cla-pr.outputs.pull-request-url }}), and ping the bot to refresh the PR.
+          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature, merge the PR (${{ steps.pull.outputs.pull-request-url }}), and ping the bot to refresh the PR.
         GITHUB_TOKEN: ${{ inputs.token }}
 
     # commit status → error
