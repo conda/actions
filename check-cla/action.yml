@@ -67,7 +67,7 @@ runs:
       with:
         github-token: ${{ inputs.token }}
         script: |
-          const [owner, repo] = '${{ inputs.cla_repo }}'.split('/');
+          const { owner, repo } = context.issue;
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
 
@@ -128,7 +128,7 @@ runs:
         signees = json.loads(path.read_text())
         signees["contributors"].append("${{ github.actor }}")
         signees["contributors"].sort()
-        path.write_text(json.dumps(signees))
+        path.write_text(json.dumps(signees, indent=2))
 
     # create PR
     - uses: peter-evans/create-pull-request@v4
@@ -146,7 +146,7 @@ runs:
         body: |
           Adding CLA signee @${{ github.actor }}
 
-          Xref ${{ github.event.pull_request.url }}
+          Xref ${{ github.event.pull_request.html_url }}
 
     # create sticky comment if not signed
     - name: Create comment
