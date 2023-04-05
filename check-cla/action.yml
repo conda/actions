@@ -66,8 +66,8 @@ runs:
       with:
         token: ${{ inputs.token }}
         context: CLA check
-        state: pending
         description: Checking conda CLA...
+        state: pending
 
     # has_signed
     - name: Check if current actor has signed
@@ -173,8 +173,8 @@ runs:
       with:
         token: ${{ inputs.token }}
         context: CLA check
-        state: error
         description: Please follow the details link to sign the conda CLA. →
+        state: error
         target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
     # commit status → success
@@ -184,5 +184,5 @@ runs:
       with:
         token: ${{ inputs.token }}
         context: CLA check
-        state: success
         description: CLA signed, thank you!
+        state: success

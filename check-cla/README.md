@@ -12,8 +12,7 @@ name: Check CLA
 
 on:
   issue_comment:
-    types:
-      - created
+    types: [created]
   pull_request_target:
 
 jobs:
