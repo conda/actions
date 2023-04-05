@@ -90,7 +90,7 @@ runs:
           core.setOutput('contributor', contributor);
           core.debug(`contributor: ${contributor}`);
 
-          const url = payload.user.html_url;
+          const url = payload.html_url;
           core.setOutput('url', url);
           core.debug(`url: ${url}`);
 
