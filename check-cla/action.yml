@@ -35,7 +35,7 @@ runs:
       with:
         token: ${{ inputs.token }}
         comment-id: ${{ github.event.comment.id }}
-        reactions: rocket
+        reactions: eyes
 
     # has_label
     - name: Get PR labels
