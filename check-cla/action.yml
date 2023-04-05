@@ -164,12 +164,20 @@ runs:
       if: steps.contributors.outputs.has_signed == 'false'
       with:
         number: context.issue.number
-        message: |
+        # GitHub flavored markdown reinvents how paragraphs work, adjoined lines of text are not
+        # concatenated so instead we rely on YAML multi-line + extra newlines
+        message: >-
           [cla]: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
-          We require contributors to sign our [Contributor License Agreement][cla] and we don't have one on file for @${{ github.event.pull_request.user.login }}.
 
-          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](cla).
-          We then need to manually verify your signature, merge the PR (${{ steps.pull.outputs.pull-request-url }}), and ping the bot to refresh the PR.
+
+          We require contributors to sign our [Contributor License Agreement][cla] and we don't
+          have one on file for @${{ github.event.pull_request.user.login }}.
+
+
+          In order for us to review and merge your code, please e-sign the
+          [Contributor License Agreement PDF][cla]. We then need to manually verify your
+          signature, merge the PR (${{ steps.pull.outputs.pull-request-url }}), and ping the bot
+          to refresh the PR.
         GITHUB_TOKEN: ${{ inputs.token }}
 
     # commit status → error
