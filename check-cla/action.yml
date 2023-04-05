@@ -33,7 +33,7 @@ runs:
   using: composite
   steps:
     # if triggered by a comment, leave a reaction
-    - name: Comment Reaction
+    - name: React to comment
       uses: peter-evans/create-or-update-comment@v3.0.0
       if: github.event_name == 'issue_comment'
       with:
@@ -98,30 +98,32 @@ runs:
           core.setOutput('has_signed', has_signed);
           core.debug(`has_signed: ${has_signed}`);
 
-    # add [cla-signed] label if actor has already signed
-    - name: Add label
+    # if contributor has already signed, add [cla-signed] label
+    - name: Add label to PR
       uses: actions-ecosystem/action-add-labels@v1.1.0
       if: steps.metadata.outputs.has_signed == 'true' && steps.metadata.outputs.has_label == 'false'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
 
-    # remove [cla-signed] label if actor has not signed yet
-    - name: Remove label
+    # if contributor has not signed yet, remove [cla-signed] label
+    - name: Remove label to PR
       uses: actions-ecosystem/action-remove-labels@v1.3.0
       if: steps.metadata.outputs.has_signed == 'false' && steps.metadata.outputs.has_label == 'true'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
 
-    # checkout cla_repo to update cla_path
-    - uses: actions/checkout@v3
+    # if unsigned, checkout cla_repo
+    - name: Clone CLA singee repo
+      uses: actions/checkout@v3
       if: steps.metadata.outputs.has_signed == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
 
-    # update cla_path
-    - shell: python
+    # if unsigned, update cla_path
+    - name: Add contributor as a CLA signee
+      shell: python
       if: steps.metadata.outputs.has_signed == 'false'
       run: |
         import json
@@ -133,8 +135,9 @@ runs:
         signees["contributors"].sort()
         path.write_text(json.dumps(signees, indent=2))
 
-    # create PR
-    - uses: peter-evans/create-pull-request@v4
+    # if unsigned, create PR
+    - name: Create PR with new CLA signee
+      uses: peter-evans/create-pull-request@v4
       id: pull
       if: steps.metadata.outputs.has_signed == 'false'
       with:
@@ -151,8 +154,8 @@ runs:
 
           Xref ${{ steps.metadata.outputs.url }}
 
-    # create sticky comment if not signed
-    - name: Create comment
+    # if unsigned, create sticky comment
+    - name: Create comment regarding missing CLA signature
       uses: marocchino/sticky-pull-request-comment@v2
       if: steps.metadata.outputs.has_signed == 'false'
       with:
