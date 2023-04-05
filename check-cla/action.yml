@@ -33,6 +33,7 @@ runs:
       uses: peter-evans/create-or-update-comment@v3.0.0
       if: github.event_name == 'issue_comment'
       with:
+        token: ${{ inputs.token }}
         comment-id: ${{ github.event.comment.id }}
         reactions: rocket
 
