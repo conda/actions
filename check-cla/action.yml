@@ -41,29 +41,6 @@ runs:
         comment-id: ${{ github.event.comment.id }}
         reactions: eyes
 
-    # has_label
-    - name: Get PR labels
-      id: labels
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const { owner, repo, number } = context.issue;
-          core.debug(`owner: ${owner}`);
-          core.debug(`repo: ${repo}`);
-          core.debug(`number: ${number}`);
-
-          const raw = await github.rest.pulls.get({
-            owner: owner,
-            repo: repo,
-            pull_number: number
-          });
-          const labels = raw.data.labels.map(label => label.name)
-          core.debug(`labels: ${labels}`);
-
-          const has_label = labels.includes('${{ inputs.label }}')
-          core.setOutput('has_label', has_label);
-          core.debug(`has_label: ${has_label}`);
-
     # commit status → pending
     - name: Set commit status with pending
       uses: conda/actions/set-commit-status@customize-cla-repo
@@ -73,7 +50,7 @@ runs:
         description: Checking conda CLA...
         state: pending
 
-    # number, contributor, url, has_signed
+    # has_label, number, contributor, url, has_signed
     - name: Collect PR metadata
       uses: actions/github-script@v6
       id: metadata
@@ -85,6 +62,18 @@ runs:
           core.debug(`repo: ${repo}`);
           core.setOutput('number', number);
           core.debug(`number: ${number}`);
+
+          const raw = await github.rest.pulls.get({
+            owner: owner,
+            repo: repo,
+            pull_number: number
+          });
+          const labels = raw.data.labels.map(label => label.name);
+          core.debug(`labels: ${labels}`);
+
+          const has_label = labels.includes('${{ inputs.label }}');
+          core.setOutput('has_label', has_label);
+          core.debug(`has_label: ${has_label}`);
 
           const { content, encoding } = (await github.rest.repos.getContent({
             owner: owner,
@@ -112,7 +101,7 @@ runs:
     # add [cla-signed] label if actor has already signed
     - name: Add label
       uses: actions-ecosystem/action-add-labels@v1.1.0
-      if: steps.metadata.outputs.has_signed == 'true' && steps.labels.outputs.has_label == 'false'
+      if: steps.metadata.outputs.has_signed == 'true' && steps.metadata.outputs.has_label == 'false'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -120,7 +109,7 @@ runs:
     # remove [cla-signed] label if actor has not signed yet
     - name: Remove label
       uses: actions-ecosystem/action-remove-labels@v1.3.0
-      if: steps.metadata.outputs.has_signed == 'false' && steps.labels.outputs.has_label == 'true'
+      if: steps.metadata.outputs.has_signed == 'false' && steps.metadata.outputs.has_label == 'true'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
