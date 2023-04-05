@@ -73,16 +73,18 @@ runs:
         description: Checking conda CLA...
         state: pending
 
-    # has_signed
-    - name: Check if current actor has signed
+    # number, contributor, url, has_signed
+    - name: Collect PR metadata
       uses: actions/github-script@v6
-      id: contributors
+      id: metadata
       with:
         github-token: ${{ inputs.token }}
         script: |
-          const { owner, repo } = context.issue;
+          const { owner, repo, number } = context.issue;
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
+          core.setOutput('number', number);
+          core.debug(`number: ${number}`);
 
           const { content, encoding } = (await github.rest.repos.getContent({
             owner: owner,
@@ -94,21 +96,23 @@ runs:
           ).contributors;
           core.debug(`contributors: ${contributors}`);
 
-          const creator = (
-            context.payload.issue
-            || context.payload.pull_request
-            || context.payload
-          ).user.login;
-          core.debug(`creator: ${creator}`);
+          const payload = context.payload.issue || context.payload.pull_request || context.payload;
+          const contributor = payload.user.login;
+          core.setOutput('contributor', contributor);
+          core.debug(`contributor: ${contributor}`);
 
-          const has_signed = contributors.includes(creator);
+          const url = payload.user.html_url;
+          core.setOutput('url', url);
+          core.debug(`url: ${url}`);
+
+          const has_signed = contributors.includes(contributor);
           core.setOutput('has_signed', has_signed);
           core.debug(`has_signed: ${has_signed}`);
 
     # add [cla-signed] label if actor has already signed
     - name: Add label
       uses: actions-ecosystem/action-add-labels@v1.1.0
-      if: steps.contributors.outputs.has_signed == 'true' && steps.labels.outputs.has_label == 'false'
+      if: steps.metadata.outputs.has_signed == 'true' && steps.labels.outputs.has_label == 'false'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -116,54 +120,54 @@ runs:
     # remove [cla-signed] label if actor has not signed yet
     - name: Remove label
       uses: actions-ecosystem/action-remove-labels@v1.3.0
-      if: steps.contributors.outputs.has_signed == 'false' && steps.labels.outputs.has_label == 'true'
+      if: steps.metadata.outputs.has_signed == 'false' && steps.labels.outputs.has_label == 'true'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
 
     # checkout cla_repo to update cla_path
     - uses: actions/checkout@v3
-      if: steps.contributors.outputs.has_signed == 'false'
+      if: steps.metadata.outputs.has_signed == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
 
     # update cla_path
     - shell: python
-      if: steps.contributors.outputs.has_signed == 'false'
+      if: steps.metadata.outputs.has_signed == 'false'
       run: |
         import json
         from pathlib import Path
 
         path = Path("${{ inputs.cla_path }}")
         signees = json.loads(path.read_text())
-        signees["contributors"].append("${{ github.actor }}")
+        signees["contributors"].append("${{ steps.metadata.outputs.contributor }}")
         signees["contributors"].sort()
         path.write_text(json.dumps(signees, indent=2))
 
     # create PR
     - uses: peter-evans/create-pull-request@v4
       id: pull
-      if: steps.contributors.outputs.has_signed == 'false'
+      if: steps.metadata.outputs.has_signed == 'false'
       with:
         push-to-fork: ${{ inputs.cla_fork }}
         token: ${{ inputs.cla_token }}
-        branch: cla-${{ github.actor }}
+        branch: cla-${{ steps.metadata.outputs.contributor }}
         delete-branch: true
-        commit-message: Adding CLA singee ${{ github.actor }}
+        commit-message: Adding CLA singee ${{ steps.metadata.outputs.contributor }}
         author: ${{ inputs.cla_author }}
         committer: ${{ inputs.cla_author }}
-        title: Adding CLA singee ${{ github.actor }}
+        title: Adding CLA singee ${{ steps.metadata.outputs.contributor }}
         body: |
-          Adding CLA signee @${{ github.actor }}
+          Adding CLA signee @${{ steps.metadata.outputs.contributor }}
 
-          Xref ${{ (github.event.issue || github.event.pull_request || github.event).html_url }}
+          Xref ${{ steps.metadata.outputs.url }}
 
     # create sticky comment if not signed
     - name: Create comment
       uses: marocchino/sticky-pull-request-comment@v2
-      if: steps.contributors.outputs.has_signed == 'false'
+      if: steps.metadata.outputs.has_signed == 'false'
       with:
-        number: ${{ (github.event.issue || github.event.pull_request || github.event).number }}
+        number: ${{ steps.metadata.outputs.number }}
         # GitHub flavored markdown reinvents how paragraphs work, adjoined lines of text are not
         # concatenated so instead we rely on YAML multi-line + extra newlines
         message: >-
@@ -171,7 +175,7 @@ runs:
 
 
           We require contributors to sign our [Contributor License Agreement][cla] and we don't
-          have one on file for @${{ (github.event.issue || github.event.pull_request || github.event).user.login }}.
+          have one on file for @${{ steps.metadata.outputs.contributor }}.
 
 
           In order for us to review and merge your code, please e-sign the
@@ -182,7 +186,7 @@ runs:
 
     # commit status → error
     - name: Set commit status to error
-      if: steps.contributors.outputs.has_signed == 'false'
+      if: steps.metadata.outputs.has_signed == 'false'
       uses: conda/actions/set-commit-status@customize-cla-repo
       with:
         token: ${{ inputs.token }}
@@ -193,7 +197,7 @@ runs:
 
     # commit status → success
     - name: Set commit status to success
-      if: steps.contributors.outputs.has_signed == 'true'
+      if: steps.metadata.outputs.has_signed == 'true'
       uses: conda/actions/set-commit-status@customize-cla-repo
       with:
         token: ${{ inputs.token }}
