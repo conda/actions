@@ -23,7 +23,7 @@ jobs:
         with:
           # [required]
           # A token with the ability to modify the commit status
-          # (`statuses: write`)
+          # (`statuses: write` for fine-grained PAT; `repo` for classic PAT)
           # (default: secrets.GITHUB_TOKEN)
           token:
 

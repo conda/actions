@@ -28,7 +28,7 @@ jobs:
         with:
           # [required]
           # A token with ability to comment, label, and modify the commit status
-          # (`pull_request: write` and `statuses: write`)
+          # (`pull_request: write` and `statuses: write` for fine-grained PAT; `repo` for classic PAT)
           # (default: secrets.GITHUB_TOKEN)
           token:
           # [required]
@@ -47,6 +47,7 @@ jobs:
           cla_fork:
           # [required]
           # Token for opening singee PR in the provided `cla_repo`
+          # (`pull_request: write` for fine-grained PAT; `repo` and `workflow` for classic PAT)
           cla_token:
           # Git-format author/committer to use for pull request commits
           # (default: Conda Bot <18747875+conda-bot@users.noreply.github.com>)

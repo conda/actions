@@ -3,7 +3,9 @@ name: CLA check
 description: Reacts to new PRs and check if the contributor has previously signed the conda contributor license agreement (CLA).
 inputs:
   token:
-    description: 'A token with ability to comment, label, and modify the commit status (`pull_request: write` and `statuses: write`)'
+    description: >-
+      A token with ability to comment, label, and modify the commit status
+      (`pull_request: write` and `statuses: write` for fine-grained PAT; `repo` for classic PAT)
     default: ${{ github.token }}
     required: true
   label:
@@ -19,7 +21,9 @@ inputs:
     description: Fork of `cla_repo` in which to create branch
     default: conda-bot/infrastructure
   cla_token:
-    description: Token for opening singee PR in `cla_fork`
+    description: >-
+      Token for opening singee PR in `cla_fork`
+      (`pull_request: write` for fine-grained PAT; `repo` and `workflow` for classic PAT)
     required: true
   cla_author:
     description: Git-format author/committer to use for pull request commits
@@ -161,9 +165,11 @@ runs:
       with:
         number: context.issue.number
         message: |
-          We require contributors to sign our [Contributor License Agreement](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement) and we don't have one on file for @${{ github.event.pull_request.user.login }}.
+          [cla]: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
+          We require contributors to sign our [Contributor License Agreement][cla] and we don't have one on file for @${{ github.event.pull_request.user.login }}.
 
-          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement). We then need to manually verify your signature, merge the PR (${{ steps.pull.outputs.pull-request-url }}), and ping the bot to refresh the PR.
+          In order for us to review and merge your code, please e-sign the [Contributor License Agreement PDF](cla).
+          We then need to manually verify your signature, merge the PR (${{ steps.pull.outputs.pull-request-url }}), and ping the bot to refresh the PR.
         GITHUB_TOKEN: ${{ inputs.token }}
 
     # commit status → error

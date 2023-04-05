@@ -3,7 +3,9 @@ name: Set Commit Status
 description: Modifies the commit status of the most recent commit.
 inputs:
   token:
-    description: 'The GitHub token (`statuses: write`) used to create an authenticated client'
+    description: >-
+      A token with the ability to modify the commit status
+      (`statuses: write` for fine-grained PAT; `repo` for classic PAT)
     default: ${{ github.token }}
     required: true
   context:
