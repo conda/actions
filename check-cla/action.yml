@@ -163,7 +163,7 @@ runs:
       uses: marocchino/sticky-pull-request-comment@v2
       if: steps.contributors.outputs.has_signed == 'false'
       with:
-        number: context.issue.number
+        number: ${{ (github.event.issue || github.event.pull_request || github.event).number }}
         # GitHub flavored markdown reinvents how paragraphs work, adjoined lines of text are not
         # concatenated so instead we rely on YAML multi-line + extra newlines
         message: >-
