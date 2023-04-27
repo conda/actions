@@ -100,7 +100,7 @@ runs:
 
     # if contributor has already signed, add [cla-signed] label
     - name: Add label to PR
-      uses: actions-ecosystem/action-add-labels@v1.1.0
+      uses: actions-ecosystem/action-add-labels@v1.1.3
       if: steps.metadata.outputs.has_signed == 'true' && steps.metadata.outputs.has_label == 'false'
       with:
         github_token: ${{ inputs.token }}
