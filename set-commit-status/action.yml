@@ -1,0 +1,51 @@
+---
+name: Set Commit Status
+description: Modifies the commit status of the most recent commit.
+inputs:
+  token:
+    description: >-
+      A token with the ability to modify the commit status
+      (`statuses: write` for fine-grained PAT; `repo` for classic PAT)
+    default: ${{ github.token }}
+    required: true
+  context:
+    description: The name of the commit status
+    required: true
+  state:
+    description: The commit status to set, either success, error, failure, or pending
+    required: true
+  description:
+    description: A short text explaining the commit status
+    default: ''
+    required: false
+  target_url:
+    description: URL/URI linking to further details
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v6
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const { owner, repo, number } = context.issue;
+          const sha = (await github.rest.pulls.get({
+            owner: owner,
+            repo: repo,
+            pull_number: number,
+          })).data.head.sha;
+          core.debug(`owner: ${owner}`);
+          core.debug(`repo: ${repo}`);
+          core.debug(`sha: ${sha}`);
+
+          const { context: name, state } = (await github.rest.repos.createCommitStatus({
+            context: '${{ inputs.context }}',
+            description: '${{ inputs.description }}',
+            owner: owner,
+            repo: repo,
+            sha: sha,
+            state: '${{ inputs.state }}',
+            target_url: '${{ inputs.target_url }}'
+          })).data;
+          core.info(`${name} is ${state}`);
