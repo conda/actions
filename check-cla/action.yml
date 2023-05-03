@@ -75,10 +75,10 @@ runs:
           core.setOutput('has_label', has_label);
           core.debug(`has_label: ${has_label}`);
 
-          const { cla_repo_owner, cla_repo_owner } = '${{ inputs.cla_repo }}'.split('/', 2);
+          const { cla_repo_owner, cla_repo_name } = '${{ inputs.cla_repo }}'.split('/', 2);
           const { content, encoding } = (await github.rest.repos.getContent({
             owner: cla_repo_owner,
-            repo: cla_repo_owner,
+            repo: cla_repo_name,
             path: '${{ inputs.cla_path }}'
           })).data;
           const contributors = JSON.parse(
