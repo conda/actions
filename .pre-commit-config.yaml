@@ -18,13 +18,13 @@ repos:
       - id: prettier
         types: [ts]
   - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
-    rev: 0.2.2
+    rev: 0.2.3
     hooks:
       - id: yamlfmt
         exclude: .github/.*$
         args: [--mapping, '2', --offset, '2', --sequence, '4']
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.22.0
+    rev: 0.23.0
     hooks:
       - id: check-github-actions
         files: .*/action.(yml|yaml)$
