@@ -133,7 +133,7 @@ runs:
         path = Path("${{ inputs.cla_path }}")
         signees = json.loads(path.read_text())
         signees["contributors"].append("${{ steps.metadata.outputs.contributor }}")
-        signees["contributors"].sort()
+        signees["contributors"].sort(key=str.lower)
         path.write_text(json.dumps(signees, indent=2))
 
     # if unsigned, create PR
