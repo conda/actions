@@ -95,7 +95,7 @@ runs:
           --label="${{ inputs.anaconda-org-label }}" \
           ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2
         echo "Uploaded the following files:"
-        ls ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2 | cut -d/ -f3- | tr ' ' $'\n'
+        basename -a ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2
         echo "::endgroup::"
 
         echo "Use this command to try out the build:"
