@@ -32,7 +32,7 @@ jobs:
           # (default: secrets.GITHUB_TOKEN)
           token:
           # [required]
-          # Label to apply to contributor's PR once CLA is singed
+          # Label to apply to contributor's PR once CLA is signed
           label:
 
           # Upstream repository in which to create PR

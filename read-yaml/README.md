@@ -16,7 +16,7 @@ In your GitHub repository include this action in your workflows:
     path: https://raw.githubusercontent.com/owner/repo/ref/path/to/yaml.yml
 
     # [optional]
-    # the keys to the valye to extract
+    # the keys to the value to extract
     key: foo.bar.2.baz
 
 # if key provided get the value itself
