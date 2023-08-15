@@ -9,7 +9,7 @@ inputs:
     default: ${{ github.token }}
     required: true
   label:
-    description: Label to apply to contributor's PR once CLA is singed
+    description: Label to apply to contributor's PR once CLA is signed
     required: true
   cla_repo:
     description: Upstream repository in which to create PR
