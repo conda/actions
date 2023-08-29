@@ -134,7 +134,7 @@ runs:
         signees = json.loads(path.read_text())
         signees["contributors"].append("${{ steps.metadata.outputs.contributor }}")
         signees["contributors"].sort(key=str.lower)
-        path.write_text(json.dumps(signees, indent=2))
+        path.write_text(json.dumps(signees, indent=2) + "\n")
 
     # if unsigned, create PR
     - name: Create PR with new CLA signee
