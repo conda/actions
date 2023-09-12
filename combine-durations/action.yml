@@ -1,0 +1,52 @@
+---
+name: Combine Durations
+description: Combine the duration files from recent pytest runs.
+author: Anaconda Inc.
+branding:
+  icon: book-open
+  color: green
+
+inputs:
+  branch:
+    description: The branch to search for recent pytest runs.
+    default: main
+  pattern:
+    description: The pattern to search for recent pytest runs.
+    default: '*-all'
+  token:
+    description: >-
+      A token with ability to comment, label, and modify the commit status
+      (`pull_request: write` and `statuses: write` for fine-grained PAT; `repo` for classic PAT)
+    default: ${{ github.token }}
+  workflow:
+    description: The workflow to search for recent pytest runs.
+    default: tests.yml
+
+runs:
+  using: composite
+  steps:
+    - name: download recent artifacts
+      shell: bash
+      run: |
+        gh run list \
+          --branch ${{ inputs.branch }} \
+          --workflow ${{ inputs.workflow }} \
+          --limit 10 \
+          --json databaseId \
+          --jq '.[].databaseId' \
+        | xargs \
+          -n 1 \
+        gh run download \
+          --dir ${{ runner.temp }}/artifacts/ \
+          --pattern '${{ inputs.pattern }}' \
+        || true
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: combine recent durations from artifacts
+      shell: bash
+      run: python $GITHUB_ACTION_PATH/action.py ${{ runner.temp }}/artifacts/
