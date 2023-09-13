@@ -1,0 +1,39 @@
+---
+name: Template Files
+description: Template (or copy) files from other repositories and commits them to the specified PR.
+author: Anaconda Inc.
+branding:
+  icon: book-open
+  color: green
+
+inputs:
+  config:
+    description: Configuration path defining what files to template/copy.
+    default: .github/templates/config.yml
+  stubs:
+    description: >-
+      Path to where stub files are located in the current repository.
+    default: .github/templates/
+  token:
+    description: >-
+      A token with ability to comment, label, and modify the commit status
+      (`pull_request: write` and `statuses: write` for fine-grained PAT; `repo` for classic PAT)
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: pip
+
+    - name: install dependencies
+      shell: bash
+      run: pip install jinja2 pyyaml jsonschema pygithub
+
+    - name: sync & template files
+      shell: bash
+      run: python $GITHUB_ACTION_PATH/action.py --config ${{ inputs.config }} --stubs ${{ inputs.stubs }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
