@@ -10,6 +10,9 @@ inputs:
   branch:
     description: The branch to search for recent pytest runs.
     default: main
+  durations-dir:
+    description: The directory to write the combined durations file.
+    default: durations
   pattern:
     description: The pattern to search for recent pytest runs.
     default: '*-all'
@@ -49,4 +52,4 @@ runs:
 
     - name: combine recent durations from artifacts
       shell: bash
-      run: python $GITHUB_ACTION_PATH/action.py ${{ runner.temp }}/artifacts/
+      run: python $GITHUB_ACTION_PATH/action.py --durations-dir=${{ inputs.durations-dir }} --artifacts-dir=${{ runner.temp }}/artifacts/
