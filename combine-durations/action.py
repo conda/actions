@@ -12,9 +12,9 @@ def validate(value: str) -> Path:
         path = Path(value).expanduser().resolve()
         path.mkdir(parents=True, exist_ok=True)
         return path
-    except FileExistsError:
+    except FileExistsError as err:
         # FileExistsError: value is a file, not a directory
-        raise ArgumentTypeError(f"{value} is not a valid directory")
+        raise ArgumentTypeError(f"{value} is not a valid directory: {err}")
 
 
 # parse CLI for inputs
