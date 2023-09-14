@@ -17,11 +17,11 @@ def validate_file(value: str) -> Path:
         path = Path(value).expanduser().resolve()
         path.read_text()
         return path
-    except (IsADirectoryError, FileNotFoundError, PermissionError):
+    except (IsADirectoryError, FileNotFoundError, PermissionError) as err:
         # IsADirectoryError: value is a directory, not a file
         # FileNotFoundError: value does not exist
         # PermissionError: value is not readable
-        raise ArgumentTypeError(f"{value} is not a valid file")
+        raise ArgumentTypeError(f"{value} is not a valid file: {err}")
 
 
 def validate_dir(value: str) -> Path:
@@ -29,9 +29,9 @@ def validate_dir(value: str) -> Path:
         path = Path(value).expanduser().resolve()
         path.mkdir(parents=True, exist_ok=True)
         return path
-    except FileExistsError:
+    except FileExistsError as err:
         # FileExistsError: value is a file, not a directory
-        raise ArgumentTypeError(f"{value} is not a valid directory")
+        raise ArgumentTypeError(f"{value} is not a valid directory: {err}")
 
 
 # parse CLI for inputs
