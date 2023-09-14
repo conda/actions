@@ -1,4 +1,0 @@
-jinja2
-jsonschema
-pygithub
-pyyaml
