@@ -19,8 +19,8 @@ def validate(value: str) -> Path:
 
 # parse CLI for inputs
 parser = ArgumentParser()
-parser.add_argument("--durations-dir", type=validate)
-parser.add_argument("--artifacts-dir", type=validate)
+parser.add_argument("--durations-dir", type=validate, required=True)
+parser.add_argument("--artifacts-dir", type=validate, required=True)
 args = parser.parse_args()
 
 combined: dict[str, dict[str, list[float]]] = {}
