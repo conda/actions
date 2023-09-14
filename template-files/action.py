@@ -92,6 +92,7 @@ env = Environment(
     variable_end_string="]]",
     comment_start_string="[#",
     comment_end_string="#]",
+    keep_trailing_newline=True,
 )
 gh = Github(auth=Auth.Token(os.environ["GITHUB_TOKEN"]))
 
