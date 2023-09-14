@@ -7,10 +7,16 @@ from argparse import ArgumentParser, ArgumentTypeError
 from pathlib import Path
 from typing import Any
 
+from rich.console import Console
+
 import yaml
 from github import Auth, Github, UnknownObjectException
 from jinja2 import Environment, FileSystemLoader
 from jsonschema import validate
+
+
+print = Console(color_system="standard", soft_wrap=True).print
+perror = Console(color_system="standard", soft_wrap=True, stderr=True, style="bold red").print
 
 
 def validate_file(value: str) -> Path:
@@ -95,7 +101,7 @@ for repository, files in config.items():
     try:
         repo = gh.get_repo(repository)
     except UnknownObjectException as err:
-        print(f"❌ Failed to fetch {repository}: {err}", file=sys.stderr)
+        perror(f"❌ Failed to fetch {repository}: {err}")
         errors += 1
         continue
 
@@ -116,7 +122,7 @@ for repository, files in config.items():
         try:
             content = repo.get_contents(src).decoded_content.decode()
         except UnknownObjectException as err:
-            print(f"❌ Failed to fetch {src} from {repository}: {err}", file=sys.stderr)
+            perror(f"❌ Failed to fetch {src} from {repository}: {err}")
             errors += 1
             continue
 
@@ -127,5 +133,5 @@ for repository, files in config.items():
         print(f"✅ Templated {repository}/{src} as {dst}")
 
 if errors:
-    print("Got {errors} errors", file=sys.stderr)
+    perror(f"Got {errors} error(s)")
 sys.exit(errors)
