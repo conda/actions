@@ -50,6 +50,10 @@ runs:
       with:
         python-version: '3.11'
 
+    - name: install dependencies
+      shell: bash
+      run: pip install --quiet rich
+
     - name: combine recent durations from artifacts
       shell: bash
       run: python $GITHUB_ACTION_PATH/action.py --durations-dir=${{ inputs.durations-dir }} --artifacts-dir=${{ runner.temp }}/artifacts/
