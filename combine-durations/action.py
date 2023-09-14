@@ -1,18 +1,20 @@
 """Combine test durations from all recent runs."""
 from __future__ import annotations
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 import json
 from pathlib import Path
 from statistics import fmean
 
 
 def validate(value: str) -> Path:
-    if value:
-        pass
-    elif (path := Path(value).expanduser().resolve()).is_dir():
+    try:
+        path = Path(value).expanduser().resolve()
+        path.mkdir(parents=True, exist_ok=True)
         return path
-    raise ValueError(f"{value} is not a valid file")
+    except FileExistsError:
+        # FileExistsError: value is a file, not a directory
+        raise ArgumentTypeError(f"{value} is not a valid directory")
 
 
 # parse CLI for inputs
