@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 from pathlib import Path
 from typing import Any
 
@@ -12,28 +12,32 @@ from jinja2 import Environment, FileSystemLoader
 from jsonschema import validate
 
 
-def validate(value: str, is_dir: bool) -> Path:
-    if value:
-        pass
-    elif is_dir and (path := Path(value).expanduser().resolve()).is_dir():
+def validate_file(value: str) -> Path:
+    try:
+        path = Path(value).expanduser().resolve()
+        path.read_text()
         return path
-    elif not is_dir and (path := Path(value).expanduser().resolve()).is_file():
+    except (IsADirectoryError, FileNotFoundError, PermissionError):
+        # IsADirectoryError: value is a directory, not a file
+        # FileNotFoundError: value does not exist
+        # PermissionError: value is not readable
+        raise ArgumentTypeError(f"{value} is not a valid file")
+
+
+def validate_dir(value: str) -> Path:
+    try:
+        path = Path(value).expanduser().resolve()
+        path.mkdir(parents=True, exist_ok=True)
         return path
-    raise ValueError(f"{value} is not a valid file")
+    except FileExistsError:
+        # FileExistsError: value is a file, not a directory
+        raise ArgumentTypeError(f"{value} is not a valid directory")
 
 
 # parse CLI for inputs
 parser = ArgumentParser()
-parser.add_argument(
-    "--config",
-    type=lambda value: validate(value, is_dir=False),
-    required=True,
-)
-parser.add_argument(
-    "--stubs",
-    type=lambda value: validate(value, is_dir=True),
-    required=True,
-)
+parser.add_argument("--config", type=validate_file, required=True)
+parser.add_argument("--stubs", type=validate_dir, required=True)
 args = parser.parse_args()
 
 # read and validate configuration file
