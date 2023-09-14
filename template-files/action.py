@@ -1,13 +1,14 @@
 """Copy files from external locations as defined in `sync.yml`."""
 from __future__ import annotations
 
+import sys
 import os
 from argparse import ArgumentParser, ArgumentTypeError
 from pathlib import Path
 from typing import Any
 
 import yaml
-from github import Auth, Github
+from github import Auth, Github, UnknownObjectException
 from jinja2 import Environment, FileSystemLoader
 from jsonschema import validate
 
@@ -89,8 +90,14 @@ env = Environment(
 gh = Github(auth=Auth.Token(os.environ["GITHUB_TOKEN"]))
 
 # iterate over configuration and template files
+errors = 0
 for repository, files in config.items():
-    repo = gh.get_repo(repository)
+    try:
+        repo = gh.get_repo(repository)
+    except UnknownObjectException as err:
+        print(f"❌ Failed to fetch {repository}: {err}", file=sys.stderr)
+        errors += 1
+        continue
 
     for file in files:
         src: str
@@ -106,9 +113,19 @@ for repository, files in config.items():
             dst = Path(file.get("dst", src))
             context = file.get("with", {})
 
-        content = repo.get_contents(src).decoded_content.decode()
+        try:
+            content = repo.get_contents(src).decoded_content.decode()
+        except UnknownObjectException as err:
+            print(f"❌ Failed to fetch {src} from {repository}: {err}", file=sys.stderr)
+            errors += 1
+            continue
+
         template = env.from_string(content)
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(template.render(repo=repo, **context))
 
-        print(f"Templated {repository}/{src} as {dst}")
+        print(f"✅ Templated {repository}/{src} as {dst}")
+
+if errors:
+    print("Got {errors} errors", file=sys.stderr)
+sys.exit(errors)
