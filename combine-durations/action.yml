@@ -56,4 +56,5 @@ runs:
 
     - name: combine recent durations from artifacts
       shell: bash
-      run: python $GITHUB_ACTION_PATH/action.py --durations-dir=${{ inputs.durations-dir }} --artifacts-dir=${{ runner.temp }}/artifacts/
+      run: |
+        python ${{ github.action_path }}/action.py --durations-dir=${{ inputs.durations-dir }} --artifacts-dir=${{ runner.temp }}/artifacts/
