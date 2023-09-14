@@ -1,22 +1,25 @@
 """Copy files from external locations as defined in `sync.yml`."""
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from pathlib import Path
 from typing import Any
-
-from rich.console import Console
 
 import yaml
 from github import Auth, Github, UnknownObjectException
 from jinja2 import Environment, FileSystemLoader
 from jsonschema import validate
-
+from rich.console import Console
 
 print = Console(color_system="standard", soft_wrap=True).print
-perror = Console(color_system="standard", soft_wrap=True, stderr=True, style="bold red").print
+perror = Console(
+    color_system="standard",
+    soft_wrap=True,
+    stderr=True,
+    style="bold red",
+).print
 
 
 def validate_file(value: str) -> Path:
@@ -76,7 +79,7 @@ validate(
                 },
             }
         },
-    }
+    },
 )
 
 # initialize Jinja environment and GitHub client
