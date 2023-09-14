@@ -29,7 +29,7 @@ runs:
 
     - name: install dependencies
       shell: bash
-      run: pip install jinja2 jsonschema pygithub pyyaml
+      run: pip install --quiet jinja2 jsonschema pygithub pyyaml
 
     - name: sync & template files
       shell: bash
