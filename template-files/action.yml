@@ -27,14 +27,14 @@ runs:
       with:
         python-version: '3.11'
         cache: pip
-        cache-dependency-path: $GITHUB_ACTION_PATH/requirements.txt
+        cache-dependency-path: ${{ github.action_path }}/requirements.txt
 
     - name: install dependencies
       shell: bash
-      run: pip install --requirement $GITHUB_ACTION_PATH/requirements.txt
+      run: pip install --requirement ${{ github.action_path }}/requirements.txt
 
     - name: sync & template files
       shell: bash
-      run: python $GITHUB_ACTION_PATH/action.py --config ${{ inputs.config }} --stubs ${{ inputs.stubs }}
+      run: python ${{ github.action_path }}/action.py --config ${{ inputs.config }} --stubs ${{ inputs.stubs }}
       env:
         GITHUB_TOKEN: ${{ github.token }}
