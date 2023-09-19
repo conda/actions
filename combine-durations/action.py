@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
-from pathlib import Path
 from functools import partial
+from pathlib import Path
 from statistics import fmean
 
 from rich.console import Console
@@ -17,7 +17,7 @@ def validate_dir(value: str, writable: bool = False) -> Path:
         path = Path(value).expanduser().resolve()
         path.mkdir(parents=True, exist_ok=True)
         if writable:
-            ignore = (path / ".ignore")
+            ignore = path / ".ignore"
             ignore.touch()
             ignore.unlink()
         return path
@@ -31,7 +31,11 @@ def parse_args() -> Namespace:
     # parse CLI for inputs
     parser = ArgumentParser()
     parser.add_argument("--durations-dir", type=validate_dir, required=True)
-    parser.add_argument("--artifacts-dir", type=partial(validate_dir, writable=True), required=True)
+    parser.add_argument(
+        "--artifacts-dir",
+        type=partial(validate_dir, writable=True),
+        required=True,
+    )
     return parser.parse_args()
 
 
@@ -78,5 +82,5 @@ def main() -> None:
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
