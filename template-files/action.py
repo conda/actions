@@ -78,7 +78,7 @@ def read_config(args: Namespace) -> dict:
                         "properties": {
                             "src": {"type": "string"},
                             "dst": {"type": "string"},
-                            "remove": {"type": "bool"},
+                            "remove": {"type": "boolean"},
                             "with": {
                                 "type": "object",
                                 "patternProperties": {
