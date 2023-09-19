@@ -86,7 +86,6 @@ def read_config(args: Namespace) -> dict:
                                 },
                             },
                         },
-                        "required": ["src"],
                     },
                 }
             },
@@ -112,21 +111,32 @@ def iterate_config(
             continue
 
         for file in files:
-            src: str
+            src: str | None
             dst: Path | None
-            remove: bool = False
-            context: dict[str, Any] = {}
+            remove: bool
+            context: dict[str, Any]
 
             if isinstance(file, str):
                 src = file
                 dst = Path(file)
+                remove = False
+                context = {}
             elif isinstance(file, dict):
-                src = file["src"]
-                dst = Path(file.get("dst", src))
-                remove = file.get("remove", remove)
-                context = file.get("with", context)
+                src = file.get("src", None)
+                dst = None if (tmp := file.get("dst", src)) is None else Path(tmp)
+                remove = file.get("remove", False)
+                context = file.get("with", {})
+            else:
+                perror(f"❌ Invalid file definition ({file}), expected str or dict")
+                errors += 1
+                continue
 
             if remove:
+                if dst is None:
+                    perror(f"❌ Invalid file definition ({file}), expected dst")
+                    errors += 1
+                    continue
+
                 try:
                     dst.unlink()
                 except FileNotFoundError:
