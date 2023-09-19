@@ -78,6 +78,7 @@ def read_config(args: Namespace) -> dict:
                         "properties": {
                             "src": {"type": "string"},
                             "dst": {"type": "string"},
+                            "remove": {"type": "bool"},
                             "with": {
                                 "type": "object",
                                 "patternProperties": {
@@ -112,17 +113,32 @@ def iterate_config(
 
         for file in files:
             src: str
-            dst: Path
-            context: dict[str, Any]
+            dst: Path | None
+            remove: bool = False
+            context: dict[str, Any] = {}
 
             if isinstance(file, str):
                 src = file
                 dst = Path(file)
-                context = {}
             elif isinstance(file, dict):
                 src = file["src"]
                 dst = Path(file.get("dst", src))
-                context = file.get("with", {})
+                remove = file.get("remove", remove)
+                context = file.get("with", context)
+
+            if remove:
+                try:
+                    dst.unlink()
+                except FileNotFoundError:
+                    # FileNotFoundError: dst does not exist
+                    print(f"⚠️ {dst} has already been removed")
+                except PermissionError as err:
+                    # PermissionError: not possible to remove dst
+                    perror(f"❌ Failed to remove {dst}: {err}")
+                    errors += 1
+                else:
+                    print(f"✅ Removed {dst}")
+                continue
 
             try:
                 content = destination.get_contents(src).decoded_content.decode()
