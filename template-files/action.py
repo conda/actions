@@ -22,25 +22,31 @@ perror = Console(
 ).print
 
 
-def validate_file(value: str) -> Path:
+def validate_file(value: str) -> Path | None:
     try:
         path = Path(value).expanduser().resolve()
         path.read_text()
         return path
-    except (IsADirectoryError, FileNotFoundError, PermissionError) as err:
+    except (IsADirectoryError, PermissionError) as err:
         # IsADirectoryError: value is a directory, not a file
-        # FileNotFoundError: value does not exist
         # PermissionError: value is not readable
         raise ArgumentTypeError(f"{value} is not a valid file: {err}")
+    except FileNotFoundError:
+        # FileNotFoundError: value does not exist
+        return None
 
 
 def validate_dir(value: str) -> Path:
     try:
         path = Path(value).expanduser().resolve()
         path.mkdir(parents=True, exist_ok=True)
+        ignore = (path / ".ignore")
+        ignore.touch()
+        ignore.unlink()
         return path
-    except FileExistsError as err:
+    except (FileExistsError, PermissionError) as err:
         # FileExistsError: value is a file, not a directory
+        # PermissionError: value is not writable
         raise ArgumentTypeError(f"{value} is not a valid directory: {err}")
 
 
@@ -49,6 +55,9 @@ parser = ArgumentParser()
 parser.add_argument("--config", type=validate_file, required=True)
 parser.add_argument("--stubs", type=validate_dir, required=True)
 args = parser.parse_args()
+if not args.config:
+    print("⚠️ No configuration file found, nothing to update")
+    sys.exit(0)
 
 # read and validate configuration file
 config = yaml.load(
