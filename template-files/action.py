@@ -41,7 +41,7 @@ def validate_dir(value: str) -> Path:
     try:
         path = Path(value).expanduser().resolve()
         path.mkdir(parents=True, exist_ok=True)
-        ignore = (path / ".ignore")
+        ignore = path / ".ignore"
         ignore.touch()
         ignore.unlink()
         return path
@@ -94,7 +94,12 @@ def read_config(args: Namespace) -> dict:
     return config
 
 
-def iterate_config(config: dict, gh: Github, env: Environment, source: Repository) -> int:
+def iterate_config(
+    config: dict,
+    gh: Github,
+    env: Environment,
+    source: Repository,
+) -> int:
     # iterate over configuration and template files
     errors = 0
     for repository, files in config.items():
@@ -182,5 +187,5 @@ def main():
     sys.exit(errors)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
