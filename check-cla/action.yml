@@ -117,7 +117,7 @@ runs:
 
     # if unsigned, checkout cla_repo
     - name: Clone CLA singee repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       if: steps.metadata.outputs.has_signed == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
