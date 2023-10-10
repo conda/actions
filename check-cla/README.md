@@ -46,7 +46,7 @@ jobs:
           # (default: conda-bot/infrastructure)
           cla_fork:
           # [required]
-          # Token for opening singee PR in the provided `cla_repo`
+          # Token for opening signee PR in the provided `cla_repo`
           # (`pull_request: write` for fine-grained PAT; `repo` and `workflow` for classic PAT)
           cla_token:
           # Git-format author/committer to use for pull request commits
