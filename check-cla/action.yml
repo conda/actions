@@ -22,7 +22,7 @@ inputs:
     default: conda-bot/infrastructure
   cla_token:
     description: >-
-      Token for opening singee PR in `cla_fork`
+      Token for opening signee PR in `cla_fork`
       (`pull_request: write` for fine-grained PAT; `repo` and `workflow` for classic PAT)
     required: true
   cla_author:
@@ -43,7 +43,7 @@ runs:
 
     # commit status → pending
     - name: Set commit status with pending
-      uses: conda/actions/set-commit-status@v23.7.0
+      uses: conda/actions/set-commit-status@v23.10.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
@@ -116,7 +116,7 @@ runs:
         labels: ${{ inputs.label }}
 
     # if unsigned, checkout cla_repo
-    - name: Clone CLA singee repo
+    - name: Clone CLA signee repo
       uses: actions/checkout@v4
       if: steps.metadata.outputs.has_signed == 'false'
       with:
@@ -146,10 +146,10 @@ runs:
         token: ${{ inputs.cla_token }}
         branch: cla-${{ steps.metadata.outputs.contributor }}
         delete-branch: true
-        commit-message: Adding CLA singee ${{ steps.metadata.outputs.contributor }}
+        commit-message: Adding CLA signee ${{ steps.metadata.outputs.contributor }}
         author: ${{ inputs.cla_author }}
         committer: ${{ inputs.cla_author }}
-        title: Adding CLA singee ${{ steps.metadata.outputs.contributor }}
+        title: Adding CLA signee ${{ steps.metadata.outputs.contributor }}
         body: |
           Adding CLA signee @${{ steps.metadata.outputs.contributor }}
 
@@ -180,7 +180,7 @@ runs:
     # commit status → error
     - name: Set commit status to error
       if: steps.metadata.outputs.has_signed == 'false'
-      uses: conda/actions/set-commit-status@v23.7.0
+      uses: conda/actions/set-commit-status@v23.10.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
@@ -191,7 +191,7 @@ runs:
     # commit status → success
     - name: Set commit status to success
       if: steps.metadata.outputs.has_signed == 'true'
-      uses: conda/actions/set-commit-status@v23.7.0
+      uses: conda/actions/set-commit-status@v23.10.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
