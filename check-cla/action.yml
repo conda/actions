@@ -52,7 +52,7 @@ runs:
 
     # has_label, number, contributor, url, has_signed
     - name: Collect PR metadata
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       id: metadata
       with:
         github-token: ${{ inputs.token }}
