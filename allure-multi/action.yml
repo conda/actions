@@ -37,7 +37,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-java@v3
+    - uses: actions/setup-java@v4
       with:
         # Don't know which Java is the best.
         distribution: temurin
