@@ -34,7 +34,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: conda-incubator/setup-miniconda@v2
+    - uses: conda-incubator/setup-miniconda@v3
 
     - name: Set output variables
       id: vars
