@@ -34,7 +34,7 @@ runs:
   steps:
     # if triggered by a comment, leave a reaction
     - name: React to comment
-      uses: peter-evans/create-or-update-comment@v3.1.0
+      uses: peter-evans/create-or-update-comment@v4.0.0
       if: github.event_name == 'issue_comment'
       with:
         token: ${{ inputs.token }}
