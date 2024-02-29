@@ -57,6 +57,10 @@ runs:
 
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
+    - name: Set up QEMU
+      if: runner.os == 'Linux'
+      uses: docker/setup-qemu-action@v3
+
     - name: Build & upload package
       # make sure we don't run on forks
       if: github.repository_owner == 'conda' || github.repository_owner == 'conda-incubator'
@@ -81,7 +85,28 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Building package"
-        conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
+        if [[ ${{ inputs.subdir }} == "linux-"* ]]; then
+          # building in the anaconda-pkg-build container
+          # source https://github.com/ContinuumIO/docker-images/blob/main/anaconda-pkg-build/linux/Dockerfile
+          platform="${{ inputs.subdir }}"
+          platform="${platform/linux-64/linux-amd64}"
+          platform="${platform/\-/\/}"
+          set -x
+          docker run \
+            --rm \
+            --platform "$platform" \
+            -e _CONDA_BUILD_ISOLATED_ACTIVATION \
+            -v $(pwd):/build_root \
+            -w /build_root \
+            public.ecr.aws/y0o4y9o3/anaconda-pkg-build:latest \
+            /bin/bash -c "\
+              conda install -y git && \
+              conda build --croot=/build_root/pkgs ${{ inputs.conda-build-arguments }} /build_root/${{ inputs.conda-build-path }}\
+            "
+          set +x
+        else
+          conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
+        fi
         echo "::endgroup::"
 
         echo "::group::Uploading package"
