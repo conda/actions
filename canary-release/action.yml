@@ -34,7 +34,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: conda-incubator/setup-miniconda@v3
+    - uses: conda-incubator/setup-miniconda@030178870c779d9e5e1b4e563269f3aa69b04081
 
     - name: Set output variables
       id: vars
@@ -42,7 +42,7 @@ runs:
       run: echo "RUN_URL=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
 
     - name: Create comment if there is no status update
-      uses: marocchino/sticky-pull-request-comment@v2
+      uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
       if: inputs.comment-token != ''
       with:
         message: |
@@ -103,7 +103,7 @@ runs:
 
     - name: Leave comment after build
       if: inputs.comment-token != '' && success()
-      uses: marocchino/sticky-pull-request-comment@v2
+      uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
       with:
         append: true
         message: |
@@ -112,7 +112,7 @@ runs:
 
     - name: Leave comment after build
       if: inputs.comment-token != '' && failure()
-      uses: marocchino/sticky-pull-request-comment@v2
+      uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
       with:
         append: true
         message: |
