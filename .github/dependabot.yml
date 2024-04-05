@@ -1,18 +1,19 @@
+---
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/allure-multi"
+  - package-ecosystem: github-actions
+    directory: /canary-release
     schedule:
-      interval: "weekly"
-  - package-ecosystem: "github-actions"
-    directory: "/canary-release"
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /check-cla
     schedule:
-      interval: "weekly"
-  - package-ecosystem: "github-actions"
-    directory: "/check-cla"
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /read-yaml
     schedule:
-      interval: "weekly"
-  - package-ecosystem: "github-actions"
-    directory: "/read-yaml"
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /set-commit-status
     schedule:
-      interval: "weekly"
+      interval: weekly
