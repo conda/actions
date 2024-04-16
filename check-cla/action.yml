@@ -138,7 +138,7 @@ runs:
 
     # if unsigned, create PR
     - name: Create PR with new CLA signee
-      uses: peter-evans/create-pull-request@70a41aba780001da0a30141984ae2a0c95d8704e
+      uses: peter-evans/create-pull-request@c55203cfde3e5c11a452d352b4393e68b85b4533
       id: pull
       if: steps.metadata.outputs.has_signed == 'false'
       with:
