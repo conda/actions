@@ -1,4 +1,3 @@
----
 name: Canary releases
 description: This builds and uploads canary releases of conda to the provided channel and label on anaconda.org.
 inputs:
