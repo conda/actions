@@ -1,4 +1,3 @@
-[codespell]
+[tool.codespell]
 # see https://github.com/codespell-project/codespell#using-a-config-file
-ignore-words-list = ,
-skip = .git
+skip = '.git'

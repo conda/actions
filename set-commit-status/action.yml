@@ -1,4 +1,3 @@
----
 name: Set Commit Status
 description: Modifies the commit status of the most recent commit.
 inputs:

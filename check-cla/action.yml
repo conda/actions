@@ -1,4 +1,3 @@
----
 name: CLA check
 description: Reacts to new PRs and check if the contributor has previously signed the conda contributor license agreement (CLA).
 inputs:
