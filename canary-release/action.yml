@@ -34,6 +34,11 @@ runs:
   using: composite
   steps:
     - uses: conda-incubator/setup-miniconda@030178870c779d9e5e1b4e563269f3aa69b04081
+      with:
+        # conda not preinstalled in arm64 runners
+        miniconda-version: ${{ (runner.os == 'macOS' && runner.arch == 'ARM64') && 'latest' || null }}
+        conda-build-version: latest
+        auto-update-conda: true
 
     - name: Set output variables
       id: vars
@@ -65,12 +70,10 @@ runs:
         echo "::group::Setting up environment"
         set -euo pipefail
         conda activate
-        conda update --yes --quiet conda
-        conda install --yes --quiet conda-build anaconda-client
         # git needs to be installed after conda-build
         # see https://github.com/conda/conda/issues/11758
         # see https://github.com/conda/actions/pull/47
-        conda install --yes --quiet git
+        conda install --yes --quiet anaconda-client git
         echo "::endgroup::"
 
         echo "::group::Debugging information"
