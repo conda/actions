@@ -36,7 +36,7 @@ runs:
     - uses: conda-incubator/setup-miniconda@030178870c779d9e5e1b4e563269f3aa69b04081
       with:
         # conda not preinstalled in arm64 runners
-        miniconda-version: ${{ (runner.os == 'macOS' && runner.arch == 'ARM64') && 'latest' || null }}
+        miniconda-version: ${{ runner.os == 'macOS' && 'latest' || null }}
         auto-update-conda: true
 
     - name: Set output variables
