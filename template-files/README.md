@@ -12,11 +12,11 @@ In your GitHub repository include this action in your workflows:
   with:
     # [optional]
     # the path to the configuration file
-    config: .github/templates/config.yml
+    config: .github/template-files/config.yml
 
     # [optional]
     # the path to the template stubs
-    stubs: .github/templates/
+    stubs: .github/template-files/templates/
 
     # [optional]
     # the GitHub token with API access

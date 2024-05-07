@@ -9,11 +9,11 @@ branding:
 inputs:
   config:
     description: Configuration path defining what files to template/copy.
-    default: .github/templates/config.yml
+    default: .github/template-files/config.yml
   stubs:
     description: >-
       Path to where stub files are located in the current repository.
-    default: .github/templates/
+    default: .github/template-files/templates/
   token:
     description: >-
       A token with ability to comment, label, and modify the commit status
@@ -26,6 +26,7 @@ runs:
     - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
         python-version: '3.11'
+        cache: pip
 
     - name: install dependencies
       shell: bash
