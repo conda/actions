@@ -11,6 +11,13 @@ repos:
       - id: check-yaml
       # catch git merge/rebase problems
       - id: check-merge-conflict
+      # sort requirements files
+      - id: file-contents-sorter
+        files: |
+          (?x)^(
+            template-files/requirements\.txt
+          )
+        args: [--unique]
   - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
     rev: 0.2.3
     hooks:

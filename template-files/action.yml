@@ -29,7 +29,7 @@ runs:
 
     - name: install dependencies
       shell: bash
-      run: pip install --quiet jinja2 jsonschema pygithub pyyaml rich
+      run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
 
     - name: sync & template files
       shell: bash
