@@ -1,4 +1,3 @@
----
 name: Template Files
 description: Template (or copy) files from other repositories and commits them to the specified PR.
 author: Anaconda Inc.
