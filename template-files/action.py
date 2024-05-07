@@ -5,7 +5,7 @@ import os
 import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import yaml
 from github import Auth, Github, UnknownObjectException
@@ -13,6 +13,9 @@ from github.Repository import Repository
 from jinja2 import Environment, FileSystemLoader
 from jsonschema import validate
 from rich.console import Console
+
+if TYPE_CHECKING:
+    from typing import Any, Literal
 
 print = Console(color_system="standard", soft_wrap=True).print
 perror = Console(
@@ -22,6 +25,9 @@ perror = Console(
     style="bold red",
 ).print
 
+
+class ActionError(Exception):
+    pass
 
 def validate_file(value: str) -> Path | None:
     try:
@@ -94,49 +100,63 @@ def read_config(args: Namespace) -> dict:
     return config
 
 
+def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, Any]]:
+    src: str | None
+    dst: Path
+    remove: bool
+    context: dict[str, Any]
+
+    if isinstance(file, str):
+        src = file
+        dst = Path(file)
+        remove = False
+        context = {}
+    elif isinstance(file, dict):
+        src = file.get("src", None)
+        if (tmp := file.get("dst", src)) is None:
+            perror(f"❌ Invalid file definition ({file}), expected dst")
+            raise ActionError
+        dst = Path(tmp)
+        remove = file.get("remove", False)
+        context = file.get("with", {})
+    else:
+        perror(f"❌ Invalid file definition ({file}), expected str or dict")
+        raise ActionError
+
+    # to template a file we need a source file
+    if not remove and src is None:
+        perror(f"❌ Invalid file definition ({file}), expected src")
+        raise ActionError
+
+    return src, dst, remove, context
+
+
 def iterate_config(
     config: dict,
     gh: Github,
     env: Environment,
-    source: Repository,
+    current_repo: Repository,
 ) -> int:
     # iterate over configuration and template files
     errors = 0
-    for repository, files in config.items():
+    for upstream_name, files in config.items():
         try:
-            destination = gh.get_repo(repository)
+            upstream_repo = gh.get_repo(upstream_name)
         except UnknownObjectException as err:
-            perror(f"❌ Failed to fetch {repository}: {err}")
+            perror(f"❌ Failed to fetch {upstream_name}: {err}")
             errors += 1
             continue
 
         for file in files:
-            src: str | None
-            dst: Path | None
-            remove: bool
-            context: dict[str, Any]
-
-            if isinstance(file, str):
-                src = file
-                dst = Path(file)
-                remove = False
-                context = {}
-            elif isinstance(file, dict):
-                src = file.get("src", None)
-                dst = None if (tmp := file.get("dst", src)) is None else Path(tmp)
-                remove = file.get("remove", False)
-                context = file.get("with", {})
-            else:
-                perror(f"❌ Invalid file definition ({file}), expected str or dict")
+            try:
+                # parse/standardize configuration
+                src, dst, remove, context = parse_config(file)
+            except ActionError:
                 errors += 1
                 continue
 
+            # remove dst file
             if remove:
-                if dst is None:
-                    perror(f"❌ Invalid file definition ({file}), expected dst")
-                    errors += 1
-                    continue
-
                 try:
                     dst.unlink()
                 except FileNotFoundError:
@@ -146,26 +166,36 @@ def iterate_config(
                     # PermissionError: not possible to remove dst
                     perror(f"❌ Failed to remove {dst}: {err}")
                     errors += 1
+                    continue
                 else:
                     print(f"✅ Removed {dst}")
-                continue
+            else:
+                # fetch src file
+                try:
+                    content = upstream_repo.get_contents(src).decoded_content.decode()
+                except UnknownObjectException as err:
+                    perror(f"❌ Failed to fetch {src} from {upstream_name}: {err}")
+                    errors += 1
+                    continue
+                else:
+                    # inject stuff about the source and destination
+                    context.update({
+                        # the current repository from which this GHA is being run,
+                        # where the new files will be written
+                        "repo": current_repo,
+                        "dst": current_repo,
+                        "destination": current_repo,
+                        "current": current_repo,
+                        # source (should be rarely, if ever, used in templating)
+                        "src": upstream_repo,
+                        "source": upstream_repo,
+                    })
 
-            try:
-                content = destination.get_contents(src).decoded_content.decode()
-            except UnknownObjectException as err:
-                perror(f"❌ Failed to fetch {src} from {repository}: {err}")
-                errors += 1
-                continue
+                    template = env.from_string(content)
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    dst.write_text(template.render(**context))
 
-            # inject stuff about the source and destination
-            context["repo"] = context["dst"] = context["destination"] = source
-            context["src"] = context["source"] = destination
-
-            template = env.from_string(content)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(template.render(**context))
-
-            print(f"✅ Templated {repository}/{src} as {dst}")
+                    print(f"✅ Templated {upstream_name}/{src} as {dst}")
 
     return errors
 
@@ -198,15 +228,15 @@ def main():
     gh = Github(auth=Auth.Token(os.environ["GITHUB_TOKEN"]))
 
     # get current repository
-    repository = os.environ["GITHUB_REPOSITORY"]
+    current_name = os.environ["GITHUB_REPOSITORY"]
     try:
-        source = gh.get_repo(repository)
+        current_repo = gh.get_repo(current_name)
     except UnknownObjectException as err:
-        perror(f"❌ Failed to fetch {repository}: {err}")
+        perror(f"❌ Failed to fetch {current_name}: {err}")
         errors += 1
 
     if not errors:
-        errors += iterate_config(config, gh, env, source)
+        errors += iterate_config(config, gh, env, current_repo)
 
     if errors:
         perror(f"Got {errors} error(s)")

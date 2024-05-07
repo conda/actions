@@ -39,4 +39,8 @@ user/repo:
   - src: path/to/template
     with:
       name: value
+
+  # removing
+  - dst: path/to/remove
+    remove: true
 ```
