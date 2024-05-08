@@ -15,7 +15,7 @@ repos:
       - id: file-contents-sorter
         files: |
           (?x)^(
-            */requirements\.txt
+            .*/requirements\.txt
           )
         args: [--unique]
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
