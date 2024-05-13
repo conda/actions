@@ -42,7 +42,7 @@ runs:
 
     # commit status → pending
     - name: Set commit status with pending
-      uses: conda/actions/set-commit-status@976289d0cfd85139701b26ddd133abdd025a7b5f
+      uses: conda/actions/set-commit-status@976289d0cfd85139701b26ddd133abdd025a7b5f # v24.5.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
@@ -179,7 +179,7 @@ runs:
     # commit status → error
     - name: Set commit status to error
       if: steps.metadata.outputs.has_signed == 'false'
-      uses: conda/actions/set-commit-status@976289d0cfd85139701b26ddd133abdd025a7b5f
+      uses: conda/actions/set-commit-status@976289d0cfd85139701b26ddd133abdd025a7b5f # v24.5.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
@@ -190,7 +190,7 @@ runs:
     # commit status → success
     - name: Set commit status to success
       if: steps.metadata.outputs.has_signed == 'true'
-      uses: conda/actions/set-commit-status@976289d0cfd85139701b26ddd133abdd025a7b5f
+      uses: conda/actions/set-commit-status@976289d0cfd85139701b26ddd133abdd025a7b5f # v24.5.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
