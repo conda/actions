@@ -23,6 +23,9 @@ inputs:
   workflow:
     description: The workflow to search for recent pytest runs.
     default: tests.yml
+  repository:
+    description: The repository to search for recent pytest runs.
+    default: ${{ github.repository }}
 
 runs:
   using: composite
@@ -31,6 +34,7 @@ runs:
       shell: bash
       run: >
         gh run list
+        --repo ${{ inputs.repository }}
         --branch ${{ inputs.branch }}
         --workflow ${{ inputs.workflow }}
         --limit 10
@@ -38,6 +42,7 @@ runs:
         --jq '.[].databaseId'
         | xargs -n 1
         gh run download
+        --repo ${{ inputs.repository }}
         --dir ${{ runner.temp }}/artifacts/
         --pattern '${{ inputs.pattern }}'
         || true
