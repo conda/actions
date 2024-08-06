@@ -25,7 +25,7 @@ from rich import box
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterator
 
-INDENT = 3
+INDENT = 4
 
 console = Console(color_system="standard", width=100_000_000, record=True)
 
@@ -369,25 +369,21 @@ def dump_summary():
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     output = os.getenv("GITHUB_OUTPUT")
     if summary or output:
-        html = console.export_html(
-            code_format=(
-                "<details>\n"
-                "<summary>Templating Audit</summary>\n"
-                "\n"
-                "{code}\n"
-                "\n"
-                "</details>"
-            )
-        )
+        html = console.export_html(code_format="{code}")
     if summary:
-        Path(summary).write_text(html)
+        Path(summary).write_text(f"### Templating Audit\n{html}")
     if output:
         with Path(output).open("a") as fh:
             fh.write(
                 # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
                 # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
                 f"summary<<GITHUB_OUTPUT_summary\n"
+                f"<details>\n"
+                f"<summary>Templating Audit</summary>\n"
+                f"\n"
                 f"{html}\n"
+                f"\n"
+                f"</details>\n"
                 f"GITHUB_OUTPUT_summary\n"
             )
 
