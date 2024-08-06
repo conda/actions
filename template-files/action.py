@@ -52,6 +52,7 @@ class TemplateState(Enum):
     UNUSED = "unused"
     MISSING = "missing"
     USED = "used"
+    CONTEXT = "context"
     WIDTH = nonmember(12)
 
     def __rich__(self) -> str:
@@ -61,6 +62,8 @@ class TemplateState(Enum):
             return f"[red]❌ ({self.value})[/red]"
         elif self == self.USED:
             return f"[green]✅ ({self.value})[/green]"
+        elif self == self.CONTEXT:
+            return f"[blue]📑 ({self.value})[/blue]"
         else:
             raise ValueError("Invalid TemplateState")
 
@@ -245,40 +248,40 @@ def template_file(
         perror(f"* ❌ Failed to fetch `{src}`: {err}", indent=INDENT)
         return 1
 
-    # inject stuff about the source and destination
-    context.update(
-        {
-            # the current repository from which this GHA is being run,
-            # where the new files will be written
-            "repo": current_repo,
-            "dst": current_repo,
-            "destination": current_repo,
-            "current": current_repo,
-            # source (should be rarely, if ever, used in templating)
-            "src": upstream_repo,
-            "source": upstream_repo,
-        }
-    )
+    # standard context with source and destination details
+    standard_context = {
+        # the current repository from which this GHA is being run,
+        # where the new files will be written
+        "repo": current_repo,
+        "dst": current_repo,
+        "destination": current_repo,
+        "current": current_repo,
+        # source (should be rarely, if ever, used in templating)
+        "src": upstream_repo,
+        "source": upstream_repo,
+    }
 
     with env.loader.get_stubs(upstream_name, src, dst) as stubs:
         try:
             template = env.from_string(content)
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(template.render(**context))
+            dst.write_text(template.render(**{**context, **standard_context}))
         except TemplateError as err:
             perror(f"* ❌ Failed to template `{src}`: {err}", indent=INDENT)
             return 1
 
         print(f"* ✅ `{src}` → `{dst}`", indent=INDENT)
 
-        # display stubs for this file
-        if stubs:
+        # display stubs & context for this file
+        if stubs or context:
             table = Table.grid(padding=1)
             table.add_column()
             table.add_column(max_width=TemplateState.WIDTH)
             table.add_column()
             for stub, state in stubs.items():
                 table.add_row("*", state, f"`{stub}`")
+            for key, value in context.items():
+                table.add_row("*", TemplateState.CONTEXT, f"`{key}={value}`")
             print(table, indent=INDENT * 2)
     return 0  # no errors
 
