@@ -7,7 +7,7 @@ import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from collections import defaultdict
 from contextlib import contextmanager
-from enum import Enum
+from enum import Enum, nonmember
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from typing import Any, Callable, Iterator
 
 INDENT = 4
-
 console = Console(color_system="standard", width=100_000_000, record=True)
 
 
@@ -47,6 +46,70 @@ def perror(renderable, **kwargs) -> None:
 
 class ActionError(Exception):
     pass
+
+
+class TemplateState(Enum):
+    UNUSED = "unused"
+    MISSING = "missing"
+    USED = "used"
+    WIDTH = nonmember(12)
+
+    def __rich__(self) -> str:
+        if self == self.UNUSED:
+            return f"[yellow]⚠️ ({self.value})[/yellow]"
+        elif self == self.MISSING:
+            return f"[red]❌ ({self.value})[/red]"
+        elif self == self.USED:
+            return f"[green]✅ ({self.value})[/green]"
+        else:
+            raise ValueError("Invalid TemplateState")
+
+
+class StubLoader(FileSystemLoader):
+    current: tuple[str, str, str] | None
+    stubs: dict[str, TemplateState]
+    templates: dict[tuple[str, str, str], dict[str, TemplateState]]
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.templates = defaultdict(dict)
+        self.stubs = dict.fromkeys(self.list_templates(), TemplateState.UNUSED)
+
+    def get_source(
+        self,
+        environment: Environment,
+        stub: str,
+    ) -> tuple[str, str, Callable[[], bool]]:
+        # assume template is used, track for current file and globally
+        if self.current:
+            self.templates[self.current][stub] = TemplateState.USED
+        self.stubs[stub] = TemplateState.USED
+
+        try:
+            # delegate to FileSystemLoader
+            return super().get_source(environment, stub)
+        except TemplateNotFound:
+            # TemplateNotFound: template does not exist, mark it as missing
+            if self.current:
+                self.templates[self.current][stub] = TemplateState.MISSING
+            self.stubs[stub] = TemplateState.MISSING
+            raise
+
+    @contextmanager
+    def get_stubs(
+        self,
+        file: str,
+        src: str,
+        dst: str,
+    ) -> Iterator[dict[str, TemplateState]]:
+        try:
+            # set current file
+            self.current = (file, src, dst)
+
+            yield self.templates[self.current]
+        finally:
+            # clear current file
+            self.current = None
 
 
 def validate_file(value: str) -> Path | None:
@@ -212,7 +275,7 @@ def template_file(
         if stubs:
             table = Table.grid(padding=1)
             table.add_column()
-            table.add_column(max_width=STATE_WIDTH)
+            table.add_column(max_width=TemplateState.WIDTH)
             table.add_column()
             for stub, state in stubs.items():
                 table.add_row("*", state, f"`{stub}`")
@@ -256,68 +319,28 @@ def iterate_config(
     return errors
 
 
-class TemplateState(Enum):
-    UNUSED = "unused"
-    MISSING = "missing"
-    USED = "used"
-
-    def __rich__(self) -> str:
-        if self == self.UNUSED:
-            return f"[yellow]⚠️ ({self.value})[/yellow]"
-        elif self == self.MISSING:
-            return f"[red]❌ ({self.value})[/red]"
-        elif self == self.USED:
-            return f"[green]✅ ({self.value})[/green]"
-        else:
-            raise ValueError("Invalid TemplateState")
-
-
-STATE_WIDTH = 12
-
-
-StubToStateType = dict[str, TemplateState]
-
-
-class StubLoader(FileSystemLoader):
-    current: tuple[str, str, str] | None
-    stubs: StubToStateType
-    templates: dict[tuple[str, str, str], StubToStateType]
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.templates = defaultdict(dict)
-        self.stubs = dict.fromkeys(self.list_templates(), TemplateState.UNUSED)
-
-    def get_source(
-        self,
-        environment: Environment,
-        stub: str,
-    ) -> tuple[str, str, Callable[[], bool]]:
-        # assume template is used, track for current file and globally
-        if self.current:
-            self.templates[self.current][stub] = TemplateState.USED
-        self.stubs[stub] = TemplateState.USED
-
-        try:
-            # delegate to FileSystemLoader
-            return super().get_source(environment, stub)
-        except TemplateNotFound:
-            # TemplateNotFound: template does not exist, mark it as missing
-            if self.current:
-                self.templates[self.current][stub] = TemplateState.MISSING
-            self.stubs[stub] = TemplateState.MISSING
-            raise
-
-    @contextmanager
-    def get_stubs(self, file: str, src: str, dst: str) -> Iterator[StubToStateType]:
-        try:
-            # set current file
-            self.current = (file, src, dst)
-
-            yield self.templates[self.current]
-        finally:
-            # clear current file
-            self.current = None
+def dump_summary():
+    # dump summary to GitHub Actions summary
+    summary = os.getenv("GITHUB_STEP_SUMMARY")
+    output = os.getenv("GITHUB_OUTPUT")
+    if summary or output:
+        html = console.export_text()
+    if summary:
+        Path(summary).write_text(f"### Templating Audit\n{html}")
+    if output:
+        with Path(output).open("a") as fh:
+            fh.write(
+                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
+                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
+                f"summary<<GITHUB_OUTPUT_summary\n"
+                f"<details>\n"
+                f"<summary>Templating Audit</summary>\n"
+                f"\n"
+                f"{html}\n"
+                f"\n"
+                f"</details>\n"
+                f"GITHUB_OUTPUT_summary\n"
+            )
 
 
 def main():
@@ -366,7 +389,7 @@ def main():
     # provide audit of stub usage
     table = Table(box=box.MARKDOWN)
     table.add_column("Stub")
-    table.add_column("State", max_width=STATE_WIDTH)
+    table.add_column("State", max_width=TemplateState.WIDTH)
     for stub, state in loader.stubs.items():
         table.add_row(f"`{stub}`", state)
     print(table)
@@ -376,30 +399,6 @@ def main():
 
     dump_summary()
     sys.exit(errors)
-
-
-def dump_summary():
-    # dump summary to GitHub Actions summary
-    summary = os.getenv("GITHUB_STEP_SUMMARY")
-    output = os.getenv("GITHUB_OUTPUT")
-    if summary or output:
-        html = console.export_text()
-    if summary:
-        Path(summary).write_text(f"### Templating Audit\n{html}")
-    if output:
-        with Path(output).open("a") as fh:
-            fh.write(
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
-                f"summary<<GITHUB_OUTPUT_summary\n"
-                f"<details>\n"
-                f"<summary>Templating Audit</summary>\n"
-                f"\n"
-                f"{html}\n"
-                f"\n"
-                f"</details>\n"
-                f"GITHUB_OUTPUT_summary\n"
-            )
 
 
 if __name__ == "__main__":
