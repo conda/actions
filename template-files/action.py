@@ -20,16 +20,30 @@ from jsonschema import validate
 from rich.console import Console
 from rich.table import Table
 from rich.padding import Padding
+from rich import box
 
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterator
 
-stdout_console = Console(color_system="standard", soft_wrap=True)
-stderr_console = Console(
-    color_system="standard", soft_wrap=True, stderr=True, style="bold red"
-)
-print = stdout_console.print
-perror = stderr_console.print
+INDENT = 3
+
+console = Console(color_system="standard", record=True)
+
+
+def print(renderable, *, indent: int = 0, **kwargs) -> None:
+    kwargs.setdefault("crop", False)
+    if indent:
+        renderable = Padding.indent(renderable, indent)
+    console.print(renderable, **kwargs)
+
+
+def perror(*args, **kwargs) -> None:
+    kwargs.setdefault("style", "bold red")
+    try:
+        console.stderr = True
+        print(*args, **kwargs)
+    finally:
+        console.stderr = False
 
 
 class ActionError(Exception):
@@ -121,18 +135,18 @@ def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, An
     elif isinstance(file, dict):
         src = file.get("src", None)
         if (tmp := file.get("dst", src)) is None:
-            perror(f"❌ Invalid file definition ({file}), expected dst")
+            perror(f"* ❌ Invalid file definition (`{file}`), expected `dst`")
             raise ActionError
         dst = Path(tmp)
         remove = file.get("remove", False)
         context = file.get("with", {})
     else:
-        perror(f"❌ Invalid file definition ({file}), expected str or dict")
+        perror(f"* ❌ Invalid file definition (`{file}`), expected `str` or `dict`")
         raise ActionError
 
     # to template a file we need a source file
     if not remove and src is None:
-        perror(f"❌ Invalid file definition ({file}), expected src")
+        perror(f"* ❌ Invalid file definition (`{file}`), expected `src`")
         raise ActionError
 
     return src, dst, remove, context
@@ -150,9 +164,11 @@ def iterate_config(
         try:
             upstream_repo = gh.get_repo(upstream_name)
         except UnknownObjectException as err:
-            perror(f"❌ Failed to fetch {upstream_name}: {err}")
+            perror(f"* ❌ Failed to fetch `{upstream_name}`: {err}")
             errors += 1
             continue
+        else:
+            print(f"* 🔄 Fetching files from `{upstream_name}`")
 
         for file in files:
             try:
@@ -168,20 +184,20 @@ def iterate_config(
                     dst.unlink()
                 except FileNotFoundError:
                     # FileNotFoundError: dst does not exist
-                    print(f"⚠️ {dst} has already been removed")
+                    print(f"* ⚠️ `{dst}` already removed", indent=INDENT)
                 except PermissionError as err:
                     # PermissionError: not possible to remove dst
-                    perror(f"❌ Failed to remove {dst}: {err}")
+                    perror(f"* ❌ Failed to remove `{dst}`: {err}", indent=INDENT)
                     errors += 1
                     continue
                 else:
-                    print(f"✅ Removed {dst}")
+                    print(f"* ❎ `{dst}` removed")
             else:
                 # fetch src file
                 try:
                     content = upstream_repo.get_contents(src).decoded_content.decode()
                 except UnknownObjectException as err:
-                    perror(f"❌ Failed to fetch {src} from {upstream_name}: {err}")
+                    perror(f"* ❌ Failed to fetch `{src}`: {err}", indent=INDENT)
                     errors += 1
                     continue
                 else:
@@ -207,21 +223,22 @@ def iterate_config(
                             dst.write_text(template.render(**context))
                         except TemplateError as err:
                             perror(
-                                f"❌ Failed to template {upstream_name}::{src}: {err}"
+                                f"* ❌ Failed to template `{src}`: {err}", indent=INDENT
                             )
                             errors += 1
                             continue
+                        else:
+                            print(f"* ✅ `{src}` → `{dst}`", indent=INDENT)
 
-                        print(f"✅ {upstream_name}::{src} → {dst}")
-
-                        # display stubs for this file
-                        if stubs:
-                            table = Table.grid(padding=1)
-                            table.add_column()
-                            table.add_column()
-                            for stub, state in stubs.items():
-                                table.add_row(stub, state)
-                            print(Padding(table, (0, 0, 0, 3)))
+                            # display stubs for this file
+                            if stubs:
+                                table = Table.grid(padding=1)
+                                table.add_column()
+                                table.add_column(max_width=STATE_WIDTH)
+                                table.add_column()
+                                for stub, state in stubs.items():
+                                    table.add_row("*", state, f"`{stub}`")
+                                print(table, indent=INDENT * 2)
 
     return errors
 
@@ -233,48 +250,30 @@ class TemplateState(Enum):
 
     def __rich__(self) -> str:
         if self == self.UNUSED:
-            return f"[yellow]{self.value}[/yellow]"
+            return f"[yellow]⚠️ ({self.value})[/yellow]"
         elif self == self.MISSING:
-            return f"[red]{self.value}[/red]"
+            return f"[red]❌ ({self.value})[/red]"
         elif self == self.USED:
-            return f"[green]{self.value}[/green]"
+            return f"[green]✅ ({self.value})[/green]"
         else:
             raise ValueError("Invalid TemplateState")
 
-    @property
-    def icon(self) -> str:
-        if self == self.UNUSED:
-            return "⚠️"
-        elif self == self.MISSING:
-            return "❌"
-        elif self == self.USED:
-            return "✅"
-        else:
-            raise ValueError("Invalid TemplateState")
+
+STATE_WIDTH = 12
 
 
 StubToStateType = dict[str, TemplateState]
 
 
-TEMPALTE_STATE_LEN = max(
-    len(state.value) for state in TemplateState.__members__.values()
-)
-
-
 class StubLoader(FileSystemLoader):
-    current: tuple[str, str] | None
-    templates: dict[tuple[str, str] | None, StubToStateType]
-
-    @property
-    def stub_to_state(self) -> StubToStateType:
-        return self.templates[None]
+    current: tuple[str, str, str] | None
+    stubs: StubToStateType
+    templates: dict[tuple[str, str, str], StubToStateType]
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.templates = defaultdict(dict)
-        self.templates[None] = dict.fromkeys(
-            self.list_templates(), TemplateState.UNUSED
-        )
+        self.stubs = dict.fromkeys(self.list_templates(), TemplateState.UNUSED)
 
     def get_source(
         self,
@@ -282,23 +281,25 @@ class StubLoader(FileSystemLoader):
         stub: str,
     ) -> tuple[str, str, Callable[[], bool]]:
         # assume template is used, track for current file and globally
-        self.templates[self.current][stub] = TemplateState.USED
-        self.templates[None][stub] = TemplateState.USED
+        if self.current:
+            self.templates[self.current][stub] = TemplateState.USED
+        self.stubs[stub] = TemplateState.USED
 
         try:
             # delegate to FileSystemLoader
             return super().get_source(environment, stub)
         except TemplateNotFound:
             # TemplateNotFound: template does not exist, mark it as missing
-            self.templates[self.current][stub] = TemplateState.MISSING
-            self.templates[None][stub] = TemplateState.MISSING
+            if self.current:
+                self.templates[self.current][stub] = TemplateState.MISSING
+            self.stubs[stub] = TemplateState.MISSING
             raise
 
     @contextmanager
     def get_stubs(self, file: str, src: str, dst: str) -> Iterator[StubToStateType]:
         try:
             # set current file
-            self.current = (f"{file}::{src}", f"{dst}")
+            self.current = (file, src, dst)
 
             yield self.templates[self.current]
         finally:
@@ -306,41 +307,13 @@ class StubLoader(FileSystemLoader):
             self.current = None
 
 
-def format_html(loader: StubLoader) -> Iterator[str]:
-    yield "<details>"
-    yield "<summary>Templating Audit</summary>"
-    yield ""
-
-    # filter out None keys (global stubs)
-    for (src, dst), stubs in filter(lambda key: key[0], loader.templates.items()):
-        yield f"* <code>{src}</code> → <code>{dst}</code>"
-        if stubs:
-            for stub, state in stubs.items():
-                yield f"  * <code>{stub}</code> {state.icon} ({state.value})"
-    yield ""
-
-    yield "<table>"
-    yield "<tr><th>Stub</th><th>State</th></tr>"
-    for stub, state in loader.stub_to_state.items():
-        yield (
-            f"<tr>"
-            f"<td><code>{stub}</code></td>"
-            f"<td>{state.icon} ({state.value})</td>"
-            f"</tr>"
-        )
-    yield "</table>"
-    yield ""
-
-    yield "</details>"
-
-
 def main():
-    errors = 0
-
     args = parse_args()
     if not args.config:
         print("⚠️ No configuration file found, nothing to update")
+        dump_summary(0)
         sys.exit(0)
+    errors = 0
 
     config = read_config(args)
 
@@ -371,25 +344,42 @@ def main():
     try:
         current_repo = gh.get_repo(current_name)
     except UnknownObjectException as err:
-        perror(f"❌ Failed to fetch {current_name}: {err}")
+        perror(f"❌ Failed to fetch `{current_name}`: {err}")
         errors += 1
 
     if not errors:
         errors += iterate_config(config, gh, env, current_repo)
 
     # provide audit of stub usage
-    table = Table()
+    table = Table(box=box.MARKDOWN)
     table.add_column("Stub")
-    table.add_column("State")
-    for stub, state in loader.stub_to_state.items():
-        table.add_row(stub, state)
+    table.add_column("State", max_width=STATE_WIDTH)
+    for stub, state in loader.stubs.items():
+        table.add_row(f"`{stub}`", state)
     print(table)
 
+    if errors:
+        perror(f"Got {errors} error(s)")
+
+    dump_summary()
+    sys.exit(errors)
+
+
+def dump_summary():
     # dump summary to GitHub Actions summary
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     output = os.getenv("GITHUB_OUTPUT")
     if summary or output:
-        html = "\n".join(format_html(loader))
+        html = console.export_html(
+            code_format=(
+                "<details>\n"
+                "<summary>Templating Audit</summary>\n"
+                "\n"
+                "{code}\n"
+                "\n"
+                "</details>"
+            )
+        )
     if summary:
         Path(summary).write_text(html)
     if output:
@@ -401,10 +391,6 @@ def main():
                 f"{html}\n"
                 f"GITHUB_OUTPUT_summary\n"
             )
-
-    if errors:
-        perror(f"Got {errors} error(s)")
-    sys.exit(errors)
 
 
 if __name__ == "__main__":
