@@ -36,11 +36,11 @@ def print(renderable, *, indent: int = 0, **kwargs) -> None:
     console.print(renderable, **kwargs)
 
 
-def perror(*args, **kwargs) -> None:
+def perror(renderable, **kwargs) -> None:
     kwargs.setdefault("style", "bold red")
     try:
         console.stderr = True
-        print(*args, **kwargs)
+        print(renderable, **kwargs)
     finally:
         console.stderr = False
 
@@ -310,7 +310,7 @@ def main():
     args = parse_args()
     if not args.config:
         print("⚠️ No configuration file found, nothing to update")
-        dump_summary(0)
+        dump_summary()
         sys.exit(0)
     errors = 0
 
@@ -369,7 +369,7 @@ def dump_summary():
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     output = os.getenv("GITHUB_OUTPUT")
     if summary or output:
-        html = console.export_html(code_format="{code}")
+        html = console.export_text()
     if summary:
         Path(summary).write_text(f"### Templating Audit\n{html}")
     if output:
