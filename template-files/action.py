@@ -151,6 +151,75 @@ def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, An
     return src, dst, remove, context
 
 
+def remove_file(dst: Path) -> int:
+    try:
+        dst.unlink()
+    except FileNotFoundError:
+        # FileNotFoundError: dst does not exist
+        print(f"* ⚠️ `{dst}` already removed", indent=INDENT)
+    except PermissionError as err:
+        # PermissionError: not possible to remove dst
+        perror(f"* ❌ Failed to remove `{dst}`: {err}", indent=INDENT)
+        return 1
+    else:
+        print(f"* ❎ `{dst}` removed")
+    return 0  # no errors
+
+
+def template_file(
+    env: Environment,
+    current_repo: Repository,
+    upstream_name: str,
+    upstream_repo: Repository,
+    src: str | None,
+    dst: Path,
+    context: dict[str, Any],
+) -> int:
+    # fetch src file
+    try:
+        content = upstream_repo.get_contents(src).decoded_content.decode()
+    except UnknownObjectException as err:
+        perror(f"* ❌ Failed to fetch `{src}`: {err}", indent=INDENT)
+        return 1
+
+    # inject stuff about the source and destination
+    context.update(
+        {
+            # the current repository from which this GHA is being run,
+            # where the new files will be written
+            "repo": current_repo,
+            "dst": current_repo,
+            "destination": current_repo,
+            "current": current_repo,
+            # source (should be rarely, if ever, used in templating)
+            "src": upstream_repo,
+            "source": upstream_repo,
+        }
+    )
+
+    with env.loader.get_stubs(upstream_name, src, dst) as stubs:
+        try:
+            template = env.from_string(content)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(template.render(**context))
+        except TemplateError as err:
+            perror(f"* ❌ Failed to template `{src}`: {err}", indent=INDENT)
+            return 1
+
+        print(f"* ✅ `{src}` → `{dst}`", indent=INDENT)
+
+        # display stubs for this file
+        if stubs:
+            table = Table.grid(padding=1)
+            table.add_column()
+            table.add_column(max_width=STATE_WIDTH)
+            table.add_column()
+            for stub, state in stubs.items():
+                table.add_row("*", state, f"`{stub}`")
+            print(table, indent=INDENT * 2)
+    return 0  # no errors
+
+
 def iterate_config(
     config: dict,
     gh: Github,
@@ -177,67 +246,12 @@ def iterate_config(
                 errors += 1
                 continue
 
-            # remove dst file
             if remove:
-                try:
-                    dst.unlink()
-                except FileNotFoundError:
-                    # FileNotFoundError: dst does not exist
-                    print(f"* ⚠️ `{dst}` already removed", indent=INDENT)
-                except PermissionError as err:
-                    # PermissionError: not possible to remove dst
-                    perror(f"* ❌ Failed to remove `{dst}`: {err}", indent=INDENT)
-                    errors += 1
-                    continue
-                else:
-                    print(f"* ❎ `{dst}` removed")
+                errors += remove_file(dst)
             else:
-                # fetch src file
-                try:
-                    content = upstream_repo.get_contents(src).decoded_content.decode()
-                except UnknownObjectException as err:
-                    perror(f"* ❌ Failed to fetch `{src}`: {err}", indent=INDENT)
-                    errors += 1
-                    continue
-                else:
-                    # inject stuff about the source and destination
-                    context.update(
-                        {
-                            # the current repository from which this GHA is being run,
-                            # where the new files will be written
-                            "repo": current_repo,
-                            "dst": current_repo,
-                            "destination": current_repo,
-                            "current": current_repo,
-                            # source (should be rarely, if ever, used in templating)
-                            "src": upstream_repo,
-                            "source": upstream_repo,
-                        }
-                    )
-
-                    with env.loader.get_stubs(upstream_name, src, dst) as stubs:
-                        try:
-                            template = env.from_string(content)
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-                            dst.write_text(template.render(**context))
-                        except TemplateError as err:
-                            perror(
-                                f"* ❌ Failed to template `{src}`: {err}", indent=INDENT
-                            )
-                            errors += 1
-                            continue
-                        else:
-                            print(f"* ✅ `{src}` → `{dst}`", indent=INDENT)
-
-                            # display stubs for this file
-                            if stubs:
-                                table = Table.grid(padding=1)
-                                table.add_column()
-                                table.add_column(max_width=STATE_WIDTH)
-                                table.add_column()
-                                for stub, state in stubs.items():
-                                    table.add_row("*", state, f"`{stub}`")
-                                print(table, indent=INDENT * 2)
+                errors += template_file(
+                    env, current_repo, upstream_name, upstream_repo, src, dst, context
+                )
 
     return errors
 
