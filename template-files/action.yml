@@ -42,7 +42,10 @@ runs:
 
     - name: Pip List
       shell: bash
-      run: pip list
+      run: |
+        echo ::group::Pip List
+        pip list
+        echo ::endgroup::
 
     - name: Template Files
       id: template
