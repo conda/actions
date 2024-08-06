@@ -18,6 +18,10 @@ inputs:
       A token with ability to comment, label, and modify the commit status
       (`pull_request: write` and `statuses: write` for fine-grained PAT; `repo` for classic PAT)
     default: ${{ github.token }}
+outputs:
+  summary:
+    description: Summary of the files that were templated/copied.
+    value: ${{ steps.template.outputs.summary }}
 
 runs:
   using: composite
@@ -32,11 +36,16 @@ runs:
       with:
         python-version: '3.11'
 
-    - name: install dependencies
+    - name: Install Dependencies
       shell: bash
       run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
 
-    - name: sync & template files
+    - name: Pip List
+      shell: bash
+      run: pip list
+
+    - name: Template Files
+      id: template
       shell: bash
       run: python ${{ github.action_path }}/action.py --config ${{ inputs.config }} --stubs ${{ inputs.stubs }}
       env:

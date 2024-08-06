@@ -1,9 +1,13 @@
 """Copy files from external locations as defined in `sync.yml`."""
+
 from __future__ import annotations
 
 import os
 import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
+from collections import defaultdict
+from contextlib import contextmanager
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,23 +15,26 @@ import yaml
 from github import Auth, Github, UnknownObjectException
 from github.Repository import Repository
 from jinja2 import Environment, FileSystemLoader
+from jinja2.exceptions import TemplateNotFound, TemplateError
 from jsonschema import validate
 from rich.console import Console
+from rich.table import Table
+from rich.padding import Padding
 
 if TYPE_CHECKING:
-    from typing import Any, Literal
+    from typing import Any, Callable, Iterator
 
-print = Console(color_system="standard", soft_wrap=True).print
-perror = Console(
-    color_system="standard",
-    soft_wrap=True,
-    stderr=True,
-    style="bold red",
-).print
+stdout_console = Console(color_system="standard", soft_wrap=True)
+stderr_console = Console(
+    color_system="standard", soft_wrap=True, stderr=True, style="bold red"
+)
+print = stdout_console.print
+perror = stderr_console.print
 
 
 class ActionError(Exception):
     pass
+
 
 def validate_file(value: str) -> Path | None:
     try:
@@ -179,25 +186,152 @@ def iterate_config(
                     continue
                 else:
                     # inject stuff about the source and destination
-                    context.update({
-                        # the current repository from which this GHA is being run,
-                        # where the new files will be written
-                        "repo": current_repo,
-                        "dst": current_repo,
-                        "destination": current_repo,
-                        "current": current_repo,
-                        # source (should be rarely, if ever, used in templating)
-                        "src": upstream_repo,
-                        "source": upstream_repo,
-                    })
+                    context.update(
+                        {
+                            # the current repository from which this GHA is being run,
+                            # where the new files will be written
+                            "repo": current_repo,
+                            "dst": current_repo,
+                            "destination": current_repo,
+                            "current": current_repo,
+                            # source (should be rarely, if ever, used in templating)
+                            "src": upstream_repo,
+                            "source": upstream_repo,
+                        }
+                    )
 
-                    template = env.from_string(content)
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    dst.write_text(template.render(**context))
+                    with env.loader.get_stubs(upstream_name, src, dst) as stubs:
+                        try:
+                            template = env.from_string(content)
+                            dst.parent.mkdir(parents=True, exist_ok=True)
+                            dst.write_text(template.render(**context))
+                        except TemplateError as err:
+                            perror(
+                                f"❌ Failed to template {upstream_name}::{src}: {err}"
+                            )
+                            errors += 1
+                            continue
 
-                    print(f"✅ Templated {upstream_name}/{src} as {dst}")
+                        print(f"✅ {upstream_name}::{src} → {dst}")
+
+                        # display stubs for this file
+                        if stubs:
+                            table = Table.grid(padding=1)
+                            table.add_column()
+                            table.add_column()
+                            for stub, state in stubs.items():
+                                table.add_row(stub, state)
+                            print(Padding(table, (0, 0, 0, 3)))
 
     return errors
+
+
+class TemplateState(Enum):
+    UNUSED = "unused"
+    MISSING = "missing"
+    USED = "used"
+
+    def __rich__(self) -> str:
+        if self == self.UNUSED:
+            return f"[yellow]{self.value}[/yellow]"
+        elif self == self.MISSING:
+            return f"[red]{self.value}[/red]"
+        elif self == self.USED:
+            return f"[green]{self.value}[/green]"
+        else:
+            raise ValueError("Invalid TemplateState")
+
+    @property
+    def icon(self) -> str:
+        if self == self.UNUSED:
+            return "⚠️"
+        elif self == self.MISSING:
+            return "❌"
+        elif self == self.USED:
+            return "✅"
+        else:
+            raise ValueError("Invalid TemplateState")
+
+
+StubToStateType = dict[str, TemplateState]
+
+
+TEMPALTE_STATE_LEN = max(
+    len(state.value) for state in TemplateState.__members__.values()
+)
+
+
+class StubLoader(FileSystemLoader):
+    current: tuple[str, str] | None
+    templates: dict[tuple[str, str] | None, StubToStateType]
+
+    @property
+    def stub_to_state(self) -> StubToStateType:
+        return self.templates[None]
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.templates = defaultdict(dict)
+        self.templates[None] = dict.fromkeys(
+            self.list_templates(), TemplateState.UNUSED
+        )
+
+    def get_source(
+        self,
+        environment: Environment,
+        stub: str,
+    ) -> tuple[str, str, Callable[[], bool]]:
+        # assume template is used, track for current file and globally
+        self.templates[self.current][stub] = TemplateState.USED
+        self.templates[None][stub] = TemplateState.USED
+
+        try:
+            # delegate to FileSystemLoader
+            return super().get_source(environment, stub)
+        except TemplateNotFound:
+            # TemplateNotFound: template does not exist, mark it as missing
+            self.templates[self.current][stub] = TemplateState.MISSING
+            self.templates[None][stub] = TemplateState.MISSING
+            raise
+
+    @contextmanager
+    def get_stubs(self, file: str, src: str, dst: str) -> Iterator[StubToStateType]:
+        try:
+            # set current file
+            self.current = (f"{file}::{src}", f"{dst}")
+
+            yield self.templates[self.current]
+        finally:
+            # clear current file
+            self.current = None
+
+
+def format_html(loader: StubLoader) -> Iterator[str]:
+    yield "<details>"
+    yield "<summary>Templating Audit</summary>"
+    yield ""
+
+    # filter out None keys (global stubs)
+    for (src, dst), stubs in filter(lambda key: key[0], loader.templates.items()):
+        yield f"* <code>{src}</code> → <code>{dst}</code>"
+        if stubs:
+            for stub, state in stubs.items():
+                yield f"  * <code>{stub}</code> {state.icon} ({state.value})"
+    yield ""
+
+    yield "<table>"
+    yield "<tr><th>Stub</th><th>State</th></tr>"
+    for stub, state in loader.stub_to_state.items():
+        yield (
+            f"<tr>"
+            f"<td><code>{stub}</code></td>"
+            f"<td>{state.icon} ({state.value})</td>"
+            f"</tr>"
+        )
+    yield "</table>"
+    yield ""
+
+    yield "</details>"
 
 
 def main():
@@ -210,9 +344,12 @@ def main():
 
     config = read_config(args)
 
-    # initialize Jinja environment and GitHub client
+    # initialize stub loader
+    loader = StubLoader(args.stubs)
+
+    # initialize Jinja environment
     env = Environment(
-        loader=FileSystemLoader(args.stubs),
+        loader=loader,
         # {{ }} is used in MermaidJS
         # ${{ }} is used in GitHub Actions
         # { } is used in Python
@@ -225,6 +362,8 @@ def main():
         comment_end_string="#]",
         keep_trailing_newline=True,
     )
+
+    # initialize GitHub client
     gh = Github(auth=Auth.Token(os.environ["GITHUB_TOKEN"]))
 
     # get current repository
@@ -237,6 +376,31 @@ def main():
 
     if not errors:
         errors += iterate_config(config, gh, env, current_repo)
+
+    # provide audit of stub usage
+    table = Table()
+    table.add_column("Stub")
+    table.add_column("State")
+    for stub, state in loader.stub_to_state.items():
+        table.add_row(stub, state)
+    print(table)
+
+    # dump summary to GitHub Actions summary
+    summary = os.getenv("GITHUB_STEP_SUMMARY")
+    output = os.getenv("GITHUB_OUTPUT")
+    if summary or output:
+        html = "\n".join(format_html(loader))
+    if summary:
+        Path(summary).write_text(html)
+    if output:
+        with Path(output).open("a") as fh:
+            fh.write(
+                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
+                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
+                f"summary<<GITHUB_OUTPUT_summary\n"
+                f"{html}\n"
+                f"GITHUB_OUTPUT_summary\n"
+            )
 
     if errors:
         perror(f"Got {errors} error(s)")
