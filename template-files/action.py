@@ -27,11 +27,10 @@ if TYPE_CHECKING:
 
 INDENT = 3
 
-console = Console(color_system="standard", record=True)
+console = Console(color_system="standard", width=100_000_000, record=True)
 
 
 def print(renderable, *, indent: int = 0, **kwargs) -> None:
-    kwargs.setdefault("crop", False)
     if indent:
         renderable = Padding.indent(renderable, indent)
     console.print(renderable, **kwargs)
