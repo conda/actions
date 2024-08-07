@@ -26,11 +26,15 @@ inputs:
   repository:
     description: The repository to search for recent pytest runs.
     default: ${{ github.repository }}
+outputs:
+  summary:
+    description: Summary of the durations that were combined.
+    value: ${{ steps.combine.outputs.summary }}
 
 runs:
   using: composite
   steps:
-    - name: download recent artifacts
+    - name: Download Recent Artifacts
       shell: bash
       run: >
         gh run list
@@ -59,11 +63,19 @@ runs:
       with:
         python-version: '3.11'
 
-    - name: install dependencies
+    - name: Install Dependencies
       shell: bash
       run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
 
-    - name: combine recent durations from artifacts
+    - name: Pip List
+      shell: bash
+      run: |
+        echo ::group::Pip List
+        pip list
+        echo ::endgroup::
+
+    - name: Combine Recent Durations
+      id: combine
       shell: bash
       run: >
         python ${{ github.action_path }}/action.py
