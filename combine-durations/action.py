@@ -1,4 +1,5 @@
 """Combine test durations from all recent runs."""
+
 from __future__ import annotations
 
 import json

@@ -18,6 +18,14 @@ repos:
             .*/requirements\.txt
           )
         args: [--unique]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.5
+    hooks:
+      # lint & attempt to correct failures (e.g. pyupgrade)
+      - id: ruff
+        args: [--fix]
+      # compatible replacement for black
+      - id: ruff-format
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
     rev: v2.14.0
     hooks:
