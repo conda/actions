@@ -45,13 +45,16 @@ def parse_args() -> Namespace:
     )
     return parser.parse_args()
 
+
 class DurationStats(NamedTuple):
     number_of_tests: int
     total_run_time: float
     average_run_time: float
 
 
-def read_durations(path: Path, stats: dict[str, DurationStats]) -> tuple[str, dict[str, float]]:
+def read_durations(
+    path: Path, stats: dict[str, DurationStats]
+) -> tuple[str, dict[str, float]]:
     OS = path.stem
     data = json.loads(path.read_text())
 
