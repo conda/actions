@@ -1,4 +1,4 @@
-"""Read local or remote JSON file."""
+"""Read local file or remote URL."""
 
 from __future__ import annotations
 
@@ -17,12 +17,16 @@ if TYPE_CHECKING:
 def parse_args() -> Namespace:
     # parse CLI for inputs
     parser = ArgumentParser()
-    parser.add_argument("file", type=str, help="Local path or remote URL to JSON file.")
+    parser.add_argument(
+        "file",
+        type=str,
+        help="Local path or remote URL to the file to read.",
+    )
     parser.add_argument(
         "parser",
         choices=["json", "yaml"],
         nargs="?",
-        help="Parser to use for the read file.",
+        help="Parser to use for the file.",
     )
     return parser.parse_args()
 

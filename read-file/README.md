@@ -1,6 +1,6 @@
 # Read JSON
 
-A composite GitHub Action to read a json file from a local or remote file.
+A composite GitHub Action to read a local file or remote URL.
 
 ## GitHub Action Usage
 
@@ -8,20 +8,34 @@ In your GitHub repository include this action in your workflows:
 
 ```yaml
 - id: read_json
-  uses: conda/actions/read-json
+  uses: conda/actions/read-file
   with:
     # [required]
-    # the relative path (or URL) to the YAML file to read
+    # the local path or remote URL to the file to read
     path: path/to/json.json
-    path: https://raw.githubusercontent.com/owner/repo/ref/path/to/json.json
+    # path: https://raw.githubusercontent.com/owner/repo/ref/path/to/json.json
 
     # [optional]
-    # the keys to the value to extract
-    key: foo.bar.2.baz
+    # the parser to use for the file
+    parser: json
 
-# if key provided get the value itself
-- run: echo ${{ steps.read_json.outputs.value }}
+- id: read_yaml
+  uses: conda/actions/read-file
+  with:
+    path: path/to/yaml.yaml
+    # path: https://raw.githubusercontent.com/owner/repo/ref/path/to/yaml.yaml
 
-# if no key provided get the entire YAML
-- run: echo ${{ fromJSON(steps.read_json.outputs.value)['key'] }}
+    parser: yaml
+
+  - id: read_text
+  uses: conda/actions/read-file
+  with:
+    path: path/to/text.text
+    # path: https://raw.githubusercontent.com/owner/repo/ref/path/to/text.text
+
+    parser: null
+
+- run: echo "${{ fromJSON(steps.read_file.outputs.content)['key'] }}"
+- run: echo "${{ fromJSON(steps.read_file.outputs.content)['key'] }}"
+- run: echo "${{ steps.read_file.outputs.content }}"
 ```

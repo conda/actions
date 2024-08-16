@@ -1,5 +1,5 @@
 name: Read JSON
-description: Reads a local or remote JSON file.
+description: Read a local file or remote URL.
 author: Anaconda Inc.
 branding:
   icon: book-open
@@ -7,10 +7,10 @@ branding:
 
 inputs:
   path:
-    description: Local path (or remote URL) to JSON file.
+    description: Local path or remote URL to the file to read.
     required: true
   parser:
-    description: Choose between json and yaml.
+    description: Parser to use for the file. Choose json, yaml, or null (to leave it as plain text).
 outputs:
   content:
     description: File contents as a JSON object (if a parser is specified) or the raw text.
