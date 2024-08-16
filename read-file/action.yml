@@ -1,0 +1,46 @@
+name: Read JSON
+description: Reads a local or remote JSON file.
+author: Anaconda Inc.
+branding:
+  icon: book-open
+  color: green
+
+inputs:
+  path:
+    description: Local path (or remote URL) to JSON file.
+    required: true
+outputs:
+  value:
+    description: Entire JSON file (if key is undefined) or the value for the provided key.
+    value: ${{ steps.read_json.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      with:
+        path: ~/.cache/pip
+        # invalidate the cache anytime a workflow changes
+        key: ${{ hashFiles('.github/workflows/*') }}
+
+    - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+      with:
+        python-version: '3.11'
+
+    - name: Install Dependencies
+      shell: bash
+      run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
+
+    - name: Pip List
+      shell: bash
+      run: |
+        echo ::group::Pip List
+        pip list
+        echo ::endgroup::
+
+    - name: Read JSON
+      id: template
+      shell: bash
+      run: python ${{ github.action_path }}/action.py ${{ inputs.path }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
