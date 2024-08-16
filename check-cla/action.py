@@ -23,9 +23,12 @@ def main() -> None:
     args = parse_args()
 
     path = args.cla_path
-    signees = json.loads(path.read_text())
-    signees["contributors"].append(args.contributor)
-    signees["contributors"].sort(key=str.lower)
+    try:
+        signees = json.loads(path.read_text())
+    except FileNotFoundError:
+        signees = []
+    signees.append(args.contributor)
+    signees.sort(key=str.lower)
     path.write_text(json.dumps(signees, indent=2) + "\n")
 
 

@@ -57,9 +57,10 @@ runs:
       with:
         path: https://raw.githubusercontent.com/${{ inputs.cla_repo }}/main/${{ inputs.cla_path }}
         parser: json
+        default: '[]'
 
     - name: Determine whether the contributor has signed the CLA
-      run: echo HAS_SIGNED=${{ contains(fromJSON(steps.read_cla.outputs.content)['contributors'], env.CONTRIBUTOR) }} >> $GITHUB_ENV
+      run: echo HAS_SIGNED=${{ contains(fromJSON(steps.read_cla.outputs.content), env.CONTRIBUTOR) }} >> $GITHUB_ENV
       shell: bash
 
     # if contributor has already signed, add [cla-signed] label
