@@ -17,15 +17,18 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Hash + Timestamp
+      run: echo "HASH=Py3.12-$(date -u "+%Y%m")" >> $GITHUB_ENV
+      shell: bash
+
     - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
         path: ~/.cache/pip
-        # invalidate the cache anytime a workflow changes
-        key: ${{ hashFiles('.github/workflows/*') }}
+        key: read-file-${{ env.HASH }}
 
     - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
-        python-version: '3.11'
+        python-version: '3.12'
 
     - name: Install Dependencies
       shell: bash
