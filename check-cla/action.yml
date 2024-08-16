@@ -12,21 +12,15 @@ inputs:
     required: true
   cla_repo:
     description: Upstream repository in which to create PR
-    default: conda/infrastructure
+    default: conda/cla
   cla_path:
     description: Path to the CLA signees file within the provided `cla_repo`
-    default: .clabot
-  cla_fork:
-    description: Fork of `cla_repo` in which to create branch
-    default: conda-bot/infrastructure
+    default: .cla-signers
   cla_token:
     description: >-
       Token for opening signee PR in `cla_fork`
       (`pull_request: write` for fine-grained PAT; `repo` and `workflow` for classic PAT)
     required: true
-  cla_author:
-    description: Git-format author/committer to use for pull request commits
-    default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
 
 runs:
   using: composite
@@ -49,59 +43,29 @@ runs:
         description: Checking conda CLA...
         state: pending
 
-    # has_label, number, contributor, url, has_signed
-    - name: Collect PR metadata
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
-      id: metadata
+    - name: Determine whether this PR has the label
+      run: echo HAS_LABEL=$(${{ contains(github.event.pull_request.labels || github.event.issue.labels, inputs.label) }}) >> $GITHUB_ENV
+      shell: bash
+
+    - name: Determine the contributor
+      run: echo CONTRIBUTOR=${{ github.event.pull_request.user.login || github.event.issue.user.login }} >> $GITHUB_ENV
+      shell: bash
+
+    - name: Read CLA signees
+      uses: conda/actions/read-file@read-file
+      id: read_cla
       with:
-        github-token: ${{ inputs.token }}
-        script: |
-          const { owner, repo, number } = context.issue;
-          core.debug(`owner: ${owner}`);
-          core.debug(`repo: ${repo}`);
-          core.setOutput('number', number);
-          core.debug(`number: ${number}`);
+        path: https://raw.githubusercontent.com/${{ inputs.cla_repo }}/main/${{ inputs.cla_path }}
+        parser: json
 
-          const raw = await github.rest.pulls.get({
-            owner: owner,
-            repo: repo,
-            pull_number: number
-          });
-          const labels = raw.data.labels.map(label => label.name);
-          core.debug(`labels: ${labels}`);
-
-          const has_label = labels.includes('${{ inputs.label }}');
-          core.setOutput('has_label', has_label);
-          core.debug(`has_label: ${has_label}`);
-
-          const cla_repo = '${{ inputs.cla_repo }}'.split('/', 2);
-          const { content, encoding } = (await github.rest.repos.getContent({
-            owner: cla_repo[0],
-            repo: cla_repo[1],
-            path: '${{ inputs.cla_path }}'
-          })).data;
-          const contributors = JSON.parse(
-            Buffer.from(content, encoding).toString('utf-8')
-          ).contributors;
-          core.debug(`contributors: ${contributors}`);
-
-          const payload = context.payload.issue || context.payload.pull_request || context.payload;
-          const contributor = payload.user.login;
-          core.setOutput('contributor', contributor);
-          core.debug(`contributor: ${contributor}`);
-
-          const url = payload.html_url;
-          core.setOutput('url', url);
-          core.debug(`url: ${url}`);
-
-          const has_signed = contributors.includes(contributor);
-          core.setOutput('has_signed', has_signed);
-          core.debug(`has_signed: ${has_signed}`);
+    - name: Determine whether the contributor has signed the CLA
+      run: echo HAS_SIGNED=${{ contains(fromJSON(steps.read_cla.outputs.content)['contributors'], env.CONTRIBUTOR) }} >> $GITHUB_ENV
+      shell: bash
 
     # if contributor has already signed, add [cla-signed] label
     - name: Add label to PR
       uses: actions-ecosystem/action-add-labels@18f1af5e3544586314bbe15c0273249c770b2daf
-      if: steps.metadata.outputs.has_signed == 'true' && steps.metadata.outputs.has_label == 'false'
+      if: env.HAS_SIGNED == 'true' && env.HAS_LABEL == 'false'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -109,7 +73,7 @@ runs:
     # if contributor has not signed yet, remove [cla-signed] label
     - name: Remove label to PR
       uses: actions-ecosystem/action-remove-labels@2ce5d41b4b6aa8503e285553f75ed56e0a40bae0
-      if: steps.metadata.outputs.has_signed == 'false' && steps.metadata.outputs.has_label == 'true'
+      if: env.HAS_SIGNED == 'false' && env.HAS_LABEL == 'true'
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -117,57 +81,65 @@ runs:
     # if unsigned, checkout cla_repo
     - name: Clone CLA signee repo
       uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
-      if: steps.metadata.outputs.has_signed == 'false'
+      if: env.HAS_SIGNED == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
 
-    # if unsigned, update cla_path
-    - name: Add contributor as a CLA signee
-      shell: python
-      if: steps.metadata.outputs.has_signed == 'false'
-      run: |
-        import json
-        from pathlib import Path
+    - name: Create fork
+      if: env.HAS_SIGNED == 'false'
+      # no-op if the repository is already forked
+      run: echo FORK=$(gh repo fork --clone=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
+      env:
+        GH_TOKEN: ${{ inputs.cla_token }}
+      shell: bash
 
-        path = Path("${{ inputs.cla_path }}")
-        signees = json.loads(path.read_text())
-        signees["contributors"].append("${{ steps.metadata.outputs.contributor }}")
-        signees["contributors"].sort(key=str.lower)
-        path.write_text(json.dumps(signees, indent=2) + "\n")
+    - name: Setup Python 3.12
+      if: env.HAS_SIGNED == 'false'
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+      with:
+        python-version: '3.12'
+
+    - name: Add contributor as a CLA signee
+      if: env.HAS_SIGNED == 'false'
+      shell: bash
+      run: python ${{ github.action_path }}/action.py ${{ inputs.cla_path }} ${{ env.CONTRIBUTOR }}
 
     # if unsigned, create PR
     - name: Create PR with new CLA signee
       uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
       id: pull
-      if: steps.metadata.outputs.has_signed == 'false'
+      if: env.HAS_SIGNED == 'false'
       with:
-        push-to-fork: ${{ inputs.cla_fork }}
+        push-to-fork: ${{ env.FORK }}
         token: ${{ inputs.cla_token }}
-        branch: cla-${{ steps.metadata.outputs.contributor }}
+        branch: cla-${{ env.CONTRIBUTOR }}
         delete-branch: true
-        commit-message: Adding CLA signee ${{ steps.metadata.outputs.contributor }}
-        author: ${{ inputs.cla_author }}
-        committer: ${{ inputs.cla_author }}
-        title: Adding CLA signee ${{ steps.metadata.outputs.contributor }}
-        body: |
-          Adding CLA signee @${{ steps.metadata.outputs.contributor }}
-
-          Xref ${{ steps.metadata.outputs.url }}
+        commit-message: 🤖 Add ${{ env.CONTRIBUTOR }} as CLA signee
+        author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+        committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+        title: 🤖 Add ${{ env.CONTRIBUTOR }} as CLA signee
+        body: Xref ${{ github.event.html_url }}
 
     # if unsigned, create sticky comment
     - name: Create comment regarding missing CLA signature
       uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
-      if: steps.metadata.outputs.has_signed == 'false'
+      if: env.HAS_SIGNED == 'false'
       with:
-        number: ${{ steps.metadata.outputs.number }}
+        number: ${{ github.event.number || github.event.issue.number }}
         # GitHub flavored markdown reinvents how paragraphs work, adjoined lines of text are not
         # concatenated so instead we rely on YAML multi-line + extra newlines
         message: >-
           [cla]: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
 
+          > [!NOTE]
+          > You may have previously signed the conda CLA. That signature is still valid
+          > for any prior contributions however conda is now a NumFOCUS project and hence
+          > requires new CLAs to be signed for any new contributions.
+
+
           We require contributors to sign our [Contributor License Agreement][cla] and we don't
-          have one on file for @${{ steps.metadata.outputs.contributor }}.
+          have one on file for @${{ env.CONTRIBUTOR }}.
 
 
           In order for us to review and merge your code, please e-sign the
@@ -178,7 +150,7 @@ runs:
 
     # commit status → error
     - name: Set commit status to error
-      if: steps.metadata.outputs.has_signed == 'false'
+      if: env.HAS_SIGNED == 'false'
       uses: conda/actions/set-commit-status@15f883f14f4232f83658e3609c3316d58905138f # v24.8.0
       with:
         token: ${{ inputs.token }}
@@ -189,7 +161,7 @@ runs:
 
     # commit status → success
     - name: Set commit status to success
-      if: steps.metadata.outputs.has_signed == 'true'
+      if: env.HAS_SIGNED == 'true'
       uses: conda/actions/set-commit-status@15f883f14f4232f83658e3609c3316d58905138f # v24.8.0
       with:
         token: ${{ inputs.token }}
