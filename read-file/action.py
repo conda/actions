@@ -19,8 +19,9 @@ def parse_args() -> Namespace:
     parser = ArgumentParser()
     parser.add_argument("file", type=str, help="Local path or remote URL to JSON file.")
     parser.add_argument(
-        "--parser",
+        "parser",
         choices=["json", "yaml"],
+        nargs="?",
         help="Parser to use for the read file.",
     )
     return parser.parse_args()

@@ -9,10 +9,12 @@ inputs:
   path:
     description: Local path (or remote URL) to JSON file.
     required: true
+  parser:
+    description: Choose between json and yaml.
 outputs:
-  value:
-    description: Entire JSON file (if key is undefined) or the value for the provided key.
-    value: ${{ steps.read_json.outputs.value }}
+  content:
+    description: File contents as a JSON object (if a parser is specified) or the raw text.
+    value: ${{ steps.read.outputs.content }}
 
 runs:
   using: composite
@@ -42,8 +44,8 @@ runs:
         echo ::endgroup::
 
     - name: Read JSON
-      id: template
+      id: read
       shell: bash
-      run: python ${{ github.action_path }}/action.py ${{ inputs.path }}
+      run: python ${{ github.action_path }}/action.py ${{ inputs.path }} ${{ inputs.parser }}
       env:
         GITHUB_TOKEN: ${{ github.token }}
