@@ -174,7 +174,16 @@ def read_config(args: Namespace) -> dict:
                             "with": {
                                 "type": "object",
                                 "patternProperties": {
-                                    r"\w+": {"type": "string"},
+                                    r"\w+": {
+                                        "type": [
+                                            "string",
+                                            "number",
+                                            "boolean",
+                                            "object",
+                                            "array",
+                                            "null",
+                                        ],
+                                    },
                                 },
                             },
                         },
