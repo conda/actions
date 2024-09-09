@@ -28,6 +28,12 @@ def parse_args() -> Namespace:
         nargs="?",
         help="Parser to use for the file.",
     )
+    parser.add_argument(
+        "default",
+        type=str,
+        nargs="?",
+        help="Default value to use if the file is not found.",
+    )
     return parser.parse_args()
 
 
@@ -38,7 +44,12 @@ def main():
         response = requests.get(args.file)
         response.raise_for_status()
     except requests.exceptions.HTTPError:
-        content = Path(args.file).read_text()
+        try:
+            content = Path(args.file).read_text()
+        except FileNotFoundError:
+            if args.default is None:
+                raise
+            content = args.default
     else:
         content = response.text
 

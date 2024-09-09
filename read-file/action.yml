@@ -11,6 +11,8 @@ inputs:
     required: true
   parser:
     description: Parser to use for the file. Choose json, yaml, or null (to leave it as plain text).
+  default:
+    description: Default value to return if the file is not found.
 outputs:
   content:
     description: File contents as a JSON object (if a parser is specified) or the raw text.
@@ -46,6 +48,6 @@ runs:
     - name: Read JSON
       id: read
       shell: bash
-      run: python ${{ github.action_path }}/action.py ${{ inputs.path }} ${{ inputs.parser }}
+      run: python ${{ github.action_path }}/action.py ${{ inputs.path }} ${{ inputs.parser }} ${{ inputs.default }}
       env:
         GITHUB_TOKEN: ${{ github.token }}
