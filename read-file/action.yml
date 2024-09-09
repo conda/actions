@@ -48,6 +48,10 @@ runs:
     - name: Read JSON
       id: read
       shell: bash
-      run: python ${{ github.action_path }}/action.py ${{ inputs.path }} ${{ inputs.parser }} ${{ inputs.default }}
+      run: >
+        python ${{ github.action_path }}/action.py
+        ${{ inputs.path }}
+        ${{ inputs.parser && format('"--parser={0}"', inputs.parser) || '' }}
+        ${{ inputs.default && format('"--default={0}"', inputs.default) || '' }}
       env:
         GITHUB_TOKEN: ${{ github.token }}

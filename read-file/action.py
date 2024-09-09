@@ -23,15 +23,13 @@ def parse_args() -> Namespace:
         help="Local path or remote URL to the file to read.",
     )
     parser.add_argument(
-        "parser",
+        "--parser",
         choices=["json", "yaml"],
-        nargs="?",
         help="Parser to use for the file.",
     )
     parser.add_argument(
-        "default",
+        "--default",
         type=str,
-        nargs="?",
         help="Default value to use if the file is not found.",
     )
     return parser.parse_args()
