@@ -154,6 +154,20 @@ runs:
           [Contributor License Agreement PDF][cla]. We then need to manually verify your
           signature, merge the PR (${{ steps.pull.outputs.pull-request-url }}), and ping the bot
           to refresh the PR.
+
+
+          <details>
+
+          <summary>Commands</summary>
+
+
+          Trigger actions by commenting on this PR:
+
+
+          - `@conda-bot check` will check whether a CLA has been signed for this PR author
+
+
+          </details>
         GITHUB_TOKEN: ${{ inputs.token }}
 
     # commit status → error
