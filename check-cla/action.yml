@@ -48,7 +48,9 @@ runs:
       shell: bash
 
     - name: Determine the contributor
-      run: echo CONTRIBUTOR=${{ github.event.pull_request.user.login || github.event.issue.user.login }} >> $GITHUB_ENV
+      run: |
+        echo CONTRIBUTOR_ID=${{ github.event.pull_request.user.id || github.event.issue.user.id }} >> $GITHUB_ENV
+        echo CONTRIBUTOR_LOGIN=${{ github.event.pull_request.user.login || github.event.issue.user.login }} >> $GITHUB_ENV
       shell: bash
 
     - name: Read CLA signees
@@ -57,10 +59,10 @@ runs:
       with:
         path: https://raw.githubusercontent.com/${{ inputs.cla_repo }}/main/${{ inputs.cla_path }}
         parser: json
-        default: '[]'
+        default: '{}'
 
     - name: Determine whether the contributor has signed the CLA
-      run: echo HAS_SIGNED=${{ contains(fromJSON(steps.read_cla.outputs.content), env.CONTRIBUTOR) }} >> $GITHUB_ENV
+      run: echo HAS_SIGNED=${{ contains(fromJSON(steps.read_cla.outputs.content), env.CONTRIBUTOR_ID) }} >> $GITHUB_ENV
       shell: bash
 
     # if contributor has already signed, add [cla-signed] label
@@ -86,7 +88,7 @@ runs:
       with:
         repository: ${{ inputs.cla_repo }}
 
-    - name: Create fork
+    - name: Create CLA fork
       if: env.HAS_SIGNED == 'false'
       # no-op if the repository is already forked
       run: echo FORK=$(gh repo fork --clone=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
@@ -103,7 +105,11 @@ runs:
     - name: Add contributor as a CLA signee
       if: env.HAS_SIGNED == 'false'
       shell: bash
-      run: python ${{ github.action_path }}/action.py ${{ inputs.cla_path }} ${{ env.CONTRIBUTOR }}
+      run: >
+        python ${{ github.action_path }}/action.py
+        ${{ inputs.cla_path }}
+        --id=${{ env.CONTRIBUTOR_ID }}
+        --login=${{ env.CONTRIBUTOR_LOGIN }}
 
     # if unsigned, create PR
     - name: Create PR with new CLA signee
@@ -113,12 +119,12 @@ runs:
       with:
         push-to-fork: ${{ env.FORK }}
         token: ${{ inputs.cla_token }}
-        branch: cla-${{ env.CONTRIBUTOR }}
+        branch: cla-${{ env.CONTRIBUTOR_ID }}
         delete-branch: true
-        commit-message: 🤖 Add ${{ env.CONTRIBUTOR }} as CLA signee
+        commit-message: 🤖 Add ${{ env.CONTRIBUTOR_LOGIN }} (${{ env.CONTRIBUTOR_ID }}) as CLA signee
         author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
-        title: 🤖 Add ${{ env.CONTRIBUTOR }} as CLA signee
+        title: 🤖 Add ${{ env.CONTRIBUTOR_LOGIN }} (${{ env.CONTRIBUTOR_ID }}) as CLA signee
         body: Xref ${{ github.event.html_url }}
 
     # if unsigned, create sticky comment
@@ -140,7 +146,7 @@ runs:
 
 
           We require contributors to sign our [Contributor License Agreement][cla] and we don't
-          have one on file for @${{ env.CONTRIBUTOR }}.
+          have one on file for @${{ env.CONTRIBUTOR_LOGIN }} (${{ env.CONTRIBUTOR_ID }}).
 
 
           In order for us to review and merge your code, please e-sign the

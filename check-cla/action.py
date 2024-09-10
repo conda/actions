@@ -15,7 +15,18 @@ def parse_args() -> Namespace:
     # parse CLI for inputs
     parser = ArgumentParser()
     parser.add_argument("cla_path", type=Path, help="Local path to the CLA file.")
-    parser.add_argument("contributor", type=str, help="Contributor to add to the CLA.")
+    parser.add_argument(
+        "--id",
+        type=int,
+        required=True,
+        help="Contributor to add to the CLA.",
+    )
+    parser.add_argument(
+        "--login",
+        type=str,
+        required=True,
+        help="Contributor's GitHub login.",
+    )
     return parser.parse_args()
 
 
@@ -26,10 +37,10 @@ def main() -> None:
     try:
         signees = json.loads(path.read_text())
     except FileNotFoundError:
-        signees = []
-    signees.append(args.contributor)
-    signees.sort(key=str.lower)
-    path.write_text(json.dumps(signees, indent=2) + "\n")
+        signees = {}
+
+    signees[args.id] = args.login
+    path.write_text(json.dumps(signees, indent=2, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":
