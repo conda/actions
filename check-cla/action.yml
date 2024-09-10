@@ -125,7 +125,7 @@ runs:
         author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         title: 🤖 Add ${{ env.CONTRIBUTOR_LOGIN }} (${{ env.CONTRIBUTOR_ID }}) as CLA signee
-        body: Xref ${{ github.event.html_url }}
+        body: Xref ${{ github.event.pull_request.user.html_url || github.event.issue.user.html_url }}
 
     # if unsigned, create sticky comment
     - name: Create comment regarding missing CLA signature
@@ -140,9 +140,10 @@ runs:
 
 
           > [!NOTE]
+
           > You may have previously signed the conda CLA. That signature is still valid
-          > for any prior contributions however conda is now a NumFOCUS project and hence
-          > requires new CLAs to be signed for any new contributions.
+          for any prior contributions however conda is now a NumFOCUS project and hence
+          requires new CLAs to be signed for any new contributions.
 
 
           We require contributors to sign our [Contributor License Agreement][cla] and we don't
