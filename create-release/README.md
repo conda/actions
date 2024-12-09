@@ -7,6 +7,10 @@ This action creates a release on GitHub. There are three parts to a release:
 
 ## GitHub Action Usage
 
+Requirements:
+- `contents: write` permission to the repository
+- (optional) Python >=3.7
+
 ```yaml
 name: Create Release
 
@@ -46,6 +50,11 @@ jobs:
           # [optional]
           # path to the release notes
           # release-notes: RELEASE_NOTES.md
+
+          # [optional]
+          # token for creating the release
+          # (`contents: write` for fine-grained PAT; `repo` for classic PAT)
+          # token: ${{ github.token }}
 ```
 
 ### Sample Workflow Releasing to Dynamic Branch
@@ -67,16 +76,13 @@ jobs:
   create:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python
-        with:
-          python-version: '>=3.4'
-
-      # derive the branch from the version
-      - shell: python
+      - name: Get Branch
+        shell: python
         run: |
           from os import environ
           from pathlib import Path
 
+          # derive the branch from the version by dropping the `PATCH` and using `.x`
           branch = "${{ inputs.version }}".rsplit(".", 1)[0]
           Path(environ["GITHUB_ENV"]).write_text(f"BRANCH={branch}.x")
 
