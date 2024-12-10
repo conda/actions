@@ -1,6 +1,6 @@
 # Create Release
 
-This action creates a release on GitHub. There are three parts to a release:
+This action creates a release on GitHub:
 1. Archiving the current repository state as a tarball (`.tar.gz`). While GitHub also does this for releases those archives are unfortunately not stable and cannot be relied on.
 2. Computing the checksum for the archived tarball.
 3. Extracting the release notes from the changelog.
@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: The release version
+        description: Release version
         required: true
 
 permissions:
@@ -52,12 +52,12 @@ jobs:
           # release-notes: RELEASE_NOTES.md
 
           # [optional]
-          # token for creating the release
+          # GitHub token to author release
           # (`contents: write` for fine-grained PAT; `repo` for classic PAT)
           # token: ${{ github.token }}
 ```
 
-### Sample Workflow Releasing to Dynamic Branch
+### Sample Workflow Creating Release using Dynamic Branch
 
 ```yaml
 name: Create Release
@@ -66,7 +66,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: The release version
+        description: Release version
         required: true
 
 permissions:

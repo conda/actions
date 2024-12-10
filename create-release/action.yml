@@ -1,25 +1,25 @@
 name: Create Release
-description: Create a release on GitHub
+description: Creates a release by archiving the source and creating a release on GitHub.
 inputs:
   version:
-    description: The release version
+    description: Release version.
     required: true
   branch:
-    description: Target branch for the release
+    description: Target branch for the release.
     required: true
   archive-name:
-    description: Name of the tarball archive
+    description: Name of the tarball archive.
     default: ${{ github.event.repository.name }}-${{ github.ref_name }}
   output-directory:
-    description: Directory for the release artifacts
+    description: Directory for the release artifacts.
     default: release
   release-notes:
-    description: Path to the release notes
+    description: Path to the release notes.
     default: RELEASE_NOTES.md
   token:
     description: >-
-      Token for creating the release
-      (`contents: write` for fine-grained PAT; `repo` for classic PAT)
+      GitHub token to author release
+      (`contents: write` for fine-grained PAT; `repo` for classic PAT).
     default: ${{ github.token }}
 runs:
   using: composite
