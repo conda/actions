@@ -18,7 +18,19 @@ runs:
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         fetch-depth: 0
-        ref: ${{ inputs.branch }}
+
+    - name: Create Branch
+      shell: bash
+      run: |
+        if git fetch origin "${{ inputs.branch }}"; then
+          # if branch already exists, checkout and pull
+          git checkout "${{ inputs.branch }}"
+          git pull origin "${{ inputs.branch }}"
+        else
+          # if branch doesn't exist, create and push
+          git checkout -b "${{ inputs.branch }}"
+          git push -u origin "${{ inputs.branch }}"
+        fi
 
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -56,6 +68,7 @@ runs:
         push-to-fork: ${{ env.FORK }}
         token: ${{ inputs.pr_token }}
         branch: changelog-${{ inputs.version }}
+        base: ${{ inputs.branch }}
         delete-branch: true
         commit-message: Changelog ${{ inputs.version }}
         author: ${{ inputs.changelog_author }}
