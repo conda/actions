@@ -6,6 +6,9 @@ inputs:
     required: true
   branch:
     description: Target branch for the release. Unless specified, uses the default branch.
+  changelog_author:
+    description: Git-format author/committer to use for pull request commits
+    default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
   token:
     description: >-
       GitHub token to fork repository and create changelog PR
@@ -60,13 +63,13 @@ runs:
       shell: bash
       run: echo FORK=$(gh repo fork --clone=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
       env:
-        GH_TOKEN: ${{ inputs.fork_token }}
+        GH_TOKEN: ${{ inputs.token }}
 
     - name: Create PR
       uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
       with:
         push-to-fork: ${{ env.FORK }}
-        token: ${{ inputs.pr_token }}
+        token: ${{ inputs.token }}
         branch: changelog-${{ inputs.version }}
         base: ${{ inputs.branch }}
         delete-branch: true
