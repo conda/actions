@@ -58,7 +58,7 @@ runs:
     - name: Get Release Notes
       shell: bash
       run: >
-        python .github/scripts/get_release_notes.py
+        python ${{ github.action_path }}/get_release_notes.py
         --input="${{ inputs.changelog }}"
         --version="${{ inputs.version }}"
         --output="${{ inputs.output-directory }}/${{ inputs.release-notes }}"
