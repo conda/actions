@@ -2,21 +2,22 @@ name: Prepare Release
 description: Prepares a release by running towncrier and creating a PR with the changes.
 inputs:
   version:
-    description: Release version.
+    description: The version to release.
     required: true
   branch:
-    description: Target branch for the release. Unless specified, uses the default branch.
-  changelog_author:
-    description: Git-format author/committer to use for pull request commits
+    description: The target branch to use for the release.
+    default: ${{ github.evebt.repository.default_branch }}
+  changelog-author:
+    description: Git-format author to use for the changelog commits.
     default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
   fork-token:
-    description: 'GitHub token to fork repository (`???: write`).'
+    description: 'GitHub token to create and push to the fork. Fine-grained PAT: `administration: write`'
     default: ${{ github.token }}
   branch-token:
-    description: 'GitHub token to checkout and create the release branch (`contents: write`).'
+    description: 'GitHub token to create and push to the branch. Fine-grained PAT: `contents: write`'
     default: ${{ github.token }}
   pr-token:
-    description: 'GitHub token to create the changelog PR (`pull-request: write`).'
+    description: 'GitHub token to create the pull request. Fine-grained PAT: `pull-request: write`'
     default: ${{ github.token }}
 runs:
   using: composite
@@ -80,8 +81,8 @@ runs:
         base: ${{ inputs.branch }}
         delete-branch: true
         commit-message: Changelog ${{ inputs.version }}
-        author: ${{ inputs.changelog_author }}
-        committer: ${{ inputs.changelog_author }}
+        author: ${{ inputs.changelog-author }}
+        committer: ${{ inputs.changelog-author }}
         title: Changelog ${{ inputs.version }}
         body: |
           [release.yml]: ${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/release.yml

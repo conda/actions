@@ -3,7 +3,20 @@
 This action prepares a release on GitHub:
 1. Running `towncrier` to update the changelog.
 
-## GitHub Action Usage
+## Action Inputs
+
+| Name | Description | Default |
+| ---- | ----------- | ------- |
+| `version` | Version to release. | **Required** |
+| `branch` | Target branch to use for the release. | `${{ github.even.repository.default_branch` |
+| `changelog-author` | Git-format author to use for the changelog commits. | @conda-bot |
+| `fork-token` | GitHub token to create and push to the fork. If not provided, no fork will be used.<br>Fine-grained PAT: `administration: write` | `${{ github.token }}` |
+| `branch-token` | GitHub token to create and push to the branch.<br>Fine-grained PAT: `contents: write` | `${{ github.token }}` |
+| `pr-token` | GitHub token to create the pull request.<br>Fine-grained PAT: `pull-request: write` | `${{ github.token }}` |
+
+## Sample Workflows
+
+### Basic Workflow
 
 ```yaml
 name: Prepare Release
@@ -12,7 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version
+        description: The version to release.
         required: true
 
 permissions:
@@ -26,17 +39,10 @@ jobs:
       - name: Prepare Release
         uses: conda/actions/prepare-release
         with:
-          # [required]
-          # the version to be released
           version: ${{ inputs.version }}
-
-          # [optional]
-          # GitHub token to fork repository and create changelog PR
-          # (`contents: write` & `pull-request: write` for fine-grained PAT; `repo` for classic PAT)
-          # token: ${{ github.token }}
 ```
 
-### Sample Workflow Preparing Release using Dynamic Branch
+### Dynamic Branch Workflow
 
 ```yaml
 name: Prepare Release
@@ -45,7 +51,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version
+        description: The version to release.
         required: true
 
 permissions:
