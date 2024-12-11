@@ -9,10 +9,14 @@ inputs:
   changelog_author:
     description: Git-format author/committer to use for pull request commits
     default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
-  token:
-    description: >-
-      GitHub token to fork repository and create changelog PR
-      (`contents: write` and `pull-request: write` for fine-grained PAT; `repo` for classic PAT).
+  fork-token:
+    description: 'GitHub token to fork repository (`???: write`).'
+    default: ${{ github.token }}
+  branch-token:
+    description: 'GitHub token to checkout and create the release branch (`contents: write`).'
+    default: ${{ github.token }}
+  pr-token:
+    description: 'GitHub token to create the changelog PR (`pull-request: write`).'
     default: ${{ github.token }}
 runs:
   using: composite
@@ -21,7 +25,7 @@ runs:
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         fetch-depth: 0
-        token: ${{ inputs.token }}
+        token: ${{ inputs.branch-token }}
 
     - name: Create Branch
       shell: bash
@@ -64,13 +68,14 @@ runs:
       shell: bash
       run: echo FORK=$(gh repo fork --clone=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
       env:
-        GH_TOKEN: ${{ inputs.token }}
+        GH_TOKEN: ${{ inputs.fork-token }}
 
     - name: Create PR
       uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
       with:
         push-to-fork: ${{ env.FORK }}
-        token: ${{ inputs.token }}
+        token: ${{ inputs.pr-token }}
+        branch-token: ${{ inputs.fork-token}}
         branch: changelog-${{ inputs.version }}
         base: ${{ inputs.branch }}
         delete-branch: true
