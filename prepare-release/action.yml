@@ -11,10 +11,7 @@ inputs:
     description: Git-format author to use for the changelog commits.
     default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
   fork-token:
-    description: 'GitHub token to create and push to the fork. Fine-grained PAT: `administration: write`'
-    default: ${{ github.token }}
-  branch-token:
-    description: 'GitHub token to create and push to the branch. Fine-grained PAT: `contents: write`'
+    description: 'GitHub token to create and push to the fork. Fine-grained PAT: `administration: write; contents: write`'
     default: ${{ github.token }}
   pr-token:
     description: 'GitHub token to create the pull request. Fine-grained PAT: `pull-request: write`'
@@ -26,7 +23,6 @@ runs:
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         fetch-depth: 0
-        token: ${{ inputs.branch-token }}
 
     - name: Create Branch
       shell: bash
