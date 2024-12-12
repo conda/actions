@@ -6,7 +6,7 @@ inputs:
     required: true
   branch:
     description: The target branch to use for the release.
-    default: ${{ github.evebt.repository.default_branch }}
+    default: ${{ github.event.repository.default_branch }}
   changelog-author:
     description: Git-format author to use for the changelog commits.
     default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
@@ -23,20 +23,24 @@ runs:
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         fetch-depth: 0
-        token: ${{ inputs.branch-token }}
 
     - name: Create Branch
       shell: bash
       run: |
-        if git fetch origin "${{ inputs.branch }}"; then
-          # if branch already exists, checkout and pull
-          git checkout "${{ inputs.branch }}"
-          git pull origin "${{ inputs.branch }}"
-        else
-          # if branch doesn't exist, create and push
-          git checkout -b "${{ inputs.branch }}"
-          git push -u origin "${{ inputs.branch }}"
+        if ! git fetch origin "${{ inputs.branch }}"; then
+          # if branch doesn't exist, create it from the default branch
+          gh api \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/git/refs" \
+            -f ref="refs/heads/${{ inputs.branch }}" \
+            -f sha="$(git rev-parse ${{ github.event.repository.default_branch }})"
         fi
+        git fetch origin
+        git checkout "${{ inputs.branch }}"
+        git pull origin "${{ inputs.branch }}"
+      env:
+        GH_TOKEN: ${{ inputs.branch-token }}
 
     - name: Setup Python
       uses: actions/setup-python@v5
