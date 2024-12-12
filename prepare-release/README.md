@@ -10,8 +10,8 @@ This action prepares a release on GitHub:
 | `version` | Version to release. | **Required** |
 | `branch` | Target branch to use for the release. | `${{ github.even.repository.default_branch` |
 | `changelog-author` | Git-format author to use for the changelog commits. | @conda-bot |
-| `token` | GitHub token to create the pull request.<br>Fine-grained PAT: `pull-request: write` | `${{ github.token }}` |
-| `branch-token` | GitHub token to create and push to the fork/branch.<br>Fine-grained PAT: `administration: write; contents: write` | `${{ github.token }}` |
+| `token` | GitHub token to create release branch if missing and the pull request.<br>Fine-grained PAT: `pull-request: write; contents: write` | `${{ github.token }}` |
+| `fork-token` | GitHub token to create and push to the fork/branch.<br>Fine-grained PAT: `administration: write; contents: write` | `${{ github.token }}` |
 
 ## Sample Workflows
 
