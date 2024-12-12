@@ -5,11 +5,20 @@ This action creates a release on GitHub:
 2. Computing the checksum for the archived tarball.
 3. Extracting the release notes from the changelog.
 
-## GitHub Action Usage
+## Action Inputs
 
-Requirements:
-- `contents: write` permission to the repository
-- (optional) Python >=3.7
+| Name | Description | Default |
+| ---- | ----------- | ------- |
+| `version` | Version to release. | **Required** |
+| `branch` | Target branch to use for the release. | `${{ github.even.repository.default_branch` |
+| `archive-name` | Name of the git archive to create. | `${{ github.event.repository.name }}-${{ inputs.version }}` |
+| `output-directory` | Directory for the release artifacts. | `release` |
+| `release-notes` | Name of the release notes to create. | `RELEASE_NOTES.md` |
+| `token` | GitHub token to create the release.<br>Fine-grained PAT: `contents: write` | `${{ github.token }}` |
+
+## Sample Workflows
+
+### Basic Workflow
 
 ```yaml
 name: Create Release
@@ -18,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version
+        description: The version to release.
         required: true
 
 permissions:
@@ -31,33 +40,11 @@ jobs:
       - name: Create Release
         uses: conda/actions/create-release
         with:
-          # [required]
-          # the version to be released
           version: ${{ inputs.version }}
-
-          # [required]
-          # the target branch for the release
           branch: main
-
-          # [optional]
-          # name of the tarball archive
-          # archive-name: ${{ github.event.repository.name }}-${{ github.ref_name }}
-
-          # [optional]
-          # directory for the release artifacts
-          # output-directory: release
-
-          # [optional]
-          # path to the release notes
-          # release-notes: RELEASE_NOTES.md
-
-          # [optional]
-          # GitHub token to author release
-          # (`contents: write` for fine-grained PAT; `repo` for classic PAT)
-          # token: ${{ github.token }}
 ```
 
-### Sample Workflow Creating Release using Dynamic Branch
+### Dynamic Branch Workflow
 
 ```yaml
 name: Create Release
@@ -66,7 +53,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version
+        description: The version to release.
         required: true
 
 permissions:
