@@ -46,12 +46,10 @@ runs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.13'
-        cache: pip
-        cache-dependency-path: ${{ github.action_path }}/requirements.txt
 
     - name: Pip Install
       shell: bash
-      run: pip install -r ${{ github.action_path }}/requirements.txt
+      run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
 
     - name: Pip List
       shell: bash
