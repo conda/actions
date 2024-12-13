@@ -57,7 +57,7 @@ runs:
 
     - name: Run Towncrier
       shell: bash
-      run: towncrier build --version ${{ inputs.version }}
+      run: towncrier build --version=${{ inputs.version }}
 
     # - name: Detect Contributors
 
