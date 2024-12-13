@@ -17,7 +17,6 @@ inputs:
     default: ${{ github.token }}
   fork-token:
     description: 'GitHub token to create and push to the fork. Fine-grained PAT: `administration: write; contents: write`'
-    default: ${{ inputs.token }}
 runs:
   using: composite
   steps:
@@ -78,13 +77,13 @@ runs:
           -f default_branch_only=true \
           --jq ".full_name") >> $GITHUB_ENV
       env:
-        GH_TOKEN: ${{ inputs.fork-token }}
+        GH_TOKEN: ${{ inputs.fork-token || inputs.token }}
 
     - name: Create PR
       uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
       with:
         # push to the fork
-        branch-token: ${{ inputs.fork-token }}
+        branch-token: ${{ inputs.fork-token || inputs.token }}
         push-to-fork: ${{ env.FORK }}
         branch: changelog-${{ inputs.version }}
         commit-message: Changelog ${{ inputs.version }}
