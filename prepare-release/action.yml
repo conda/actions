@@ -68,7 +68,15 @@ runs:
     - name: Create Fork
       # no-op if the repository is already forked
       shell: bash
-      run: echo FORK=$(gh repo fork --clone=false --remote=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
+      # don't use `gh repo fork` since it doesn't provide consistent output
+      # see: https://github.com/cli/cli/issues/10079
+      run: |
+        echo FORK=$(gh api \
+          -X POST \
+          -H "Accept: application/vnd.github+json" \
+          "/repos/${{ github.repository }}/forks" \
+          -f default_branch_only=true \
+          --jq ".full_name") >> $GITHUB_ENV
       env:
         GH_TOKEN: ${{ inputs.fork-token }}
 
