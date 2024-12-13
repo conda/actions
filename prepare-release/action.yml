@@ -66,22 +66,24 @@ runs:
     - name: Create Fork
       # no-op if the repository is already forked
       shell: bash
-      run: echo FORK=$(gh repo fork --clone=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
+      run: echo FORK=$(gh repo fork --clone=false --remote=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
       env:
         GH_TOKEN: ${{ inputs.fork-token }}
 
     - name: Create PR
       uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
       with:
+        # push to the fork
+        branch-token: ${{ inputs.fork-token }}
         push-to-fork: ${{ env.FORK }}
-        token: ${{ inputs.token }}
-        branch-token: ${{ inputs.fork-token}}
         branch: changelog-${{ inputs.version }}
-        base: ${{ inputs.branch }}
-        delete-branch: true
         commit-message: Changelog ${{ inputs.version }}
         author: ${{ inputs.changelog-author }}
         committer: ${{ inputs.changelog-author }}
+        # create PR
+        token: ${{ inputs.token }}
+        base: ${{ inputs.branch }}
+        delete-branch: true
         title: Changelog ${{ inputs.version }}
         body: |
           [release.yml]: ${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/release.yml
