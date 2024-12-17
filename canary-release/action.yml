@@ -33,7 +33,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: conda-incubator/setup-miniconda@a4260408e20b96e80095f42ff7f1a15b27dd94ca
+    - uses: conda-incubator/setup-miniconda@d2e6a045a86077fb6cad6f5adf368e9076ddaa8d
 
     - name: Set output variables
       id: vars
@@ -57,8 +57,6 @@ runs:
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
     - name: Build & upload package
-      # make sure we don't run on forks
-      if: github.repository_owner == 'conda' || github.repository_owner == 'conda-incubator'
       id: build
       shell: bash -l {0}
       run: |
