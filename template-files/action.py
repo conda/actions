@@ -467,7 +467,7 @@ def iterate_config(
     return errors
 
 
-def dump_summary():
+def dump_summary(errors: int):
     # dump summary to GitHub Actions summary
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     output = os.getenv("GITHUB_OUTPUT")
@@ -481,7 +481,7 @@ def dump_summary():
                 # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
                 # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
                 f"summary<<GITHUB_OUTPUT_summary\n"
-                f"<details>\n"
+                f"<details {'open' if errors else ''}>\n"
                 f"<summary>Templating Audit</summary>\n"
                 f"\n"
                 f"{html}\n"
@@ -550,7 +550,7 @@ def main():
     if errors:
         perror(f"Got {errors} error(s)")
 
-    dump_summary()
+    dump_summary(errors)
     sys.exit(errors)
 
 
