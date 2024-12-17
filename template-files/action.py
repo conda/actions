@@ -133,7 +133,7 @@ class SpyFileSystemLoader(FileSystemLoader):
     ) -> tuple[str, str, Callable[[], bool]]:
         try:
             # delegate to FileSystemLoader
-            return super().get_source(environment, stub)
+            value = super().get_source(environment, stub)
         except TemplateNotFound:
             # TemplateNotFound: template does not exist, mark it as missing
             self.count(environment, stub, -1)
@@ -141,6 +141,7 @@ class SpyFileSystemLoader(FileSystemLoader):
         else:
             # template found, mark it as used
             self.count(environment, stub, +1)
+            return value
 
 
 class SpyContext(Context):
