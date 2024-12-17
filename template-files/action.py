@@ -17,7 +17,7 @@ from github import Auth, Github, UnknownObjectException
 from jinja2.environment import Environment
 from jinja2.exceptions import TemplateError, TemplateNotFound
 from jinja2.loaders import FileSystemLoader
-from jinja2.runtime import Context
+from jinja2.runtime import Context, Undefined
 from jinja2.utils import missing
 from jsonschema import validate
 from rich import box
@@ -64,19 +64,22 @@ class TemplateState(Enum):
     MISSING = "missing"
     USED = "used"
     CONTEXT = "context"
+    OPTIONAL = "optional"
 
     @classmethod
     def from_count(cls, count: int) -> TemplateState:
         if count < 0:
             return cls.MISSING
-        if count > 0:
-            return cls.USED
-        return cls.UNUSED
+        if count == 0:
+            return cls.UNUSED
+        return cls.USED
 
     @classmethod
     def from_value(cls, value: Any) -> TemplateState:
-        if value is missing:
+        if isinstance(value, Undefined):
             return cls.MISSING
+        if value is missing:
+            return cls.OPTIONAL
         return cls.CONTEXT
 
     @cache
@@ -89,7 +92,9 @@ class TemplateState(Enum):
             case self.USED:
                 return ":white_check_mark:", "green"
             case self.CONTEXT:
-                return ":bookmark_tabs:", "blue"
+                return ":books:", "blue"
+            case self.OPTIONAL:
+                return ":heavy_plus_sign:", "yellow"
             case _:
                 raise ValueError("Invalid TemplateState")
 
@@ -113,10 +118,10 @@ class TemplateState(Enum):
 
 
 class SpyFileSystemLoader(FileSystemLoader):
-    def _count(self, environment: Environment, key: str, increment: int) -> None:
+    def count(self, environment: Environment, key: str, increment: int) -> None:
         # count template usage
-        if not (current := getattr(environment, "_current")) or not (
-            mapping := getattr(environment, "_stubs")
+        if not (current := getattr(environment, "current")) or not (
+            mapping := getattr(environment, "stubs")
         ):
             return
         mapping[current][key] += increment
@@ -131,18 +136,18 @@ class SpyFileSystemLoader(FileSystemLoader):
             return super().get_source(environment, stub)
         except TemplateNotFound:
             # TemplateNotFound: template does not exist, mark it as missing
-            self._count(environment, stub, -1)
+            self.count(environment, stub, -1)
             raise
         else:
             # template found, mark it as used
-            self._count(environment, stub, +1)
+            self.count(environment, stub, +1)
 
 
 class SpyContext(Context):
-    def _register(self, environment: Environment, key: str, value: Any) -> None:
+    def register(self, environment: Environment, key: str, value: Any) -> None:
         # register variable usage, no point to count usage since it will always be 1
-        if not (current := getattr(environment, "_current")) or not (
-            mapping := getattr(environment, "_variables")
+        if not (current := getattr(environment, "current")) or not (
+            mapping := getattr(environment, "variables")
         ):
             return
         mapping[current][key] = value
@@ -150,35 +155,46 @@ class SpyContext(Context):
     def resolve_or_missing(self, key: str) -> Any:
         # delegate to Context
         value = super().resolve_or_missing(key)
-        # count variable usage
-        self._register(self.environment, key, value)
+        # register variable usage
+        self.register(self.environment, key, value)
         return value
 
 
 class SpyEnvironment(Environment):
-    _current: tuple[str, str, str] | None = None
-    _stubs: dict[SpyCurrent, SpyCounter]
-    _variables: dict[SpyCurrent, SpyRegister]
+    current: tuple[str, str, str] | None = None
+    stubs: dict[SpyCurrent, SpyCounter]
+    variables: dict[SpyCurrent, SpyRegister]
 
     context_class: type[Context] = SpyContext
+    undefined: type[Undefined]
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._stubs = defaultdict(lambda: defaultdict(int))
-        self._variables = defaultdict(dict)
+        self.stubs = defaultdict(lambda: defaultdict(int))
+        self.variables = defaultdict(dict)
 
     @contextmanager
     def spy(
         self, file: str, src: str, dst: str
     ) -> Iterator[tuple[SpyCounter, SpyRegister]]:
-        try:
-            # set current file
-            self._current = (file, src, dst)
+        class SpyUndefined(Undefined):
+            def __str__(slf) -> str:
+                # only store undefined variables, ignore missing attributes/elements
+                if slf._undefined_obj is missing and self.current:
+                    self.variables[self.current][slf._undefined_name] = slf
+                return super().__str__()
 
-            yield self._stubs[self._current], self._variables[self._current]
+        stored_undefined = self.undefined
+        try:
+            # set current file & custom undefined
+            self.current = (file, src, dst)
+            self.undefined = SpyUndefined
+
+            yield self.stubs[self.current], self.variables[self.current]
         finally:
-            # clear current file
-            self._current = None
+            # clear current file & reset undefined
+            self.current = None
+            self.undefined = stored_undefined
 
 
 def validate_file(value: str) -> Path | None:
@@ -217,10 +233,10 @@ def parse_args() -> Namespace:
     return parser.parse_args()
 
 
-def read_config(args: Namespace) -> dict:
+def read_config(config: Path) -> dict:
     # read and validate configuration file
     config = yaml.load(
-        args.config.read_text(),
+        config.read_text(),
         Loader=yaml.SafeLoader,
     )
     validate(
@@ -228,7 +244,8 @@ def read_config(args: Namespace) -> dict:
         schema={
             "type": "object",
             "patternProperties": {
-                r"\w+/\w+": {
+                # GitHub repository name or local directory
+                r"\w+/\w+|\..+": {
                     "type": "array",
                     "items": {
                         "type": ["string", "object"],
@@ -348,11 +365,12 @@ def template_file(
             perror(f"* :cross_mark: Failed to template `{src}`: {err}", indent=INDENT)
             return 1
 
-        print(f"* :white_check_mark: `{src}` → `{dst}`", indent=INDENT)
-
         # display stubs & context for this file
+        table = None
+        error = False
+        warning = False
         if stubs or variables:
-            table = Table.grid(padding=1)
+            table = Table.grid(padding=(0, 1))
             # stubs
             for stub, count in stubs.items():
                 state = TemplateState.from_count(count)
@@ -362,16 +380,53 @@ def template_file(
                 if variable in standard_context:
                     continue
                 state = TemplateState.from_value(value)
-                value = "" if value is missing else value
+                if isinstance(value, Undefined):
+                    error = True
+                    value = ""
+                elif value is missing:
+                    warning = True
+                    value = ""
                 table.add_row("*", state, f"`{variable}={value}`")
             for variable in set(context) - set(variables):
                 value = context[variable]
                 table.add_row("*", TemplateState.UNUSED, f"`{variable}={value}`")
+
+        if error:
+            perror(f"* :cross_mark: Context missing `{src}` → `{dst}`", indent=INDENT)
+        elif warning:
+            print(f"* :warning-emoji: `{src}` → `{dst}`", indent=INDENT)
+        else:
+            print(f"* :white_check_mark: `{src}` → `{dst}`", indent=INDENT)
+        if table:
             print(table, indent=INDENT * 2)
-    return 0  # no errors
+
+        return int(error)
+
+
+class LocalContents:
+    # mirror GitHub contents object
+    def __init__(self, path: Path):
+        self.decoded_content = path.read_text().encode()
+
+
+class LocalRepository:
+    # mirror GitHub repository object
+    def __init__(self, *paths: str | os.PathLike[str] | Path) -> None:
+        self.path = Path(*paths).resolve()
+        if not paths or not self.path.is_dir():
+            raise FileNotFoundError(f"{self.path} is not a directory")
+
+        # constants
+        self.html_url = f"file://{self.path}"
+        self.user = "<local>"
+        self.name = "<local>"
+
+    def get_contents(self, path: str) -> LocalContents:
+        return LocalContents(self.path / path)
 
 
 def iterate_config(
+    config_path: Path,
     config: dict,
     gh: Github,
     env: Environment,
@@ -381,8 +436,13 @@ def iterate_config(
     errors = 0
     for upstream_name, files in config.items():
         try:
-            upstream_repo = gh.get_repo(upstream_name)
-        except UnknownObjectException as err:
+            if upstream_name.startswith("."):
+                upstream_repo = LocalRepository(config_path.parent / upstream_name)
+            else:
+                upstream_repo = gh.get_repo(upstream_name)
+        except (UnknownObjectException, FileNotFoundError) as err:
+            # UnknownObjectException: repository does not exist
+            # FileNotFoundError: path does not exist
             perror(f"* :cross_mark: Failed to fetch `{upstream_name}`: {err}")
             errors += 1
             continue
@@ -439,7 +499,7 @@ def main():
         sys.exit(0)
     errors = 0
 
-    config = read_config(args)
+    config = read_config(args.config)
 
     # initialize stub loader
     loader = SpyFileSystemLoader(args.stubs)
@@ -472,20 +532,20 @@ def main():
         errors += 1
 
     if not errors:
-        errors += iterate_config(config, gh, env, current_repo)
+        errors += iterate_config(args.config, config, gh, env, current_repo)
 
     # provide audit of stub usage
-    table = Table("Stub", "State", "Count", box=box.MARKDOWN)
-
     stubs = defaultdict(int)
-    for counts in env._stubs.values():
+    for counts in env.stubs.values():
         for key, count in counts.items():
             stubs[key] += count
 
-    for stub, count in stubs.items():
-        state = TemplateState.from_count(count)
-        table.add_row(f"`{stub}`", state, str(abs(count)))
-    print(table)
+    if stubs:
+        table = Table("Stub", "State", "Count", box=box.MARKDOWN)
+        for stub, count in stubs.items():
+            state = TemplateState.from_count(count)
+            table.add_row(f"`{stub}`", state, str(abs(count)))
+        print(table)
 
     if errors:
         perror(f"Got {errors} error(s)")
