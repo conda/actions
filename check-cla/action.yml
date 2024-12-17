@@ -142,8 +142,8 @@ runs:
           > [!NOTE]
 
           > You may have previously signed the conda CLA. That signature is still valid
-          for any prior contributions however conda is now a NumFOCUS project and hence
-          requires new CLAs to be signed for any new contributions.
+          for any prior contributions however conda is now a fiscally sponsored project
+          by NumFOCUS and hence requires new CLAs to be signed for any new contributions.
 
 
           We require contributors to sign our [Contributor License Agreement][cla] and we don't
