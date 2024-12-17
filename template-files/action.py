@@ -7,23 +7,34 @@ import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from collections import defaultdict
 from contextlib import contextmanager
-from enum import Enum, nonmember
+from enum import Enum
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 from github import Auth, Github, UnknownObjectException
-from github.Repository import Repository
-from jinja2 import Environment, FileSystemLoader
-from jinja2.exceptions import TemplateNotFound, TemplateError
+from jinja2.environment import Environment
+from jinja2.exceptions import TemplateError, TemplateNotFound
+from jinja2.loaders import FileSystemLoader
+from jinja2.runtime import Context
+from jinja2.utils import missing
 from jsonschema import validate
-from rich.console import Console
-from rich.table import Table
-from rich.padding import Padding
 from rich import box
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
+from rich.padding import Padding
+from rich.table import Table
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Iterator
+    from collections.abc import Iterator
+    from typing import Any, Callable
+
+    from github.Repository import Repository
+
+    SpyCurrent = tuple[str, str, str]
+    SpyCounter = dict[str, int]
+    SpyRegister = dict[str, Any]
 
 INDENT = 4
 console = Console(color_system="standard", width=100_000_000, record=True)
@@ -53,66 +64,121 @@ class TemplateState(Enum):
     MISSING = "missing"
     USED = "used"
     CONTEXT = "context"
-    WIDTH = nonmember(12)
 
-    def __rich__(self) -> str:
-        if self == self.UNUSED:
-            return f"[yellow]⚠️ ({self.value})[/yellow]"
-        elif self == self.MISSING:
-            return f"[red]❌ ({self.value})[/red]"
-        elif self == self.USED:
-            return f"[green]✅ ({self.value})[/green]"
-        elif self == self.CONTEXT:
-            return f"[blue]📑 ({self.value})[/blue]"
-        else:
-            raise ValueError("Invalid TemplateState")
+    @classmethod
+    def from_count(cls, count: int) -> TemplateState:
+        if count < 0:
+            return cls.MISSING
+        if count > 0:
+            return cls.USED
+        return cls.UNUSED
+
+    @classmethod
+    def from_value(cls, value: Any) -> TemplateState:
+        if value is missing:
+            return cls.MISSING
+        return cls.CONTEXT
+
+    @cache
+    def _get_emoji_style(self) -> tuple[str, str]:
+        match self:
+            case self.UNUSED:
+                return ":warning-emoji:", "yellow"
+            case self.MISSING:
+                return ":cross_mark:", "red"
+            case self.USED:
+                return ":white_check_mark:", "green"
+            case self.CONTEXT:
+                return ":bookmark_tabs:", "blue"
+            case _:
+                raise ValueError("Invalid TemplateState")
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        emoji, style = self._get_emoji_style()
+        # trying to return this in any other way will result in rich splitting the emoji
+        # and the text into separate lines
+        yield console.render_str(f"{emoji} [{style}]({self.value})[/]")
+
+    def __rich_measure__(
+        self, console: Console, options: ConsoleOptions
+    ) -> Measurement:
+        # explicitly calculate the size of the emoji and the text, otherwise, rich will
+        # decide the emoji has no width and use the default/terminal width as the max
+        emoji, style = self._get_emoji_style()
+        # len(emoji) + space + parenthesis + len(value)
+        size = console.measure(emoji).maximum + 1 + 2 + len(self.value)
+        return Measurement(size, size)
 
 
-class StubLoader(FileSystemLoader):
-    current: tuple[str, str, str] | None
-    stubs: dict[str, TemplateState]
-    templates: dict[tuple[str, str, str], dict[str, TemplateState]]
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.templates = defaultdict(dict)
-        self.stubs = dict.fromkeys(self.list_templates(), TemplateState.UNUSED)
+class SpyFileSystemLoader(FileSystemLoader):
+    def _count(self, environment: Environment, key: str, increment: int) -> None:
+        # count template usage
+        if not (current := getattr(environment, "_current")) or not (
+            mapping := getattr(environment, "_stubs")
+        ):
+            return
+        mapping[current][key] += increment
 
     def get_source(
         self,
         environment: Environment,
         stub: str,
     ) -> tuple[str, str, Callable[[], bool]]:
-        # assume template is used, track for current file and globally
-        if self.current:
-            self.templates[self.current][stub] = TemplateState.USED
-        self.stubs[stub] = TemplateState.USED
-
         try:
             # delegate to FileSystemLoader
             return super().get_source(environment, stub)
         except TemplateNotFound:
             # TemplateNotFound: template does not exist, mark it as missing
-            if self.current:
-                self.templates[self.current][stub] = TemplateState.MISSING
-            self.stubs[stub] = TemplateState.MISSING
+            self._count(environment, stub, -1)
             raise
+        else:
+            # template found, mark it as used
+            self._count(environment, stub, +1)
+
+
+class SpyContext(Context):
+    def _register(self, environment: Environment, key: str, value: Any) -> None:
+        # register variable usage, no point to count usage since it will always be 1
+        if not (current := getattr(environment, "_current")) or not (
+            mapping := getattr(environment, "_variables")
+        ):
+            return
+        mapping[current][key] = value
+
+    def resolve_or_missing(self, key: str) -> Any:
+        # delegate to Context
+        value = super().resolve_or_missing(key)
+        # count variable usage
+        self._register(self.environment, key, value)
+        return value
+
+
+class SpyEnvironment(Environment):
+    _current: tuple[str, str, str] | None = None
+    _stubs: dict[SpyCurrent, SpyCounter]
+    _variables: dict[SpyCurrent, SpyRegister]
+
+    context_class: type[Context] = SpyContext
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._stubs = defaultdict(lambda: defaultdict(int))
+        self._variables = defaultdict(dict)
 
     @contextmanager
-    def get_stubs(
-        self,
-        file: str,
-        src: str,
-        dst: str,
-    ) -> Iterator[dict[str, TemplateState]]:
+    def spy(
+        self, file: str, src: str, dst: str
+    ) -> Iterator[tuple[SpyCounter, SpyRegister]]:
         try:
             # set current file
-            self.current = (file, src, dst)
+            self._current = (file, src, dst)
 
-            yield self.templates[self.current]
+            yield self._stubs[self._current], self._variables[self._current]
         finally:
             # clear current file
-            self.current = None
+            self._current = None
 
 
 def validate_file(value: str) -> Path | None:
@@ -209,18 +275,21 @@ def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, An
     elif isinstance(file, dict):
         src = file.get("src", None)
         if (tmp := file.get("dst", src)) is None:
-            perror(f"* ❌ Invalid file definition (`{file}`), expected `dst`")
+            perror(f"* :cross_mark: Invalid file definition (`{file}`), expected `dst`")
             raise ActionError
         dst = Path(tmp)
         remove = file.get("remove", False)
         context = file.get("with", {})
     else:
-        perror(f"* ❌ Invalid file definition (`{file}`), expected `str` or `dict`")
+        perror(
+            f"* :cross_mark: Invalid file definition (`{file}`), "
+            f"expected `str` or `dict`"
+        )
         raise ActionError
 
     # to template a file we need a source file
     if not remove and src is None:
-        perror(f"* ❌ Invalid file definition (`{file}`), expected `src`")
+        perror(f"* :cross_mark: Invalid file definition (`{file}`), expected `src`")
         raise ActionError
 
     return src, dst, remove, context
@@ -231,13 +300,13 @@ def remove_file(dst: Path) -> int:
         dst.unlink()
     except FileNotFoundError:
         # FileNotFoundError: dst does not exist
-        print(f"* ⚠️ `{dst}` already removed", indent=INDENT)
+        print(f"* :warning-emoji: `{dst}` already removed", indent=INDENT)
     except PermissionError as err:
         # PermissionError: not possible to remove dst
-        perror(f"* ❌ Failed to remove `{dst}`: {err}", indent=INDENT)
+        perror(f"* :cross_mark: Failed to remove `{dst}`: {err}", indent=INDENT)
         return 1
     else:
-        print(f"* ❎ `{dst}` removed")
+        print(f"* :cross_mark_button: `{dst}` removed")
     return 0  # no errors
 
 
@@ -254,7 +323,7 @@ def template_file(
     try:
         content = upstream_repo.get_contents(src).decoded_content.decode()
     except UnknownObjectException as err:
-        perror(f"* ❌ Failed to fetch `{src}`: {err}", indent=INDENT)
+        perror(f"* :cross_mark: Failed to fetch `{src}`: {err}", indent=INDENT)
         return 1
 
     # standard context with source and destination details
@@ -270,27 +339,34 @@ def template_file(
         "source": upstream_repo,
     }
 
-    with env.loader.get_stubs(upstream_name, src, dst) as stubs:
+    with env.spy(upstream_name, src, dst) as (stubs, variables):
         try:
             template = env.from_string(content)
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_text(template.render(**{**context, **standard_context}))
         except TemplateError as err:
-            perror(f"* ❌ Failed to template `{src}`: {err}", indent=INDENT)
+            perror(f"* :cross_mark: Failed to template `{src}`: {err}", indent=INDENT)
             return 1
 
-        print(f"* ✅ `{src}` → `{dst}`", indent=INDENT)
+        print(f"* :white_check_mark: `{src}` → `{dst}`", indent=INDENT)
 
         # display stubs & context for this file
-        if stubs or context:
+        if stubs or variables:
             table = Table.grid(padding=1)
-            table.add_column()
-            table.add_column(max_width=TemplateState.WIDTH)
-            table.add_column()
-            for stub, state in stubs.items():
+            # stubs
+            for stub, count in stubs.items():
+                state = TemplateState.from_count(count)
                 table.add_row("*", state, f"`{stub}`")
-            for key, value in context.items():
-                table.add_row("*", TemplateState.CONTEXT, f"`{key}={value}`")
+            # variables
+            for variable, value in variables.items():
+                if variable in standard_context:
+                    continue
+                state = TemplateState.from_value(value)
+                value = "" if value is missing else value
+                table.add_row("*", state, f"`{variable}={value}`")
+            for variable in set(context) - set(variables):
+                value = context[variable]
+                table.add_row("*", TemplateState.UNUSED, f"`{variable}={value}`")
             print(table, indent=INDENT * 2)
     return 0  # no errors
 
@@ -307,11 +383,11 @@ def iterate_config(
         try:
             upstream_repo = gh.get_repo(upstream_name)
         except UnknownObjectException as err:
-            perror(f"* ❌ Failed to fetch `{upstream_name}`: {err}")
+            perror(f"* :cross_mark: Failed to fetch `{upstream_name}`: {err}")
             errors += 1
             continue
         else:
-            print(f"* 🔄 Fetching files from `{upstream_name}`")
+            print(f"* :arrows_counterclockwise: Fetching files from `{upstream_name}`")
 
         for file in files:
             try:
@@ -358,7 +434,7 @@ def dump_summary():
 def main():
     args = parse_args()
     if not args.config:
-        print("⚠️ No configuration file found, nothing to update")
+        print(":warning-emoji: No configuration file found, nothing to update")
         dump_summary()
         sys.exit(0)
     errors = 0
@@ -366,10 +442,10 @@ def main():
     config = read_config(args)
 
     # initialize stub loader
-    loader = StubLoader(args.stubs)
+    loader = SpyFileSystemLoader(args.stubs)
 
     # initialize Jinja environment
-    env = Environment(
+    env = SpyEnvironment(
         loader=loader,
         # {{ }} is used in MermaidJS
         # ${{ }} is used in GitHub Actions
@@ -392,18 +468,23 @@ def main():
     try:
         current_repo = gh.get_repo(current_name)
     except UnknownObjectException as err:
-        perror(f"❌ Failed to fetch `{current_name}`: {err}")
+        perror(f":cross_mark: Failed to fetch `{current_name}`: {err}")
         errors += 1
 
     if not errors:
         errors += iterate_config(config, gh, env, current_repo)
 
     # provide audit of stub usage
-    table = Table(box=box.MARKDOWN)
-    table.add_column("Stub")
-    table.add_column("State", max_width=TemplateState.WIDTH)
-    for stub, state in loader.stubs.items():
-        table.add_row(f"`{stub}`", state)
+    table = Table("Stub", "State", "Count", box=box.MARKDOWN)
+
+    stubs = defaultdict(int)
+    for counts in env._stubs.values():
+        for key, count in counts.items():
+            stubs[key] += count
+
+    for stub, count in stubs.items():
+        state = TemplateState.from_count(count)
+        table.add_row(f"`{stub}`", state, str(abs(count)))
     print(table)
 
     if errors:
