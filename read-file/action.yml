@@ -21,29 +21,25 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Hash + Timestamp
-      run: echo "HASH=Py3.12-$(date -u "+%Y%m")" >> $GITHUB_ENV
-      shell: bash
-
-    - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+    - name: Load Pip Cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
         path: ~/.cache/pip
-        key: read-file-${{ env.HASH }}
+        # invalidate the cache anytime a workflow changes
+        key: ${{ github.workflow }}-${{ hashFiles('.github/workflows/*') }}
 
-    - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+    - name: Setup Python
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
-        python-version: '3.12'
+        python-version: '>3.7'
 
-    - name: Install Dependencies
+    - name: Pip Install
       shell: bash
       run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
 
     - name: Pip List
       shell: bash
-      run: |
-        echo ::group::Pip List
-        pip list
-        echo ::endgroup::
+      run: pip list
 
     - name: Read JSON
       id: read
