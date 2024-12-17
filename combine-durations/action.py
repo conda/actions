@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import sys
 import json
+import os
+import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from functools import partial
 from pathlib import Path
-import os
 from statistics import fmean
 from typing import NamedTuple
 
-from rich.console import Console
 from rich import box
+from rich.console import Console
 from rich.table import Table
 
 console = Console(color_system="standard", soft_wrap=True, record=True)
