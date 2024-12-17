@@ -32,9 +32,9 @@ if TYPE_CHECKING:
 
     from github.Repository import Repository
 
-    SpyCurrent = tuple[str, str, str]
-    SpyCounter = dict[str, int]
-    SpyRegister = dict[str, Any]
+    AuditCurrent = tuple[str, str, str]
+    AuditCounter = dict[str, int]
+    AuditRegister = dict[str, Any]
 
 INDENT = 4
 console = Console(color_system="standard", width=100_000_000, record=True)
@@ -117,7 +117,7 @@ class TemplateState(Enum):
         return Measurement(size, size)
 
 
-class SpyFileSystemLoader(FileSystemLoader):
+class AuditFileSystemLoader(FileSystemLoader):
     def count(self, environment: Environment, key: str, increment: int) -> None:
         # count template usage
         if not (current := getattr(environment, "current")) or not (
@@ -144,7 +144,7 @@ class SpyFileSystemLoader(FileSystemLoader):
             return value
 
 
-class SpyContext(Context):
+class AuditContext(Context):
     def register(self, environment: Environment, key: str, value: Any) -> None:
         # register variable usage, no point to count usage since it will always be 1
         if not (current := getattr(environment, "current")) or not (
@@ -161,12 +161,12 @@ class SpyContext(Context):
         return value
 
 
-class SpyEnvironment(Environment):
+class AuditEnvironment(Environment):
     current: tuple[str, str, str] | None = None
-    stubs: dict[SpyCurrent, SpyCounter]
-    variables: dict[SpyCurrent, SpyRegister]
+    stubs: dict[AuditCurrent, AuditCounter]
+    variables: dict[AuditCurrent, AuditRegister]
 
-    context_class: type[Context] = SpyContext
+    context_class: type[Context] = AuditContext
     undefined: type[Undefined]
 
     def __init__(self, *args, **kwargs) -> None:
@@ -177,8 +177,8 @@ class SpyEnvironment(Environment):
     @contextmanager
     def spy(
         self, file: str, src: str, dst: str
-    ) -> Iterator[tuple[SpyCounter, SpyRegister]]:
-        class SpyUndefined(Undefined):
+    ) -> Iterator[tuple[AuditCounter, AuditRegister]]:
+        class AuditUndefined(Undefined):
             def __str__(slf) -> str:
                 # only store undefined variables, ignore missing attributes/elements
                 if slf._undefined_obj is missing and self.current:
@@ -189,7 +189,7 @@ class SpyEnvironment(Environment):
         try:
             # set current file & custom undefined
             self.current = (file, src, dst)
-            self.undefined = SpyUndefined
+            self.undefined = AuditUndefined
 
             yield self.stubs[self.current], self.variables[self.current]
         finally:
@@ -503,10 +503,10 @@ def main():
     config = read_config(args.config)
 
     # initialize stub loader
-    loader = SpyFileSystemLoader(args.stubs)
+    loader = AuditFileSystemLoader(args.stubs)
 
     # initialize Jinja environment
-    env = SpyEnvironment(
+    env = AuditEnvironment(
         loader=loader,
         # {{ }} is used in MermaidJS
         # ${{ }} is used in GitHub Actions
