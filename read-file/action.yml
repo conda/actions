@@ -1,4 +1,4 @@
-name: Read JSON
+name: Read File
 description: Read a local file or remote URL.
 author: Anaconda Inc.
 branding:

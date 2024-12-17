@@ -1,4 +1,4 @@
-"""Read local file or remote URL."""
+"""Read a local file or remote URL."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def main():
     else:
         content = response.text
 
-    # if a parser is defined we parse the content and dump it as JSON
+    # if a parser is defined we parse the content and dump it as JSON/YAML
     if args.parser == "json":
         content = json.loads(content)
         content = json.dumps(content)

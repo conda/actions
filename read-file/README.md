@@ -1,6 +1,6 @@
-# Read JSON
+# Read File
 
-A composite GitHub Action to read a local file or remote URL.
+A composite GitHub Action to read a local file or remote URL with an optional JSON/YAML parser.
 
 ## GitHub Action Usage
 
