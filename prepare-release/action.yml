@@ -43,6 +43,13 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.token }}
 
+    - name: Load Pip Cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      with:
+        path: ~/.cache/pip
+        # invalidate the cache anytime a workflow changes
+        key: ${{ github.workflow }}-${{ hashFiles('.github/workflows/*') }}
+
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
