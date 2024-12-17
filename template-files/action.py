@@ -175,7 +175,7 @@ class AuditEnvironment(Environment):
         self.variables = defaultdict(dict)
 
     @contextmanager
-    def spy(
+    def audit(
         self, file: str, src: str, dst: str
     ) -> Iterator[tuple[AuditCounter, AuditRegister]]:
         class AuditUndefined(Undefined):
@@ -357,7 +357,7 @@ def template_file(
         "source": upstream_repo,
     }
 
-    with env.spy(upstream_name, src, dst) as (stubs, variables):
+    with env.audit(upstream_name, src, dst) as (stubs, variables):
         try:
             template = env.from_string(content)
             dst.parent.mkdir(parents=True, exist_ok=True)
