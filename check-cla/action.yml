@@ -86,6 +86,7 @@ runs:
       if: steps.detect-signature.outputs.signed == 'false'
       uses: conda/actions/create-fork@create-fork
       with:
+        repository: ${{ inputs.repository }}
         token: ${{ inputs.fork-token || inputs.token }}
 
     - name: Setup Python
