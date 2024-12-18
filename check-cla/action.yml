@@ -112,13 +112,16 @@ runs:
       if: steps.detect-signature.outputs.signed == 'false'
       uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
       with:
+        # push to the fork
+        branch-token: ${{ inputs.fork-token || inputs.token }}
         push-to-fork: ${{ steps.create-fork.outputs.fork }}
-        token: ${{ inputs.fork-token }}
         branch: cla-${{ steps.detect-contributor.outputs.id }}
-        delete-branch: true
         commit-message: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
         author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+        # create PR
+        token: ${{ inputs.fork-token }}
+        delete-branch: true
         title: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
         body: Xref ${{ github.event.pull_request.user.html_url || github.event.issue.user.html_url }}
 
