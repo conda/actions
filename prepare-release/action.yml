@@ -72,37 +72,17 @@ runs:
     # - name: Detect First-Time Contributors
 
     - name: Create Fork
-      # no-op if the repository is already forked
-      shell: bash
-      # don't use `gh repo fork` since it doesn't provide consistent output
-      # see: https://github.com/cli/cli/issues/10079
-      run: |
-        RESPONSE=$(gh api \
-          -X POST \
-          -H "Accept: application/vnd.github+json" \
-          "/repos/${{ github.repository }}/forks" \
-          -f default_branch_only=true)
-
-        # extract values with jq
-        FULL_NAME="$(echo "${RESPONSE}" | jq -r '.full_name')"
-        CREATED_AT="$(echo "${RESPONSE}" | jq -r '.created_at')"
-
-        # wait a minute to ensure the fork is ready
-        TIMESTAMP="$(date -d "${CREATED_AT}" +%s)"
-        CURRENT="$(date +%s)"
-        [ $((CURRENT - TIMESTAMP)) -gt 60 ] || sleep 60
-
-        # store values for subsequent usage
-        echo FORK="${FULL_NAME}" >> $GITHUB_ENV
-      env:
-        GH_TOKEN: ${{ inputs.fork-token || inputs.token }}
+      id: create-fork
+      uses: conda/actions/create-fork@create-fork
+      with:
+        token: ${{ inputs.fork-token || inputs.token }}
 
     - name: Create PR
       uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
       with:
         # push to the fork
         branch-token: ${{ inputs.fork-token || inputs.token }}
-        push-to-fork: ${{ env.FORK }}
+        push-to-fork: ${{ steps.create-fork.outputs.fork }}
         branch: changelog-${{ inputs.version }}
         commit-message: Changelog ${{ inputs.version }}
         author: ${{ inputs.changelog-author }}
