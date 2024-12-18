@@ -3,7 +3,7 @@ description: Reacts to new PRs and check if the contributor has previously signe
 inputs:
   label:
     description: Label to apply to contributor's PR once the CLA is signed.
-    required: true
+    default: cla-signed
   repository:
     description: Repository in which to create PR adding CLA signature.
     default: conda/cla
