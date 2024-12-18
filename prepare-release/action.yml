@@ -21,6 +21,7 @@ inputs:
     description: |
       GitHub token to create and push to the fork.
       Fine-grained PAT: `administration: write; contents: write`
+    # default: ${{ inputs.token }}
 runs:
   using: composite
   steps:
