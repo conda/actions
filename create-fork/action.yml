@@ -1,18 +1,24 @@
 name: Create Fork
 description: Creates a fork of the current repository.
+
 inputs:
+  repository:
+    description: Repository to fork.
+    default: ${{ github.repository }}
+  timeout:
+    description: Seconds to wait after creating forked repository.
+    default: '60'
   token:
     description: |
       GitHub token to create fork of current repository.
       Fine-grained PAT: `administration: write`
     default: ${{ github.token }}
-  timeout:
-    description: Seconds to wait after creating forked repository.
-    default: '60'
+
 outputs:
   fork:
     description: The full name of the fork created, e.g., owner/repo.
     value: ${{ steps.create_fork.outputs.fork }}
+
 runs:
   using: composite
   steps:
@@ -27,7 +33,7 @@ runs:
         RESPONSE=$(gh api \
           -X POST \
           -H "Accept: application/vnd.github+json" \
-          "/repos/${{ github.repository }}/forks" \
+          "/repos/${{ inputs.repository }}/forks" \
           -f default_branch_only=true)
 
         # extract values with jq
