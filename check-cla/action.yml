@@ -1,14 +1,14 @@
-name: CLA check
+name: Check CLA
 description: Reacts to new PRs and check if the contributor has previously signed the conda contributor license agreement (CLA).
 inputs:
   label:
-    description: Label to apply to contributor's PR once CLA is signed
+    description: Label to apply to contributor's PR once the CLA is signed.
     required: true
   repository:
-    description: Upstream repository in which to create PR
+    description: Repository in which to create PR adding CLA signature.
     default: conda/cla
   path:
-    description: Path to the CLA signees file within the provided `repository`
+    description: Path to the CLA signees file within the provided `repository`.
     default: .cla-signers
   token:
     description: >-
