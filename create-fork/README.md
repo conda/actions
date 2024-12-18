@@ -21,13 +21,17 @@ name: Create Fork
 on:
   workflow_dispatch:
 
-permissions:
-  administration: write
-
 jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
       - name: Create Fork
+        id: create-fork
         uses: conda/actions/create-fork
+        with:
+            token: ${{ secrets.BOT_TOKEN }}
+      - name: Checkout Fork
+        uses: actions/checkout
+        with:
+          repository: ${{ steps.create-fork.outputs.fork }}
 ```
