@@ -13,10 +13,14 @@ inputs:
     description: Git-format author to use for the changelog commits.
     default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
   token:
-    description: 'GitHub token to create release branch if missing and the pull request. Fine-grained PAT: `pull-request: write; contents: write`'
+    description: |
+      GitHub token to create release branch if missing and the pull request.
+      Fine-grained PAT: `pull-request: write; contents: write`
     default: ${{ github.token }}
   fork-token:
-    description: 'GitHub token to create and push to the fork. Fine-grained PAT: `administration: write; contents: write`'
+    description: |
+      GitHub token to create and push to the fork.
+      Fine-grained PAT: `administration: write; contents: write`
 runs:
   using: composite
   steps:
