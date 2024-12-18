@@ -11,7 +11,7 @@ inputs:
     description: Path to the CLA signees file within the provided `repository`.
     default: .cla-signers
   token:
-    description: >-
+    description: |
       GitHub token to comment on PRs, change PR labels, modify the commit status, and create pull request.
       Fine-grained PAT: `pull_request: write; statuses: write`
     default: ${{ github.token }}
@@ -19,6 +19,7 @@ inputs:
     description: |
       GitHub token to create and push to the fork.
       Fine-grained PAT: `administration: write; contents: write`
+    # default: ${{ inputs.token }}
 
 runs:
   using: composite
@@ -120,10 +121,10 @@ runs:
         author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         # create PR
-        token: ${{ inputs.fork-token }}
+        token: ${{ inputs.token }}
         delete-branch: true
         title: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
-        body: Xref ${{ github.event.pull_request.user.html_url || github.event.issue.user.html_url }}
+        body: Xref ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
 
     - name: Create Comment
       uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31 # v2.9.0
