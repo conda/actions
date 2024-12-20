@@ -24,7 +24,7 @@ inputs:
     description: |
       GitHub token to create and push to a `repository` fork.
       Fine-grained PAT: `administration: write; contents: write`
-    # default: ${{ inputs.token }}
+    # default: ${{ inputs.pr-token }}
 
 runs:
   using: composite
@@ -92,7 +92,7 @@ runs:
       uses: conda/actions/create-fork@create-fork
       with:
         repository: ${{ inputs.repository }}
-        token: ${{ inputs.fork-token || inputs.token }}
+        token: ${{ inputs.fork-token || inputs.pr-token || inputs.token }}
 
     - name: Setup Python
       if: steps.detect-signature.outputs.signed == 'false'
@@ -115,7 +115,7 @@ runs:
       uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
       with:
         # push to the fork
-        branch-token: ${{ inputs.fork-token || inputs.token }}
+        branch-token: ${{ inputs.fork-token || inputs.pr-token || inputs.token }}
         push-to-fork: ${{ steps.create-fork.outputs.fork }}
         branch: cla-${{ steps.detect-contributor.outputs.id }}
         commit-message: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
