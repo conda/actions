@@ -3,9 +3,18 @@
 A custom GitHub action to be used in the conda GitHub organization for checking the
 conda contributor license agreement.
 
-## GitHub Action Usage
+## Action Inputs
 
-In your GitHub repository include the action in your workflows:
+| Name | Description | Default |
+| ---- | ----------- | ------- |
+| `label` | Label to apply to contributor's PR once the CLA is signed. | cla-signed |
+| `repository` | Repository in which to create PR adding CLA signature. | conda/cla |
+| `path` | Path to the CLA signees file within the provided `repository`. | .cla-signers |
+| `token` | GitHub token to comment on PRs, change PR labels, and modify the commit status in the current repository.<br>Fine-grained PAT: `pull_request: write; statuses: write` | `${{ github.token }}` |
+| `pr-token` | GitHub token to create pull request in the `repository`.<br>Fine-grained PAT: `pull_request: write` | `${{ inputs.token }}` |
+| `fork-token` | GitHub token to create and push to a `repository` fork.<br>Fine-grained PAT: `administration: write; contents: write` | `${{ inputs.pr-token }}` |
+
+## Sample Workflows
 
 ```yaml
 name: Check CLA
@@ -26,30 +35,7 @@ jobs:
     steps:
       - uses: conda/actions/check-cla
         with:
-          # [required]
-          # A token with ability to comment, label, and modify the commit status
-          # (`pull_request: write` and `statuses: write` for fine-grained PAT; `repo` for classic PAT)
-          # (default: secrets.GITHUB_TOKEN)
-          token:
-          # [required]
-          # Label to apply to contributor's PR once CLA is signed
-          label:
-
-          # Upstream repository in which to create PR
-          # (default: conda/infrastructure)
-          cla_repo:
-          # Path to the CLA signees file within the provided `cla_repo`
-          # (default: .clabot)
-          cla_path:
-
-          # Fork of cla_repo in which to create branch
-          # (default: conda-bot/infrastructure)
-          cla_fork:
-          # [required]
-          # Token for opening signee PR in the provided `cla_repo`
-          # (`pull_request: write` for fine-grained PAT; `repo` and `workflow` for classic PAT)
-          cla_token:
-          # Git-format author/committer to use for pull request commits
-          # (default: Conda Bot <18747875+conda-bot@users.noreply.github.com>)
-          cla_author:
+          token: ...
+          pr-token: ...
+          fork-token: ...
 ```

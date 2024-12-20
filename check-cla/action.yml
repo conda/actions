@@ -12,12 +12,17 @@ inputs:
     default: .cla-signers
   token:
     description: |
-      GitHub token to comment on PRs, change PR labels, modify the commit status, and create pull request.
+      GitHub token to comment on PRs, change PR labels, and modify the commit status in the current repository.
       Fine-grained PAT: `pull_request: write; statuses: write`
     default: ${{ github.token }}
+  pr-token:
+    description: |
+      GitHub token to create pull request in the `repository`.
+      Fine-grained PAT: `pull_request: write`
+    # default: ${{ inputs.token }}
   fork-token:
     description: |
-      GitHub token to create and push to the fork.
+      GitHub token to create and push to a `repository` fork.
       Fine-grained PAT: `administration: write; contents: write`
     # default: ${{ inputs.token }}
 
@@ -117,7 +122,7 @@ runs:
         author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
         # create PR
-        token: ${{ inputs.token }}
+        token: ${{ inputs.pr-token || inputs.token }}
         delete-branch: true
         title: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
         body: Xref ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
