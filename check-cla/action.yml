@@ -10,6 +10,9 @@ inputs:
   path:
     description: Path to the CLA signees file within the provided `repository`.
     default: .cla-signers
+  magic-command:
+    description: Magic word to trigger the action via a comment.
+    default: '@conda-bot check'
   token:
     description: |
       GitHub token to comment on PRs, change PR labels, and modify the commit status in the current repository.
@@ -163,7 +166,7 @@ runs:
           Trigger actions by commenting on this PR:
 
 
-          - `@conda-bot check` will check whether a CLA has been signed for this PR author
+          - `${{ inputs.magic-command }}` will check whether a CLA has been signed for this PR author
 
 
           </details>
