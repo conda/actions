@@ -21,12 +21,16 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: SHA256
+      id: sha256
+      shell: bash
+      run: echo checksum=$(sha256sum ${{ github.action_path }}/requirements.txt | awk '{print $1}') >> $GITHUB_OUTPUT
+
     - name: Load Pip Cache
       uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
         path: ~/.cache/pip
-        # invalidate the cache anytime a workflow changes
-        key: ${{ github.workflow }}-${{ hashFiles('.github/workflows/*') }}
+        key: ${{ github.workflow }}-read-file-${{ steps.sha256.outputs.checksum }}
 
     - name: Setup Python
       uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
