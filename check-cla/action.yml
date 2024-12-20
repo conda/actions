@@ -13,6 +13,9 @@ inputs:
   magic-command:
     description: Magic word to trigger the action via a comment.
     default: '@conda-bot check'
+  author:
+    description: Git-format author to use for the CLA commits.
+    default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
   token:
     description: |
       GitHub token to comment on PRs, change PR labels, and modify the commit status in the current repository.
@@ -122,8 +125,8 @@ runs:
         push-to-fork: ${{ steps.create-fork.outputs.fork }}
         branch: cla-${{ steps.detect-contributor.outputs.id }}
         commit-message: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
-        author: Conda Bot <18747875+conda-bot@users.noreply.github.com>
-        committer: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+        author: ${{ inputs.author }}
+        committer: ${{ inputs.author }}
         # create PR
         token: ${{ inputs.pr-token || inputs.token }}
         delete-branch: true
