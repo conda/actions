@@ -1,0 +1,23 @@
+org/repo:
+  # paths are copied from org/repo to current repo
+  - file.txt
+  - path/to/file.txt
+
+org/repo2:
+  # paths are copied from org/repo2 to current repo
+  - src: file2.txt
+    dst: path/to/file2.txt
+  # paths are copied from org/repo2 to current repo with templating
+  - src: file3.txt
+    with:
+      variable: value
+  - src: file4.txt
+    dst: path/to/file4.txt
+    with:
+      variable: value
+  # remove dst paths from current repo
+  - dst: file5.txt
+    remove: true
+  # remove src paths from current repo
+  - src: file6.txt
+    remove: true

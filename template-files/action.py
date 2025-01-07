@@ -27,30 +27,36 @@ from rich.padding import Padding
 from rich.table import Table
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
     from typing import Any, Callable
 
     from github.Repository import Repository
+    from jinja2.style import Style
 
     AuditCurrent = tuple[str, str, str]
     AuditCounter = dict[str, int]
     AuditRegister = dict[str, Any]
 
 INDENT = 4
-console = Console(color_system="standard", width=100_000_000, record=True)
+CONSOLE = Console(color_system="standard", width=100_000_000, record=True)
 
 
-def print(renderable, *, indent: int = 0, **kwargs) -> None:
+def print(renderable, *, indent: int = 0, console: Console = CONSOLE, **kwargs) -> None:
     if indent:
         renderable = Padding.indent(renderable, indent)
     console.print(renderable, **kwargs)
 
 
-def perror(renderable, **kwargs) -> None:
-    kwargs.setdefault("style", "bold red")
+def perror(
+    renderable,
+    *,
+    console: Console = CONSOLE,
+    style: Style | str | None = "bold red",
+    **kwargs,
+) -> None:
     try:
         console.stderr = True
-        print(renderable, **kwargs)
+        print(renderable, console=console, style=style, **kwargs)
     finally:
         console.stderr = False
 
@@ -95,7 +101,7 @@ class TemplateState(Enum):
                 return ":books:", "blue"
             case self.OPTIONAL:
                 return ":heavy_plus_sign:", "yellow"
-            case _:
+            case _:  # pragma: no cover
                 raise ValueError("Invalid TemplateState")
 
     def __rich_console__(
@@ -120,11 +126,11 @@ class TemplateState(Enum):
 class AuditFileSystemLoader(FileSystemLoader):
     def count(self, environment: Environment, key: str, increment: int) -> None:
         # count template usage
-        if not (current := getattr(environment, "current")) or not (
-            mapping := getattr(environment, "stubs")
+        if None not in (
+            current := getattr(environment, "current", None),
+            stubs := getattr(environment, "stubs", None),
         ):
-            return
-        mapping[current][key] += increment
+            stubs[current][key] += increment
 
     def get_source(
         self,
@@ -147,11 +153,11 @@ class AuditFileSystemLoader(FileSystemLoader):
 class AuditContext(Context):
     def register(self, environment: Environment, key: str, value: Any) -> None:
         # register variable usage, no point to count usage since it will always be 1
-        if not (current := getattr(environment, "current")) or not (
-            mapping := getattr(environment, "variables")
+        if None not in (
+            current := getattr(environment, "current", None),
+            variables := getattr(environment, "variables", None),
         ):
-            return
-        mapping[current][key] = value
+            variables[current][key] = value
 
     def resolve_or_missing(self, key: str) -> Any:
         # delegate to Context
@@ -226,12 +232,12 @@ def validate_dir(value: str) -> Path:
         raise ArgumentTypeError(f"{value} is not a valid directory: {err}")
 
 
-def parse_args() -> Namespace:
+def parse_args(args: Sequence[str] | None = None) -> Namespace:
     # parse CLI for inputs
     parser = ArgumentParser()
     parser.add_argument("--config", type=validate_file, required=True)
     parser.add_argument("--stubs", type=validate_dir, required=True)
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
 def read_config(config: Path) -> dict:
@@ -473,7 +479,7 @@ def dump_summary(errors: int):
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     output = os.getenv("GITHUB_OUTPUT")
     if summary or output:
-        html = console.export_text()
+        html = CONSOLE.export_text()
     if summary:
         Path(summary).write_text(f"### Templating Audit\n{html}")
     if output:

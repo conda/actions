@@ -69,10 +69,7 @@ runs:
 
     - name: Pip List
       shell: bash
-      run: |
-        echo ::group::Pip List
-        pip list
-        echo ::endgroup::
+      run: pip list
 
     - name: Combine Recent Durations
       id: combine
