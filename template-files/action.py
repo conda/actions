@@ -474,28 +474,36 @@ def iterate_config(
     return errors
 
 
-def dump_summary(errors: int):
+def get_summary_text(html: str) -> str:
+    return f"### Templating Audit\n{html}"
+
+
+def get_output_text(errors: int, html: str) -> str:
+    return (
+        # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
+        # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
+        f"summary<<GITHUB_OUTPUT_summary\n"
+        f"<details{' open' if errors else ''}>\n"
+        f"<summary>Templating Audit</summary>\n"
+        f"\n"
+        f"{html}\n"
+        f"\n"
+        f"</details>\n"
+        f"GITHUB_OUTPUT_summary\n"
+    )
+
+
+def dump_summary(errors: int, console: Console = CONSOLE) -> None:
     # dump summary to GitHub Actions summary
-    summary = os.getenv("GITHUB_STEP_SUMMARY")
-    output = os.getenv("GITHUB_OUTPUT")
-    if summary or output:
-        html = CONSOLE.export_text()
-    if summary:
-        Path(summary).write_text(f"### Templating Audit\n{html}")
-    if output:
-        with Path(output).open("a") as fh:
-            fh.write(
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
-                f"summary<<GITHUB_OUTPUT_summary\n"
-                f"<details {'open' if errors else ''}>\n"
-                f"<summary>Templating Audit</summary>\n"
-                f"\n"
-                f"{html}\n"
-                f"\n"
-                f"</details>\n"
-                f"GITHUB_OUTPUT_summary\n"
-            )
+    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+    output_path = os.getenv("GITHUB_OUTPUT")
+    if summary_path or output_path:
+        html = console.export_text()
+    if summary_path:
+        Path(summary_path).write_text(get_summary_text(html))
+    if output_path:
+        with Path(output_path).open("a") as fh:
+            fh.write(get_output_text(errors, html))
 
 
 def main():

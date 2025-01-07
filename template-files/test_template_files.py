@@ -15,6 +15,9 @@ from action import (
     AuditEnvironment,
     AuditFileSystemLoader,
     TemplateState,
+    dump_summary,
+    get_output_text,
+    get_summary_text,
     parse_args,
     parse_config,
     perror,
@@ -29,6 +32,7 @@ from jinja2.exceptions import TemplateNotFound
 from jinja2.runtime import DebugUndefined, StrictUndefined, Undefined
 from jinja2.utils import missing
 from jsonschema.exceptions import ValidationError
+from rich.console import Console
 
 if TYPE_CHECKING:
     from pytest import CaptureFixture, MonkeyPatch
@@ -40,35 +44,40 @@ DATA = Path(__file__).parent / "data"
 CONFIGS = DATA / "configs"
 
 
-def test_print(capsys: CaptureFixture) -> None:
-    print("foo")
+@pytest.fixture
+def console() -> Console:
+    return Console(color_system="standard", width=100_000_000, record=True)
+
+
+def test_print(capsys: CaptureFixture, console: Console) -> None:
+    print("foo", console=console)
     stdout, stderr = capsys.readouterr()
     assert stdout == "foo\n"
     assert not stderr
 
-    print("foo", style="bold")
+    print("foo", style="bold", console=console)
     stdout, stderr = capsys.readouterr()
     assert stdout == "\x1b[1mfoo\x1b[0m\n"
     assert not stderr
 
-    print("foo", style="bold yellow", indent=4)
+    print("foo", style="bold yellow", indent=4, console=console)
     stdout, stderr = capsys.readouterr()
     assert stdout == "\x1b[1;33m    \x1b[0m\x1b[1;33mfoo\x1b[0m\n"
     assert not stderr
 
 
-def test_perror(capsys: CaptureFixture) -> None:
-    perror("foo")
+def test_perror(capsys: CaptureFixture, console: Console) -> None:
+    perror("foo", console=console)
     stdout, stderr = capsys.readouterr()
     assert not stdout
     assert stderr == "\x1b[1;31mfoo\x1b[0m\n"
 
-    perror("foo", style="bold")
+    perror("foo", style="bold", console=console)
     stdout, stderr = capsys.readouterr()
     assert not stdout
     assert stderr == "\x1b[1mfoo\x1b[0m\n"
 
-    perror("foo", style="bold yellow", indent=4)
+    perror("foo", style="bold yellow", indent=4, console=console)
     stdout, stderr = capsys.readouterr()
     assert not stdout
     assert stderr == "\x1b[1;33m    \x1b[0m\x1b[1;33mfoo\x1b[0m\n"
@@ -300,3 +309,46 @@ def test_remove_file(tmp_path: Path, capsys: CaptureFixture) -> None:
     finally:
         # cleanup so tmp_path can be removed
         tmp_path.chmod(stat.st_mode)
+
+
+def test_get_summary_text() -> None:
+    summary = get_summary_text(text := uuid4().hex)
+    assert text in summary
+
+
+def test_get_output_text() -> None:
+    output = get_output_text(0, text := uuid4().hex)
+    assert "<details>" in output
+    assert text in output
+    output = get_output_text(1, text := uuid4().hex)
+    assert "<details open>" in output
+    assert text in output
+
+
+def test_dump_summary(
+    capsys: CaptureFixture, monkeypatch: MonkeyPatch, tmp_path: Path, console: Console
+) -> None:
+    (step_summary := tmp_path / "step_summary").write_text("text to overwrite\n")
+    (output := tmp_path / "output").write_text(old := "text to append\n")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", step_summary)
+    monkeypatch.setenv("GITHUB_OUTPUT", output)
+
+    print(text := uuid4().hex, console=console)
+    perror(error := uuid4().hex, console=console)
+    dump_summary(0, console=console)
+    stdout, stderr = capsys.readouterr()
+    assert text in stdout
+    assert error in stderr
+    assert step_summary.read_text() == get_summary_text(f"{text}\n{error}\n")
+    assert output.read_text() == old + get_output_text(0, f"{text}\n{error}\n")
+
+    output.write_text(old)
+
+    print(text := uuid4().hex, console=console)
+    perror(error := uuid4().hex, console=console)
+    dump_summary(1, console=console)
+    stdout, stderr = capsys.readouterr()
+    assert text in stdout
+    assert error in stderr
+    assert step_summary.read_text() == get_summary_text(f"{text}\n{error}\n")
+    assert output.read_text() == old + get_output_text(1, f"{text}\n{error}\n")
