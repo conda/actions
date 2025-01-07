@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from argparse import ArgumentTypeError, Namespace
 from contextlib import nullcontext
+from inspect import isgenerator
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -33,8 +34,12 @@ from jinja2.runtime import DebugUndefined, StrictUndefined, Undefined
 from jinja2.utils import missing
 from jsonschema.exceptions import ValidationError
 from rich.console import Console
+from rich.measure import Measurement
+from rich.text import Text
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from pytest import CaptureFixture, MonkeyPatch
     from pytest_mocker import MockerFixture
 
@@ -93,28 +98,89 @@ def test_TemplateState() -> None:
     }
 
 
-def test_TemplateState_from_count() -> None:
-    assert TemplateState.from_count(-2) == TemplateState.MISSING
-    assert TemplateState.from_count(-1) == TemplateState.MISSING
-    assert TemplateState.from_count(0) == TemplateState.UNUSED
-    assert TemplateState.from_count(1) == TemplateState.USED
-    assert TemplateState.from_count(2) == TemplateState.USED
+@pytest.mark.parametrize(
+    "count,expected",
+    [
+        (-2, TemplateState.MISSING),
+        (-1, TemplateState.MISSING),
+        (0, TemplateState.UNUSED),
+        (1, TemplateState.USED),
+        (2, TemplateState.USED),
+    ],
+)
+def test_TemplateState_from_count(count: int, expected: TemplateState) -> None:
+    assert TemplateState.from_count(count) == expected
 
 
-def test_TemplateState_from_value() -> None:
-    assert TemplateState.from_value(Undefined()) == TemplateState.MISSING
-    assert TemplateState.from_value(StrictUndefined()) == TemplateState.MISSING
-    assert TemplateState.from_value(DebugUndefined()) == TemplateState.MISSING
-    assert TemplateState.from_value(missing) == TemplateState.OPTIONAL
-    assert TemplateState.from_value("value") == TemplateState.CONTEXT
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (Undefined(), TemplateState.MISSING),
+        (StrictUndefined(), TemplateState.MISSING),
+        (DebugUndefined(), TemplateState.MISSING),
+        (missing, TemplateState.OPTIONAL),
+        ("value", TemplateState.CONTEXT),
+    ],
+)
+def test_TemplateState_from_value(value: Any, expected: TemplateState) -> None:
+    assert TemplateState.from_value(value) == expected
 
 
-def test_TemplateState_get_emoji_style() -> None:
-    assert TemplateState.UNUSED._get_emoji_style() == (":warning-emoji:", "yellow")
-    assert TemplateState.MISSING._get_emoji_style() == (":cross_mark:", "red")
-    assert TemplateState.USED._get_emoji_style() == (":white_check_mark:", "green")
-    assert TemplateState.CONTEXT._get_emoji_style() == (":books:", "blue")
-    assert TemplateState.OPTIONAL._get_emoji_style() == (":heavy_plus_sign:", "yellow")
+@pytest.mark.parametrize(
+    "state,emoji,style",
+    [
+        pytest.param(TemplateState.UNUSED, ":warning-emoji:", "yellow", id="unused"),
+        pytest.param(TemplateState.MISSING, ":cross_mark:", "red", id="missing"),
+        pytest.param(TemplateState.USED, ":white_check_mark:", "green", id="used"),
+        pytest.param(TemplateState.CONTEXT, ":books:", "blue", id="context"),
+        pytest.param(
+            TemplateState.OPTIONAL, ":heavy_plus_sign:", "yellow", id="optional"
+        ),
+    ],
+)
+def test_TemplateState_get_emoji_style(
+    state: TemplateState, emoji: str, style: str
+) -> None:
+    assert state._get_emoji_style() == (emoji, style)
+
+
+@pytest.mark.parametrize(
+    "state,emoji,style",
+    [
+        pytest.param(TemplateState.UNUSED, "⚠️", "yellow", id="unused"),
+        pytest.param(TemplateState.MISSING, "❌", "red", id="missing"),
+        pytest.param(TemplateState.USED, "✅", "green", id="used"),
+        pytest.param(TemplateState.CONTEXT, "📚", "blue", id="context"),
+        pytest.param(TemplateState.OPTIONAL, "➕", "yellow", id="optional"),
+    ],
+)
+def test_TemplateState_rich_console(
+    console: Console, state: TemplateState, emoji: str, style: str
+) -> None:
+    result = state.__rich_console__(console, console.options)
+    assert isgenerator(result)
+    expanded = list(result)
+    assert len(expanded) == 1
+    text = expanded[0]
+    assert isinstance(text, Text)
+    assert text.plain == f"{emoji} ({state.value})"
+    assert text.spans[-1].style == style
+
+
+@pytest.mark.parametrize(
+    "state,size",
+    [
+        pytest.param(TemplateState.UNUSED, 10, id="unused"),
+        pytest.param(TemplateState.MISSING, 12, id="missing"),
+        pytest.param(TemplateState.USED, 9, id="used"),
+        pytest.param(TemplateState.CONTEXT, 12, id="context"),
+        pytest.param(TemplateState.OPTIONAL, 13, id="optional"),
+    ],
+)
+def test_TemplateState_rich_measure(
+    console: Console, state: TemplateState, size: int
+) -> None:
+    assert state.__rich_measure__(console, console.options) == Measurement(size, size)
 
 
 def test_AuditFileSystemLoader(mocker: MockerFixture) -> None:
