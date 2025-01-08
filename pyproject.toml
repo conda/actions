@@ -3,7 +3,10 @@
 skip = '.git'
 
 [tool.coverage.report]
-exclude_also = ["if TYPE_CHECKING:"]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  'if __name__ == "__main__":',
+]
 
 [tool.coverage.run]
 omit = ["**/test_*.py"]
@@ -12,6 +15,7 @@ omit = ["**/test_*.py"]
 addopts = [
   "--color=yes",
   "--cov=combine-durations",
+  "--cov=read-file",
   "--cov=template-files",
   "--cov-append",
   "--cov-branch",
@@ -42,4 +46,8 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["combine_durations", "template_files"]
+known-first-party = [
+  "combine_durations",
+  "read_file",
+  "template_files",
+]

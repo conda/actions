@@ -49,7 +49,7 @@ runs:
       id: read
       shell: bash
       run: >
-        python ${{ github.action_path }}/action.py
+        python ${{ github.action_path }}/read_file.py
         ${{ inputs.path }}
         ${{ inputs.parser && format('"--parser={0}"', inputs.parser) || '' }}
         ${{ inputs.default && format('"--default={0}"', inputs.default) || '' }}
