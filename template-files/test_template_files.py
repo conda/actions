@@ -10,7 +10,16 @@ from uuid import uuid4
 
 import pytest
 import yaml
-from action import (
+from jinja2.environment import Environment
+from jinja2.exceptions import TemplateNotFound
+from jinja2.runtime import DebugUndefined, StrictUndefined, Undefined
+from jinja2.utils import missing
+from jsonschema.exceptions import ValidationError
+from rich.console import Console
+from rich.measure import Measurement
+from rich.text import Text
+
+from template_files import (
     ActionError,
     AuditContext,
     AuditEnvironment,
@@ -30,14 +39,6 @@ from action import (
     validate_dir,
     validate_file,
 )
-from jinja2.environment import Environment
-from jinja2.exceptions import TemplateNotFound
-from jinja2.runtime import DebugUndefined, StrictUndefined, Undefined
-from jinja2.utils import missing
-from jsonschema.exceptions import ValidationError
-from rich.console import Console
-from rich.measure import Measurement
-from rich.text import Text
 
 if TYPE_CHECKING:
     from typing import Any
