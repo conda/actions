@@ -37,7 +37,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Dependencies
-        run: pip install --quiet -r requirements.txt
+        run: pip install --quiet -r requirements.txt -r combine-durations/requirements.txt -r template-files/requirements.txt
 
       - name: Run Tests
         run: pytest
