@@ -11,4 +11,4 @@
 <br>
 [![GitHub Release][release-badge]](https://github.com/conda/actions/releases)
 
-A collection of GitHub Actions used across the conda org for issue and project automation.
+A collection of GitHub Actions used across the conda org.
