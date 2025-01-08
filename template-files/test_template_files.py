@@ -15,6 +15,7 @@ from action import (
     AuditContext,
     AuditEnvironment,
     AuditFileSystemLoader,
+    LocalRepository,
     TemplateState,
     dump_summary,
     get_output_text,
@@ -25,6 +26,7 @@ from action import (
     print,
     read_config,
     remove_file,
+    template_file,
     validate_dir,
     validate_file,
 )
@@ -47,6 +49,7 @@ if TYPE_CHECKING:
 ON_LINUX = sys.platform == "linux"
 DATA = Path(__file__).parent / "data"
 CONFIGS = DATA / "configs"
+UPSTREAM = DATA / "upstream"
 
 
 @pytest.fixture
@@ -185,14 +188,14 @@ def test_TemplateState_rich_measure(
 
 def test_AuditFileSystemLoader(mocker: MockerFixture) -> None:
     environment = Environment()
-    loader = AuditFileSystemLoader(DATA)
+    loader = AuditFileSystemLoader(UPSTREAM)
 
     count = mocker.spy(loader, "count")
 
-    assert loader.get_source(environment, "stub.txt")
+    assert loader.get_source(environment, "stub")
     assert count.call_count == 1
     with pytest.raises(TemplateNotFound):
-        loader.get_source(environment, "missing.txt")
+        loader.get_source(environment, "missing")
     assert count.call_count == 2
 
 
@@ -211,33 +214,28 @@ def test_AuditContext(mocker: MockerFixture) -> None:
 
 def test_AuditEnvironment() -> None:
     environment = AuditEnvironment()
-    loader = AuditFileSystemLoader(DATA)
+    loader = AuditFileSystemLoader(UPSTREAM)
     context = AuditContext(environment, {}, None, {})
     context.vars["variable"] = (value := uuid4().hex)
 
-    with environment.audit(
-        file := uuid4().hex,
-        src := uuid4().hex,
-        dst := uuid4().hex,
-    ) as (stubs, variables):
+    with environment.audit(*(current := ("file", "src", "dst"))) as (stubs, variables):
         assert isinstance(stubs, dict) and not stubs
         assert isinstance(variables, dict) and not variables
 
-        current = (file, src, dst)
         assert environment.current == current
         assert environment.stubs[current] is stubs
         assert environment.variables[current] is variables
 
         for _ in range(5):
-            assert loader.get_source(environment, "stub.txt")
+            assert loader.get_source(environment, "stub")
         for _ in range(3):
             with pytest.raises(TemplateNotFound):
-                loader.get_source(environment, "missing.txt")
+                loader.get_source(environment, "missing")
         assert context.resolve_or_missing("variable") == value
         assert context.resolve_or_missing("missing") == missing
 
-        assert stubs["stub.txt"] == +5
-        assert stubs["missing.txt"] == -3
+        assert stubs["stub"] == +5
+        assert stubs["missing"] == -3
         assert variables["variable"] == value
         assert variables["missing"] == missing
 
@@ -375,6 +373,73 @@ def test_remove_file(tmp_path: Path, capsys: CaptureFixture) -> None:
     finally:
         # cleanup so tmp_path can be removed
         tmp_path.chmod(stat.st_mode)
+
+
+def test_template_file(tmp_path: Path, capsys: CaptureFixture) -> None:
+    loader = AuditFileSystemLoader(UPSTREAM)
+    environment = AuditEnvironment(loader=loader)
+    current = LocalRepository(tmp_path)
+    upstream = LocalRepository(UPSTREAM)
+
+    # template without errors
+    assert (
+        template_file(
+            environment,
+            current,
+            upstream,
+            "success",
+            tmp_path / "out",
+            {"variable": "value"},
+        )
+        == 0
+    )
+    stdout, stderr = capsys.readouterr()
+    assert stdout
+    assert not stderr
+
+    # template with missing context
+    assert (
+        template_file(environment, current, upstream, "success", tmp_path / "out", {})
+        == 1
+    )
+    stdout, stderr = capsys.readouterr()
+    assert stdout
+    assert stderr
+
+    # template missing file
+    assert (
+        template_file(environment, current, upstream, "missing", tmp_path / "out", {})
+        == 1
+    )
+    stdout, stderr = capsys.readouterr()
+    assert not stdout
+    assert stderr
+
+    # template python error
+    assert (
+        template_file(
+            environment, current, upstream, "python_error", tmp_path / "out", {}
+        )
+        == 1
+    )
+    stdout, stderr = capsys.readouterr()
+    assert not stdout
+    assert stderr
+
+    # template error
+    assert (
+        template_file(
+            environment, current, upstream, "template_error", tmp_path / "out", {}
+        )
+        == 1
+    )
+    stdout, stderr = capsys.readouterr()
+    assert not stdout
+    assert stderr
+
+
+def test_iterate_config() -> None:
+    pass
 
 
 def test_get_summary_text() -> None:

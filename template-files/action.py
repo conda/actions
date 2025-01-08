@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import yaml
 from github import Auth, Github, UnknownObjectException
 from jinja2.environment import Environment
-from jinja2.exceptions import TemplateError, TemplateNotFound
+from jinja2.exceptions import TemplateNotFound
 from jinja2.loaders import FileSystemLoader
 from jinja2.runtime import Context, Undefined
 from jinja2.utils import missing
@@ -185,6 +185,7 @@ class AuditEnvironment(Environment):
         self, file: str, src: str, dst: str
     ) -> Iterator[tuple[AuditCounter, AuditRegister]]:
         class AuditUndefined(Undefined):
+            # TODO: do we need this?
             def __str__(slf) -> str:
                 # only store undefined variables, ignore missing attributes/elements
                 if slf._undefined_obj is missing and self.current:
@@ -337,7 +338,6 @@ def remove_file(dst: Path) -> int:
 def template_file(
     env: Environment,
     current_repo: Repository,
-    upstream_name: str,
     upstream_repo: Repository,
     src: str | None,
     dst: Path,
@@ -363,12 +363,13 @@ def template_file(
         "source": upstream_repo,
     }
 
-    with env.audit(upstream_name, src, dst) as (stubs, variables):
+    with env.audit(upstream_repo.full_name, src, dst) as (stubs, variables):
         try:
             template = env.from_string(content)
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_text(template.render(**{**context, **standard_context}))
-        except TemplateError as err:
+        except Exception as err:
+            # Exception: catch all errors whether they are Jinja2 or Python errors
             perror(f"* :cross_mark: Failed to template `{src}`: {err}", indent=INDENT)
             return 1
 
@@ -413,7 +414,10 @@ def template_file(
 class LocalContents:
     # mirror GitHub contents object
     def __init__(self, path: Path):
-        self.decoded_content = path.read_text().encode()
+        try:
+            self.decoded_content = path.read_text().encode()
+        except FileNotFoundError as err:
+            raise UnknownObjectException(404, f"{path} not found") from err
 
 
 class LocalRepository:
@@ -426,7 +430,11 @@ class LocalRepository:
         # constants
         self.html_url = f"file://{self.path}"
         self.user = "<local>"
-        self.name = "<local>"
+        self.name = self.path
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.user}/{self.name}"
 
     def get_contents(self, path: str) -> LocalContents:
         return LocalContents(self.path / path)
@@ -468,7 +476,7 @@ def iterate_config(
                 errors += remove_file(dst)
             else:
                 errors += template_file(
-                    env, current_repo, upstream_name, upstream_repo, src, dst, context
+                    env, current_repo, upstream_repo, src, dst, context
                 )
 
     return errors
@@ -493,7 +501,7 @@ def get_output_text(errors: int, html: str) -> str:
     )
 
 
-def dump_summary(errors: int, console: Console = CONSOLE) -> None:
+def dump_summary(errors: int, *, console: Console = CONSOLE) -> None:
     # dump summary to GitHub Actions summary
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
     output_path = os.getenv("GITHUB_OUTPUT")
