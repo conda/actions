@@ -13,17 +13,19 @@ from typing import TYPE_CHECKING
 
 import yaml
 from github import Auth, Github, UnknownObjectException
-from github.Repository import Repository
 from jinja2 import Environment, FileSystemLoader
-from jinja2.exceptions import TemplateNotFound, TemplateError
+from jinja2.exceptions import TemplateError, TemplateNotFound
 from jsonschema import validate
-from rich.console import Console
-from rich.table import Table
-from rich.padding import Padding
 from rich import box
+from rich.console import Console
+from rich.padding import Padding
+from rich.table import Table
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Iterator
+    from collections.abc import Iterator
+    from typing import Any, Callable
+
+    from github.Repository import Repository
 
 INDENT = 4
 console = Console(color_system="standard", width=100_000_000, record=True)
