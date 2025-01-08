@@ -11,6 +11,7 @@ omit = ["**/test_*.py"]
 [tool.pytest.ini_options]
 addopts = [
   "--color=yes",
+  "--cov=combine-durations",
   "--cov=template-files",
   "--cov-append",
   "--cov-branch",
@@ -39,3 +40,6 @@ select = [
   "UP",  # pyupgrade
   "W",  # pycodestyle warnings
 ]
+
+[tool.ruff.lint.isort]
+known-first-party = ["combine_durations", "template_files"]

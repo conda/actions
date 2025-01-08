@@ -47,6 +47,6 @@ runs:
     - name: Template Files
       id: template
       shell: bash
-      run: python ${{ github.action_path }}/action.py --config ${{ inputs.config }} --stubs ${{ inputs.stubs }}
+      run: python ${{ github.action_path }}/template_files.py --config ${{ inputs.config }} --stubs ${{ inputs.stubs }}
       env:
         GITHUB_TOKEN: ${{ github.token }}

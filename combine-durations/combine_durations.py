@@ -15,11 +15,11 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-console = Console(color_system="standard", soft_wrap=True, record=True)
-print = console.print
+CONSOLE = Console(color_system="standard", soft_wrap=True, record=True)
+print = CONSOLE.print
 
 
-def validate_dir(value: str, writable: bool = False) -> Path:
+def validate_dir(value: str | os.PathLike[str] | Path, writable: bool = False) -> Path:
     try:
         path = Path(value).expanduser().resolve()
         path.mkdir(parents=True, exist_ok=True)
@@ -68,28 +68,36 @@ def read_durations(
     return OS, data
 
 
-def dump_summary():
+def get_step_summary(html: str) -> str:
+    return f"### Durations Audit\n{html}"
+
+
+def get_output(html: str) -> str:
+    return (
+        # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
+        # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
+        f"summary<<GITHUB_OUTPUT_summary\n"
+        f"<details>\n"
+        f"<summary>Durations Audit</summary>\n"
+        f"\n"
+        f"{html}\n"
+        f"\n"
+        f"</details>\n"
+        f"GITHUB_OUTPUT_summary\n"
+    )
+
+
+def dump_summary(console: Console = CONSOLE) -> None:
     # dump summary to GitHub Actions summary
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     output = os.getenv("GITHUB_OUTPUT")
     if summary or output:
         html = console.export_text()
     if summary:
-        Path(summary).write_text(f"### Durations Audit\n{html}")
+        Path(summary).write_text(get_step_summary(html))
     if output:
         with Path(output).open("a") as fh:
-            fh.write(
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
-                f"summary<<GITHUB_OUTPUT_summary\n"
-                f"<details>\n"
-                f"<summary>Durations Audit</summary>\n"
-                f"\n"
-                f"{html}\n"
-                f"\n"
-                f"</details>\n"
-                f"GITHUB_OUTPUT_summary\n"
-            )
+            fh.write(get_output(html))
 
 
 def main() -> None:

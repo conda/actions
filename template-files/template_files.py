@@ -36,6 +36,8 @@ if TYPE_CHECKING:
     AuditCurrent = tuple[str, str, str]
     AuditCounter = dict[str, int]
     AuditRegister = dict[str, Any]
+    from typing import Any
+
 
 INDENT = 4
 CONSOLE = Console(color_system="standard", width=100_000_000, record=True)
