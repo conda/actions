@@ -41,3 +41,8 @@ jobs:
 
       - name: Run Tests
         run: pytest
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v5.1.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
