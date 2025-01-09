@@ -114,4 +114,4 @@ jobs:
           TITLE: 🤖 Tests Failed
         with:
           filename: .github/TEST_FAILURE_REPORT_TEMPLATE.md
-          update_existing: false
+          update_existing: true
