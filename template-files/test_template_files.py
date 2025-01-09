@@ -58,6 +58,14 @@ def console() -> Console:
     return Console(color_system="standard", width=100_000_000, record=True)
 
 
+def ids(value: Any) -> Any:
+    if isinstance(value, TemplateState):
+        return value.value
+    elif isinstance(value, Path):
+        return str(Path(*value.parts[-2:]))
+    return value
+
+
 def test_print(capsys: CaptureFixture, console: Console) -> None:
     print("foo", console=console)
     stdout, stderr = capsys.readouterr()
@@ -111,6 +119,7 @@ def test_TemplateState() -> None:
         (1, TemplateState.USED),
         (2, TemplateState.USED),
     ],
+    ids=ids,
 )
 def test_TemplateState_from_count(count: int, expected: TemplateState) -> None:
     assert TemplateState.from_count(count) == expected
@@ -133,14 +142,13 @@ def test_TemplateState_from_value(value: Any, expected: TemplateState) -> None:
 @pytest.mark.parametrize(
     "state,emoji,style",
     [
-        pytest.param(TemplateState.UNUSED, ":warning-emoji:", "yellow", id="unused"),
-        pytest.param(TemplateState.MISSING, ":cross_mark:", "red", id="missing"),
-        pytest.param(TemplateState.USED, ":white_check_mark:", "green", id="used"),
-        pytest.param(TemplateState.CONTEXT, ":books:", "blue", id="context"),
-        pytest.param(
-            TemplateState.OPTIONAL, ":heavy_plus_sign:", "yellow", id="optional"
-        ),
+        (TemplateState.UNUSED, ":warning-emoji:", "yellow"),
+        (TemplateState.MISSING, ":cross_mark:", "red"),
+        (TemplateState.USED, ":white_check_mark:", "green"),
+        (TemplateState.CONTEXT, ":books:", "blue"),
+        (TemplateState.OPTIONAL, ":heavy_plus_sign:", "yellow"),
     ],
+    ids=ids,
 )
 def test_TemplateState_get_emoji_style(
     state: TemplateState, emoji: str, style: str
@@ -151,12 +159,13 @@ def test_TemplateState_get_emoji_style(
 @pytest.mark.parametrize(
     "state,emoji,style",
     [
-        pytest.param(TemplateState.UNUSED, "⚠️", "yellow", id="unused"),
-        pytest.param(TemplateState.MISSING, "❌", "red", id="missing"),
-        pytest.param(TemplateState.USED, "✅", "green", id="used"),
-        pytest.param(TemplateState.CONTEXT, "📚", "blue", id="context"),
-        pytest.param(TemplateState.OPTIONAL, "➕", "yellow", id="optional"),
+        (TemplateState.UNUSED, "⚠️", "yellow"),
+        (TemplateState.MISSING, "❌", "red"),
+        (TemplateState.USED, "✅", "green"),
+        (TemplateState.CONTEXT, "📚", "blue"),
+        (TemplateState.OPTIONAL, "➕", "yellow"),
     ],
+    ids=ids,
 )
 def test_TemplateState_rich_console(
     console: Console, state: TemplateState, emoji: str, style: str
@@ -174,12 +183,13 @@ def test_TemplateState_rich_console(
 @pytest.mark.parametrize(
     "state,size",
     [
-        pytest.param(TemplateState.UNUSED, 10, id="unused"),
-        pytest.param(TemplateState.MISSING, 12, id="missing"),
-        pytest.param(TemplateState.USED, 9, id="used"),
-        pytest.param(TemplateState.CONTEXT, 12, id="context"),
-        pytest.param(TemplateState.OPTIONAL, 13, id="optional"),
+        (TemplateState.UNUSED, 10),
+        (TemplateState.MISSING, 12),
+        (TemplateState.USED, 9),
+        (TemplateState.CONTEXT, 12),
+        (TemplateState.OPTIONAL, 13),
     ],
+    ids=ids,
 )
 def test_TemplateState_rich_measure(
     console: Console, state: TemplateState, size: int
@@ -301,15 +311,10 @@ def test_parse_args(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "path,raises",
     [
-        *[
-            pytest.param(path, False, id=path.name)
-            for path in (CONFIGS / "valid").iterdir()
-        ],
-        *[
-            pytest.param(path, True, id=path.name)
-            for path in (CONFIGS / "invalid").iterdir()
-        ],
+        *[(path, False) for path in (CONFIGS / "valid").iterdir()],
+        *[(path, True) for path in (CONFIGS / "invalid").iterdir()],
     ],
+    ids=ids,
 )
 def test_read_config(path: Path, raises: bool) -> None:
     with pytest.raises(ValidationError) if raises else nullcontext():
@@ -317,25 +322,22 @@ def test_read_config(path: Path, raises: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    "config,raises",
+    "path,config,raises",
     [
-        *[
-            pytest.param(
-                yaml.load(path.read_text(), Loader=yaml.SafeLoader), False, id=path.name
-            )
-            for path in (CONFIGS / "valid").iterdir()
-        ],
-        *[
-            pytest.param(
-                yaml.load(path.read_text(), Loader=yaml.SafeLoader), True, id=path.name
-            )
-            for path in (CONFIGS / "inconsistent").iterdir()
-        ],
-        pytest.param({"org/repo": [1]}, True, id="cannot parse number"),
-        pytest.param({"org/repo": [True]}, True, id="cannot parse bool"),
+        *[(path, None, False) for path in (CONFIGS / "valid").iterdir()],
+        *[(path, None, True) for path in (CONFIGS / "inconsistent").iterdir()],
+        pytest.param(None, {"org/repo": [1]}, True, id="cannot parse number"),
+        pytest.param(None, {"org/repo": [True]}, True, id="cannot parse bool"),
     ],
+    ids=ids,
 )
-def test_parse_config(config: dict, raises: bool) -> None:
+def test_parse_config(path: Path | None, config: dict | None, raises: bool) -> None:
+    # read config from path
+    if path:
+        config = yaml.load(path.read_text(), Loader=yaml.SafeLoader)
+    # either path or config must be provided
+    assert config is not None
+
     for repo, files in config.items():
         for file in files:
             with pytest.raises(ActionError) if raises else nullcontext():
