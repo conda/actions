@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
+  pytest:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
@@ -46,3 +46,56 @@ jobs:
         uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v5.1.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  read-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Read Remote JSON
+        id: json
+        uses: ./read-file
+        with:
+          path: https://raw.githubusercontent.com/conda/actions/refs/heads/${{ github.ref }}/read-file/data/json.json
+          parser: json
+
+      - name: Read Local YAML
+        id: yaml
+        uses: ./read-file
+        with:
+          path: ./read-file/data/yaml.yaml
+          parser: yaml
+
+      - name: Test
+        shell: python
+        run: |
+          assert "${{ steps.json.outputs.content }}" == "${{ steps.yaml.outputs.content }}"
+          assert "${{ fromJSON(steps.json.outputs.content)['foo'] }}" == "${{ fromJSON(steps.yaml.outputs.content)['foo'] }}"
+
+  # required check
+  analyze:
+    needs: [pytest, read-file]
+    if: '!cancelled()'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine Success
+        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
+        id: alls-green
+        with:
+          jobs: ${{ toJSON(needs) }}
+
+      - name: Checkout our source
+        if: always() && github.event_name != 'pull_request' && steps.alls-green.outputs.result == 'failure'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Report failures
+        if: always() && github.event_name != 'pull_request' && steps.alls-green.outputs.result == 'failure'
+        uses: JasonEtco/create-an-issue@1b14a70e4d8dc185e5cc76d3bec9eab20257b2c5 # v2.9.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.AUTO_REPORT_TEST_FAILURE }}
+          RUN_ID: ${{ github.run_id }}
+          TITLE: 🤖 Tests Failed
+        with:
+          filename: .github/TEST_FAILURE_REPORT_TEMPLATE.md
+          update_existing: false
