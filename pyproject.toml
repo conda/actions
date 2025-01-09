@@ -6,7 +6,10 @@ skip = '.git'
 exclude_also = ["if TYPE_CHECKING:"]
 
 [tool.coverage.run]
-omit = ["**/test_*.py"]
+omit = [
+  "**/test_*.py",
+  'if __name__ == "__main__":',
+]
 
 [tool.pytest.ini_options]
 addopts = [
@@ -21,7 +24,6 @@ addopts = [
   "--tb=native",
   "-vv",
 ]
-testpaths = ["**/"]
 
 [tool.ruff]
 target-version = "py39"
@@ -42,4 +44,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["combine_durations", "template_files"]
+known-first-party = [
+  "combine_durations",
+  "template_files",
+]
