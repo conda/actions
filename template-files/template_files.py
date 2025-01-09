@@ -328,7 +328,8 @@ def remove_file(dst: Path) -> int:
     except FileNotFoundError:
         # FileNotFoundError: dst does not exist
         print(f"* :warning-emoji: `{dst}` already removed", indent=INDENT)
-    except PermissionError as err:
+    except (IsADirectoryError, PermissionError) as err:
+        # IsADirectoryError: dst is a directory
         # PermissionError: not possible to remove dst
         perror(f"* :cross_mark: Failed to remove `{dst}`: {err}", indent=INDENT)
         return 1
