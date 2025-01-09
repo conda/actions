@@ -81,8 +81,8 @@ jobs:
       - name: Test
         shell: python
         run: |
-          assert "${{ steps.json.outputs.content }}" == "${{ steps.yaml.outputs.content }}"
-          assert "${{ fromJSON(steps.json.outputs.content)['foo'] }}" == "${{ fromJSON(steps.yaml.outputs.content)['foo'] }}"
+          assert '''${{ steps.json.outputs.content }}''' == '''${{ steps.yaml.outputs.content }}'''
+          assert '''${{ fromJSON(steps.json.outputs.content)['foo'] }}''' == '''${{ fromJSON(steps.yaml.outputs.content)['foo'] }}'''
 
   # required check
   analyze:
