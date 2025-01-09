@@ -110,7 +110,7 @@ runs:
       if: steps.detect-signature.outputs.signed == 'false'
       shell: bash
       run: >
-        python ${{ github.action_path }}/action.py
+        python ${{ github.action_path }}/check_cla.py
         ${{ inputs.path }}
         --id=${{ steps.detect-contributor.outputs.id }}
         --login=${{ steps.detect-contributor.outputs.login }}
