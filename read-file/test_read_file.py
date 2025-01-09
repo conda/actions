@@ -67,7 +67,7 @@ def test_server() -> Iterator[ThreadingHTTPServer]:
     server.shutdown()
 
 
-def test_parse_args_file(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_parse_args_file() -> None:
     # file is required
     with pytest.raises(SystemExit):
         assert parse_args([])
