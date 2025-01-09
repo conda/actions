@@ -124,7 +124,7 @@ def test_read_file(
         content = (DATA / path).read_text()
 
     with pytest.raises(FileNotFoundError) if raises else nullcontext():
-        uri = f"{DATA if source == "local" else test_server}/{path}"
+        uri = f"{DATA if source == 'local' else test_server}/{path}"
         assert read_file(uri, default) == content
 
 
