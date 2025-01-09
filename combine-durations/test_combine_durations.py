@@ -29,8 +29,8 @@ def test_validate_dir(tmp_path: Path) -> None:
         tmp_path.chmod(stat.st_mode)
 
     # missing
-    assert validate_dir(path := tmp_path / "missing", writable=False) == path
-    assert validate_dir(path := tmp_path / "missing", writable=True) == path
+    assert validate_dir(path := tmp_path / "missing1", writable=False) == path
+    assert validate_dir(path := tmp_path / "missing2", writable=True) == path
 
     # file
     (path := tmp_path / "file").touch()
