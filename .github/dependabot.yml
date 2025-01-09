@@ -16,3 +16,7 @@ updates:
     directory: /set-commit-status
     schedule:
       interval: weekly
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly

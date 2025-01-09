@@ -1,3 +1,50 @@
 [tool.codespell]
 # see https://github.com/codespell-project/codespell#using-a-config-file
 skip = '.git'
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:"]
+
+[tool.coverage.run]
+omit = [
+  "**/test_*.py",
+  'if __name__ == "__main__":',
+]
+
+[tool.pytest.ini_options]
+addopts = [
+  "--color=yes",
+  "--cov=combine-durations",
+  "--cov=template-files",
+  "--cov-append",
+  "--cov-branch",
+  "--cov-report=term-missing",  # print summary table to screen
+  "--cov-report=xml",  # for codecov/codecov-action upload
+  "--strict-markers",
+  "--tb=native",
+  "-vv",
+]
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+# see https://docs.astral.sh/ruff/rules/
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "FA",  # flake8-future-annotations
+  "I",  # isort
+  "ISC",  # flake8-implicit-str-concat
+  "RUF100",  # Unused noqa directive
+  "T10",  # flake8-debugger
+  "TCH",  # flake8-type-checking
+  "UP",  # pyupgrade
+  "W",  # pycodestyle warnings
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+  "combine_durations",
+  "template_files",
+]

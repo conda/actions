@@ -1,0 +1,75 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+
+  workflow_dispatch:
+
+  schedule:
+    # https://crontab.guru/#15_14_*_*_*
+    - cron: 15 14 * * *
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Cache Pip
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.cache/pip
+          # invalidate the cache anytime a requirements.txt changes
+          key: ${{ github.workflow }}-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Setup Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: '>=3.9'
+
+      - name: Install Dependencies
+        run: pip install --quiet -r requirements.txt -r combine-durations/requirements.txt -r template-files/requirements.txt
+
+      - name: Run Tests
+        run: pytest
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v5.1.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # required check
+  analyze:
+    needs: [pytest]
+    if: '!cancelled()'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine Success
+        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
+        id: alls-green
+        with:
+          jobs: ${{ toJSON(needs) }}
+
+      - name: Checkout our source
+        if: always() && github.event_name != 'pull_request' && steps.alls-green.outputs.result == 'failure'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Report failures
+        if: always() && github.event_name != 'pull_request' && steps.alls-green.outputs.result == 'failure'
+        uses: JasonEtco/create-an-issue@1b14a70e4d8dc185e5cc76d3bec9eab20257b2c5 # v2.9.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.AUTO_REPORT_TEST_FAILURE }}
+          RUN_ID: ${{ github.run_id }}
+          TITLE: 🤖 Tests Failed
+        with:
+          filename: .github/TEST_FAILURE_REPORT_TEMPLATE.md
+          update_existing: true
