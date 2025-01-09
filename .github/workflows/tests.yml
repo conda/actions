@@ -78,7 +78,12 @@ jobs:
           path: ./read-file/data/yaml.yaml
           parser: yaml
 
-      - name: Test
+      - name: Setup Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: '>=3.9'
+
+      - name: Run Tests
         shell: python
         run: |
           assert '''${{ steps.json.outputs.content }}''' == '''${{ steps.yaml.outputs.content }}'''
