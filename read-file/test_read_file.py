@@ -16,12 +16,12 @@ from read_file import dump_output, get_output, parse_args, parse_content, read_f
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from typing import Literal
+    from typing import Final, Literal
 
     from pytest import MonkeyPatch
 
 
-DATA = Path(__file__).parent / "data"
+DATA: Final = Path(__file__).parent / "data"
 
 
 @pytest.fixture(scope="session")
