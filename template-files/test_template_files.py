@@ -41,16 +41,16 @@ from template_files import (
 )
 
 if TYPE_CHECKING:
-    from typing import Any
+    from typing import Any, Final
 
     from pytest import CaptureFixture, MonkeyPatch
     from pytest_mocker import MockerFixture
 
 
-ON_LINUX = sys.platform == "linux"
-DATA = Path(__file__).parent / "data"
-CONFIGS = DATA / "configs"
-UPSTREAM = DATA / "upstream"
+ON_LINUX: Final = sys.platform == "linux"
+DATA: Final = Path(__file__).parent / "data"
+CONFIGS: Final = DATA / "configs"
+UPSTREAM: Final = DATA / "upstream"
 
 
 @pytest.fixture
