@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
 
   schedule:
-    # https://crontab.guru/#30_*_*_*_*
-    - cron: 30 * * * *
+    # https://crontab.guru/#45_*_*_*_*
+    - cron: 45 * * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
