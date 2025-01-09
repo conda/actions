@@ -25,7 +25,6 @@ addopts = [
   "--tb=native",
   "-vv",
 ]
-testpaths = ["**/"]
 
 [tool.ruff]
 target-version = "py39"
