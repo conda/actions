@@ -462,8 +462,8 @@ def test_dump_summary(
 ) -> None:
     (step_summary := tmp_path / "step_summary").write_text("text to overwrite\n")
     (output := tmp_path / "output").write_text(old := "text to append\n")
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", step_summary)
-    monkeypatch.setenv("GITHUB_OUTPUT", output)
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(step_summary))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
 
     print(text := uuid4().hex, console=console)
     perror(error := uuid4().hex, console=console)
