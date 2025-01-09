@@ -159,7 +159,7 @@ def test_dump_output(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dump_output("noop")
 
     # set GITHUB_OUTPUT and check for content
-    monkeypatch.setenv("GITHUB_OUTPUT", output := tmp_path / "output")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output := tmp_path / "output"))
 
     dump_output("content")
     assert output.read_text() == (content := get_output("content"))
