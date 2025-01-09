@@ -61,8 +61,14 @@ jobs:
       - name: Read Remote JSON
         id: json
         uses: ./read-file
+        env:
+          # `full_name` is the org/repo slug, extracting from `head` in case PR was opened via a fork
+          FULL_NAME: ${{ github.event.pull_request.head.repo.full_name || github.event.repository.full_name }}
+          # `head_ref` is the pull_request branch
+          # `ref_name` is the push/workflow_dispatch/schedule branch
+          REF: ${{ github.head_ref || github.ref_name }}
         with:
-          path: https://raw.githubusercontent.com/conda/actions/refs/heads/${{ github.ref }}/read-file/data/json.json
+          path: https://raw.githubusercontent.com/${{ env.FULL_NAME }}/refs/heads/${{ env.REF }}/read-file/data/json.json
           parser: json
 
       - name: Read Local YAML
