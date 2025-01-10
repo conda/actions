@@ -12,6 +12,7 @@ import pytest
 import yaml
 from jinja2.environment import Environment
 from jinja2.exceptions import TemplateNotFound
+from jinja2.loaders import FileSystemLoader
 from jinja2.runtime import DebugUndefined, StrictUndefined, Undefined
 from jinja2.utils import missing
 from jsonschema.exceptions import ValidationError
@@ -23,7 +24,7 @@ from template_files import (
     ActionError,
     AuditContext,
     AuditEnvironment,
-    AuditFileSystemLoader,
+    AuditStubs,
     LocalRepository,
     TemplateState,
     dump_summary,
@@ -197,16 +198,16 @@ def test_TemplateState_rich_measure(
     assert state.__rich_measure__(console, console.options) == Measurement(size, size)
 
 
-def test_AuditFileSystemLoader(mocker: MockerFixture) -> None:
+def test_AuditStubs(mocker: MockerFixture) -> None:
     environment = Environment()
-    loader = AuditFileSystemLoader(UPSTREAM)
+    cache = {(None, "stub"): "placeholder"}
+    audit = AuditStubs(environment, cache)
 
-    count = mocker.spy(loader, "count")
+    count = mocker.spy(audit, "count")
 
-    assert loader.get_source(environment, "stub")
+    assert audit.get((None, "stub")) == "placeholder"
     assert count.call_count == 1
-    with pytest.raises(TemplateNotFound):
-        loader.get_source(environment, "missing")
+    assert audit.get((None, "missing")) is None
     assert count.call_count == 2
 
 
@@ -224,8 +225,7 @@ def test_AuditContext(mocker: MockerFixture) -> None:
 
 
 def test_AuditEnvironment() -> None:
-    environment = AuditEnvironment()
-    loader = AuditFileSystemLoader(UPSTREAM)
+    environment = AuditEnvironment(loader=FileSystemLoader(UPSTREAM))
     context = AuditContext(environment, {}, None, {})
     context.vars["variable"] = (value := uuid4().hex)
 
@@ -238,10 +238,10 @@ def test_AuditEnvironment() -> None:
         assert environment.variables[current] is variables
 
         for _ in range(5):
-            assert loader.get_source(environment, "stub")
+            assert environment.get_template("stub")
         for _ in range(3):
             with pytest.raises(TemplateNotFound):
-                loader.get_source(environment, "missing")
+                environment.get_template("missing")
         assert context.resolve_or_missing("variable") == value
         assert context.resolve_or_missing("missing") == missing
 
@@ -379,8 +379,7 @@ def test_remove_file(tmp_path: Path, capsys: CaptureFixture) -> None:
 
 
 def test_template_file(tmp_path: Path, capsys: CaptureFixture) -> None:
-    loader = AuditFileSystemLoader(UPSTREAM)
-    environment = AuditEnvironment(loader=loader)
+    environment = AuditEnvironment(loader=FileSystemLoader(UPSTREAM))
     current = LocalRepository(tmp_path)
     upstream = LocalRepository(UPSTREAM)
 
