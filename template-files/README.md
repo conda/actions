@@ -3,27 +3,39 @@
 A composite GitHub Action to template (or copy) files from other repositories and
 commits them to the specified PR.
 
-## GitHub Action Usage
+## Action Inputs
+
+| Name | Description | Default |
+|------|-------------|---------|
+| `config` | Configuration path defining what files to template/copy. | `.github/template-files/config.yml` |
+| `stubs` | Path to where stub files are located in the current repository. | `.github/template-files/templates/` |
+| `token` | GitHub token to comment, label, and modify the commit status in the current repository.<br>Fine-grained PAT: `pull_request: write`; `statuses: write` | `${{ github.token }}` |
+
+## Action Outputs
+
+| Name | Description |
+|------|-------------|
+| `summary` | Summary of the files that were templated/copied. |
+
+## Sample Workflows
 
 In your GitHub repository include this action in your workflows:
 
 ```yaml
-- uses: conda/actions/template-files
-  with:
-    # [optional]
-    # the path to the configuration file
-    config: .github/template-files/config.yml
+name: Template Files
 
-    # [optional]
-    # the path to the template stubs
-    stubs: .github/template-files/templates/
+on:
+  workflow_dispatch:
 
-    # [optional]
-    # the GitHub token with API access
-    token: ${{ github.token }}
+jobs:
+  template:
+    steps:
+      - uses: conda/actions/template-files
+        with:
+          token: ...
 ```
 
-Define what files to template in a configuration file, e.g., `.github/templates/config.yml`:
+## Sample Config (e.g., `.github/templates/config.yml`)
 
 ```yaml
 user/repo:

@@ -15,8 +15,8 @@ inputs:
     default: .github/template-files/templates/
   token:
     description: >-
-      A token with ability to comment, label, and modify the commit status
-      (`pull_request: write` and `statuses: write` for fine-grained PAT; `repo` for classic PAT)
+      GitHub token to comment, label, and modify the commit status in the current repository.
+      Fine-grained PAT: `pull_request: write`; `statuses: write`
     default: ${{ github.token }}
 outputs:
   summary:
