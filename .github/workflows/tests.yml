@@ -60,9 +60,7 @@ jobs:
           stubs: ./template-files/data/templates
 
       - name: Run Tests
-        run: |
-          cmp --silent template-files/data/expected/file1.txt generated/file1.txt
-          cmp --silent template-files/data/expected/file2.txt generated/file2.txt
+        run: diff --recursive .github_cache/template-files template-files/data/expected
 
   # required check
   analyze:

@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 import yaml
 from github import Auth, Github, UnknownObjectException
 from jinja2.environment import Environment
-from jinja2.exceptions import TemplateNotFound
 from jinja2.loaders import FileSystemLoader
 from jinja2.runtime import Context, Undefined
 from jinja2.utils import missing
@@ -25,18 +24,22 @@ from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
 from rich.padding import Padding
 from rich.table import Table
+from wrapt import ObjectProxy
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
-    from typing import Any, Callable
+    import weakref
+    from collections.abc import Iterator, MutableMapping, Sequence
+    from typing import Any
 
     from github.Repository import Repository
+    from jinja2.environment import Template
+    from jinja2.loaders import BaseLoader
     from jinja2.style import Style
 
     AuditCurrent = tuple[str, str, str]
     AuditCounter = dict[str, int]
     AuditRegister = dict[str, Any]
-    from typing import Any
+    StubsCacheKey = tuple[weakref.ref[BaseLoader], str]
 
 
 INDENT = 4
@@ -125,31 +128,52 @@ class TemplateState(Enum):
         return Measurement(size, size)
 
 
-class AuditFileSystemLoader(FileSystemLoader):
-    def count(self, environment: Environment, key: str, increment: int) -> None:
+class AuditStubs(ObjectProxy):
+    # see jinja2.environment.Environment._load_template
+    def __init__(
+        self, environment: Environment, cache: MutableMapping[StubsCacheKey, Template]
+    ) -> None:
+        super().__init__(cache)
+        self._self_environment = environment
+
+    @property
+    def environment(self) -> Environment:
+        return self._self_environment
+
+    def count(
+        self,
+        key: str,
+        increment: int | None = None,
+        *,
+        hit: bool = False,
+    ) -> None:
         # count template usage
         if None not in (
-            current := getattr(environment, "current", None),
-            stubs := getattr(environment, "stubs", None),
+            current := getattr(self.environment, "current", None),
+            stubs := getattr(self.environment, "stubs", None),
         ):
-            stubs[current][key] += increment
+            if increment is not None:
+                stubs[current][key] += increment
+            elif hit:
+                # check cache was previously a bust
+                assert stubs[current][key] == -1
+                # override cache bust with a hit
+                stubs[current][key] = +1
 
-    def get_source(
-        self,
-        environment: Environment,
-        stub: str,
-    ) -> tuple[str, str, Callable[[], bool]]:
+    def get(self, key: StubsCacheKey, default: Any = None) -> Template:
         try:
-            # delegate to FileSystemLoader
-            value = super().get_source(environment, stub)
-        except TemplateNotFound:
-            # TemplateNotFound: template does not exist, mark it as missing
-            self.count(environment, stub, -1)
-            raise
+            value = self.__wrapped__[key]
+        except KeyError:
+            # KeyError: key does not exist
+            self.count(key[-1], -1)
+            return default
         else:
-            # template found, mark it as used
-            self.count(environment, stub, +1)
+            self.count(key[-1], +1)
             return value
+
+    def __setitem__(self, key: StubsCacheKey, value: Template) -> None:
+        self.__wrapped__[key] = value
+        self.count(key[-1], hit=True)
 
 
 class AuditContext(Context):
@@ -181,13 +205,14 @@ class AuditEnvironment(Environment):
         super().__init__(*args, **kwargs)
         self.stubs = defaultdict(lambda: defaultdict(int))
         self.variables = defaultdict(dict)
+        self.cache = AuditStubs(self, self.cache)
 
     @contextmanager
     def audit(
         self, file: str, src: str, dst: str
     ) -> Iterator[tuple[AuditCounter, AuditRegister]]:
         class AuditUndefined(Undefined):
-            # TODO: do we need this?
+            # this is used to distinguish between optional and missing context values
             def __str__(slf) -> str:
                 # only store undefined variables, ignore missing attributes/elements
                 if slf._undefined_obj is missing and self.current:
@@ -528,7 +553,7 @@ def main():
     config = read_config(args.config)
 
     # initialize stub loader
-    loader = AuditFileSystemLoader(args.stubs)
+    loader = FileSystemLoader(args.stubs)
 
     # initialize Jinja environment
     env = AuditEnvironment(

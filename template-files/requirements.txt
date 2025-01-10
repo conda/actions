@@ -3,3 +3,4 @@ jsonschema
 pygithub
 pyyaml
 rich
+wrapt
