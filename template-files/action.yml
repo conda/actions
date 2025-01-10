@@ -25,17 +25,25 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+    # `hashFiles` only works on files within the working directory, since `requirements.txt`
+    # is not in the working directory we need to manually compute the SHA256 hash
+    - name: Compute Hash
+      id: hash
+      shell: bash
+      run: echo hash=$(sha256sum ${{ github.action_path }}/requirements.txt | awk '{print $1}') >> $GITHUB_OUTPUT
+
+    - name: Pip Cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
         path: ~/.cache/pip
-        # invalidate the cache anytime a workflow changes
-        key: ${{ github.workflow }}-${{ hashFiles('.github/workflows/*') }}
+        key: ${{ github.workflow }}-template-files-${{ steps.hash.outputs.hash }}
 
-    - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+    - name: Setup Python
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
         python-version: '>=3.9'
 
-    - name: Install Dependencies
+    - name: Pip Install
       shell: bash
       run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
 
