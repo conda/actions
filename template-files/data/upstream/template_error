@@ -1,1 +1,1 @@
-{{ include 'missing.stub' }}
+{% include 'missing.stub' %}

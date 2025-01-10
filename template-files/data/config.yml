@@ -1,0 +1,7 @@
+./templates:
+  - src: file1.txt
+    dst: generated/file1.txt
+  - src: file2.txt
+    dst: generated/file2.txt
+    with:
+      variable: value

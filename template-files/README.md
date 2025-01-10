@@ -9,7 +9,7 @@ commits them to the specified PR.
 |------|-------------|---------|
 | `config` | Configuration path defining what files to template/copy. | `.github/template-files/config.yml` |
 | `stubs` | Path to where stub files are located in the current repository. | `.github/template-files/templates/` |
-| `token` | GitHub token to comment, label, and modify the commit status in the current repository.<br>Fine-grained PAT: `pull_request: write`; `statuses: write` | `${{ github.token }}` |
+| `token` | GitHub token to fetch remote files from repositories (no extra permissions are needed to access public repositories). | `${{ github.token }}` |
 
 ## Action Outputs
 
