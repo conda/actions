@@ -12,7 +12,7 @@ inputs:
   parser:
     description: Parser to use for the file. Choose json, yaml, or null (to leave it as plain text).
   default:
-    description: Default value to return if the file is not found.
+    description: File contents to use if the file is not found.
 outputs:
   content:
     description: File contents as a JSON object (if a parser is specified) or the raw text.

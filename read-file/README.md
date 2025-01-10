@@ -2,40 +2,51 @@
 
 A composite GitHub Action to read a local file or remote URL with an optional JSON/YAML parser.
 
-## GitHub Action Usage
+## Action Inputs
 
-In your GitHub repository include this action in your workflows:
+| Name | Description | Default |
+|------|-------------|---------|
+| `path` | Local path or remote URL to the file to read. | **required** |
+| `parser` | Parser to use for the file. Choose json, yaml, or null (to leave it as plain text). | **optional** |
+| `default` | File contents to use if the file is not found. | **optional** |
+
+## Action Outputs
+
+| Name | Description |
+|------|-------------|
+| `content` | File contents as a JSON object (if a parser is specified) or the raw text. |
+
+## Sample Workflows
 
 ```yaml
-- id: read_json
-  uses: conda/actions/read-file
-  with:
-    # [required]
-    # the local path or remote URL to the file to read
-    path: path/to/json.json
-    # path: https://raw.githubusercontent.com/owner/repo/ref/path/to/json.json
+name: Read File
 
-    # [optional]
-    # the parser to use for the file
-    parser: json
+on:
+  pull_request:
 
-- id: read_yaml
-  uses: conda/actions/read-file
-  with:
-    path: path/to/yaml.yaml
-    # path: https://raw.githubusercontent.com/owner/repo/ref/path/to/yaml.yaml
+jobs:
+  read:
+    steps:
+      - id: read_json
+        uses: conda/actions/read-file
+        with:
+          path: https://raw.githubusercontent.com/owner/repo/ref/path/to/json.json
+          default: '{}'
+          parser: json
 
-    parser: yaml
+      - id: read_yaml
+        uses: conda/actions/read-file
+        with:
+          path: https://raw.githubusercontent.com/owner/repo/ref/path/to/yaml.yaml
+          default: '{}'
+          parser: yaml
 
-  - id: read_text
-  uses: conda/actions/read-file
-  with:
-    path: path/to/text.text
-    # path: https://raw.githubusercontent.com/owner/repo/ref/path/to/text.text
+      - id: read_text
+        uses: conda/actions/read-file
+        with:
+          path: path/to/text.text
 
-    parser: null
-
-- run: echo "${{ fromJSON(steps.read_file.outputs.content)['key'] }}"
-- run: echo "${{ fromJSON(steps.read_file.outputs.content)['key'] }}"
-- run: echo "${{ steps.read_file.outputs.content }}"
+      - run: echo "${{ fromJSON(steps.read_json.outputs.content)['key'] }}"
+      - run: echo "${{ fromJSON(steps.read_yaml.outputs.content)['key'] }}"
+      - run: echo "${{ steps.read_file.outputs.content }}"
 ```
