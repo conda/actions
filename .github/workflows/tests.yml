@@ -71,12 +71,19 @@ jobs:
       - name: Run Tests
         run: diff --recursive .github_cache/template-files template-files/data/expected
 
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
+      - name: Filter Changes
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
         with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
+          filters: |
+            code:
+              - 'template-files/**'
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && steps.filter.outputs.code == 'true'
+        uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31  # v2.9.0
+        with:
+          message: |
             ### Template Success
             ${{ steps.templates-success.outputs.summary }}
 
