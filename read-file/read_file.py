@@ -84,8 +84,8 @@ def dump_output(content: str) -> None:
             fh.write(get_output(content))
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    args = parse_args(argv)
+def main() -> None:
+    args = parse_args()
 
     content = read_file(args.file, args.default)
     if args.parser:
