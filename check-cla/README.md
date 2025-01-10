@@ -7,9 +7,9 @@ conda contributor license agreement.
 
 | Name | Description | Default |
 | ---- | ----------- | ------- |
-| `label` | Label to apply to contributor's PR once the CLA is signed. | cla-signed |
-| `repository` | Repository in which to create PR adding CLA signature. | conda/cla |
-| `path` | Path to the CLA signees file within the provided `repository`. | .cla-signers |
+| `label` | Label to apply to contributor's PR once the CLA is signed. | `cla-signed` |
+| `repository` | Repository in which to create PR adding CLA signature. | `conda/cla` |
+| `path` | Path to the CLA signees file within the provided `repository`. | `.cla-signers` |
 | `magic-command` | Magic word to trigger the action via a comment. | `@conda-bot check` |
 | `author` | Git-format author to use for the CLA commits. | @conda-bot |
 | `token` | GitHub token to comment on PRs, change PR labels, and modify the commit status in the current repository.<br>Fine-grained PAT: `pull_request: write; statuses: write` | `${{ github.token }}` |
@@ -22,18 +22,10 @@ conda contributor license agreement.
 name: Check CLA
 
 on:
-  issue_comment:
-    types: [created]
   pull_request_target:
 
 jobs:
   check:
-    if: >-
-      (
-        github.event.comment.body == '@conda-bot check'
-        && github.event.issue.pull_request
-        || github.event_name == 'pull_request_target'
-      )
     steps:
       - uses: conda/actions/check-cla
         with:
