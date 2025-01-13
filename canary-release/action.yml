@@ -37,11 +37,13 @@ runs:
   using: composite
   steps:
     - uses: conda-incubator/setup-miniconda@d2e6a045a86077fb6cad6f5adf368e9076ddaa8d
+      with:
+        python-version: 3.11
 
     - name: Set output variables
       id: vars
-      shell: bash -l {0}
-      run: echo "RUN_URL=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+      shell: bash
+      run: echo "run_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_OUTPUT
 
     - name: Create comment if there is no status update
       uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31
@@ -49,7 +51,7 @@ runs:
       with:
         message: |
           # ${{ inputs.comment-headline }}
-          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.RUN_URL }}) by @${{ github.actor }}!
+          > The workflow for building and uploading a canary release for ${{ inputs.package-name }} with the label `${{ inputs.anaconda-org-label }}` in channel `${{ inputs.anaconda-org-channel }}` [was started](${{ steps.vars.outputs.run_url }}) by @${{ github.actor }}!
 
           Once it's done, use this command to try it out in a new conda environment:
 
@@ -59,44 +61,57 @@ runs:
 
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
-    - name: Build & upload package
-      id: build
+    - name: Conda Install
+      shell: bash -l {0}
+      run: >
+        conda install
+        --yes
+        conda-build
+        anaconda-client
+        ${{ inputs.conda-build-dependencies }}
+
+    - name: Conda Install Git
+      shell: bash -l {0}
+      # git needs to be installed after conda-build
+      # see https://github.com/conda/conda/issues/11758
+      # see https://github.com/conda/actions/pull/47
+      run: conda install --yes git
+
+    - name: Conda Info
+      shell: bash -l {0}
+      run: conda info --verbose
+
+    - name: Conda Config
+      shell: bash -l {0}
+      run: conda config --show-sources
+
+    - name: Conda List
+      shell: bash -l {0}
+      run: conda list --show-channel-urls
+
+    - name: Build Package
+      shell: bash -l {0}
+      # use conda-build installed into test env, not base env
+      run: conda-build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
+
+    - name: Upload Package
+      shell: bash -l {0}
+      run: >
+        anaconda
+        --token="${{ inputs.anaconda-org-token }}"
+        upload
+        --force
+        --register
+        --no-progress
+        --user="${{ inputs.anaconda-org-channel }}"
+        --label="${{ inputs.anaconda-org-label }}"
+        ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2
+
+    - name: Upload Info
       shell: bash -l {0}
       run: |
-        echo "::group::Setting up environment"
-        set -euo pipefail
-        conda activate
-        conda update --yes --quiet conda
-        conda install --yes --quiet conda-build anaconda-client ${{ inputs.conda-build-dependencies }}
-        # git needs to be installed after conda-build
-        # see https://github.com/conda/conda/issues/11758
-        # see https://github.com/conda/actions/pull/47
-        conda install --yes --quiet git
-        echo "::endgroup::"
-
-        echo "::group::Debugging information"
-        conda info
-        conda config --show-sources
-        conda list
-        echo "::endgroup::"
-
-        echo "::group::Building package"
-        conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
-        echo "::endgroup::"
-
-        echo "::group::Uploading package"
-        anaconda \
-          --token="${{ inputs.anaconda-org-token }}" \
-          upload \
-          --force \
-          --register \
-          --no-progress \
-          --user="${{ inputs.anaconda-org-channel }}" \
-          --label="${{ inputs.anaconda-org-label }}" \
-          ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2
         echo "Uploaded the following files:"
         basename -a ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.tar.bz2
-        echo "::endgroup::"
 
         echo "Use this command to try out the build:"
         echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
@@ -107,7 +122,7 @@ runs:
       with:
         append: true
         message: |
-          - build [${{ github.run_id }}](${{ steps.vars.outputs.RUN_URL }}) succeeded on ${{ runner.os }} (${{ runner.arch }})
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run_url }}) succeeded on ${{ runner.os }} (${{ runner.arch }})
         GITHUB_TOKEN: ${{ inputs.comment-token }}
 
     - name: Leave comment after build
@@ -116,5 +131,5 @@ runs:
       with:
         append: true
         message: |
-          - build [${{ github.run_id }}](${{ steps.vars.outputs.RUN_URL }}) failed on ${{ runner.os }} (${{ runner.arch }})
+          - build [${{ github.run_id }}](${{ steps.vars.outputs.run_url }}) failed on ${{ runner.os }} (${{ runner.arch }})
         GITHUB_TOKEN: ${{ inputs.comment-token }}
