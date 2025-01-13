@@ -23,6 +23,9 @@ inputs:
   anaconda-org-token:
     description: Upload token for anaconda.org
     required: true
+  conda-build-dependencies:
+    description: List of conda packages to install before building the package.
+    required: false
   conda-build-arguments:
     description: Command line arguments for conda-build, inserted before recipe path with no processing.
     required: false
@@ -64,7 +67,7 @@ runs:
         set -euo pipefail
         conda activate
         conda update --yes --quiet conda
-        conda install --yes --quiet conda-build anaconda-client
+        conda install --yes --quiet conda-build anaconda-client ${{ inputs.conda-build-dependencies }}
         # git needs to be installed after conda-build
         # see https://github.com/conda/conda/issues/11758
         # see https://github.com/conda/actions/pull/47
