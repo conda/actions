@@ -77,6 +77,10 @@ runs:
         conda list
         echo "::endgroup::"
 
+        echo "::group:Clean cache"
+        conda clean --all --yes
+        echo "::endgroup::"
+
         echo "::group::Building package"
         conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
         echo "::endgroup::"
