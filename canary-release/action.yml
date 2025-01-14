@@ -39,6 +39,7 @@ runs:
     - uses: conda-incubator/setup-miniconda@d2e6a045a86077fb6cad6f5adf368e9076ddaa8d
       with:
         python-version: 3.11
+        pkgs-dirs: ${{ runner.temp }}/other-pkgs-dir
 
     - name: Set output variables
       id: vars
