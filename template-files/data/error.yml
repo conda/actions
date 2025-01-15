@@ -1,0 +1,5 @@
+./templates:
+  - src: file1.txt
+    dst: .github_cache/template-files/error/file1.txt
+  - src: file2.txt
+    dst: .github_cache/template-files/error/file2.txt

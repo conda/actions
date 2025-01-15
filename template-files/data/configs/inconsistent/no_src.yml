@@ -1,0 +1,5 @@
+org/repo:
+  - dst: file.txt
+  - remove: true
+  - with:
+      variable: value

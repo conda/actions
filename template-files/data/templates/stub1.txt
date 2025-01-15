@@ -1,0 +1,5 @@
+# stub1
+
+Nullam blandit nisi non elit efficitur porttitor quis a justo. Sed venenatis, eros quis malesuada aliquet, ligula purus cursus velit, eget efficitur libero ante id ipsum. Aliquam et neque id justo tempus egestas quis ut augue. Curabitur eu sem velit. Phasellus sed nunc ipsum. Sed rhoncus luctus turpis, eu rutrum ipsum dictum nec. Curabitur vulputate dolor non ipsum ultrices, ut ultricies nibh vestibulum. Donec molestie scelerisque interdum. Vestibulum et finibus purus, rhoncus porttitor ligula.
+
+[% include 'stub2.txt' ignore missing -%]

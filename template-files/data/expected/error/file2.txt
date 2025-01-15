@@ -1,0 +1,16 @@
+# file2
+
+This is a template and expects additional context.
+
+| context | value |
+|---|---|
+| variable |  |
+| optional | 12 |
+
+Name finibus augue ac efficitur sodales. Donec facilisis lacus sit amet metus congue aliquam. Proin mollis, sapien sit amet iaculis congue, libero erat volutpat neque, in bibendum lacus massa eget eros. Mauris fringilla turpis id pulvinar ultricies. Cras dictum condimentum mauris sit amet lobortis. Maecenas ultrices in lectus eget tristique. Etiam sollicitudin tempus dolor sit amet tincidunt. Nulla nec mi eget est gravida elementum vitae vitae risus. Nullam eget urna dignissim, sollicitudin massa at, cursus urna.
+
+# stub2
+
+Curabitur metus libero, lacinia nec magna euismod, pellentesque lacinia sem. Nullam tempor vitae ex ut tincidunt. Etiam ullamcorper et nisi at cursus. Praesent ac mauris vel mauris ornare consequat sit amet ut magna. Integer luctus, ante at rhoncus cursus, est erat aliquam magna, et pretium urna felis eget lorem. Etiam tristique, justo viverra cursus congue, quam odio sagittis dolor, quis dictum risus tortor et turpis. Donec arcu urna, dapibus eget metus ac, consequat feugiat velit. Integer aliquet velit quis sollicitudin luctus. Maecenas aliquam arcu non urna maximus hendrerit. Integer porta efficitur blandit. Donec interdum nec metus at iaculis. Donec pellentesque enim turpis. Nulla facilisi. In hac habitasse platea dictumst.
+
+EOF
