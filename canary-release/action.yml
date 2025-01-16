@@ -86,6 +86,7 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Uploading package"
+        shopt -s extglob
         anaconda \
           --token="${{ inputs.anaconda-org-token }}" \
           upload \
@@ -94,9 +95,10 @@ runs:
           --no-progress \
           --user="${{ inputs.anaconda-org-channel }}" \
           --label="${{ inputs.anaconda-org-label }}" \
-          ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*{.tar.bz2,.conda}
+          "./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.(tar.bz2|conda)"
         echo "Uploaded the following files:"
-        basename -a ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*{.tar.bz2,.conda}
+        basename -a "./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*.(tar.bz2|conda)"
+        shopt -u extglob
         echo "::endgroup::"
 
         echo "Use this command to try out the build:"
