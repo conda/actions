@@ -85,6 +85,18 @@ runs:
         conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
         echo "::endgroup::"
 
+        echo "::group::Find packages"
+        PACKAGES=(
+          $(
+            find "./pkgs/${{ inputs.subdir }}" -type f \
+            \( \
+              -name "${{ inputs.package-name }}-*.tar.bz2" -o \
+              -name "${{ inputs.package-name }}-*.conda" \
+            \)
+          )
+        )
+        echo "::endgroup::"
+
         echo "::group::Uploading package"
         anaconda \
           --token="${{ inputs.anaconda-org-token }}" \
@@ -94,9 +106,9 @@ runs:
           --no-progress \
           --user="${{ inputs.anaconda-org-channel }}" \
           --label="${{ inputs.anaconda-org-label }}" \
-          ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*{.tar.bz2,.conda}
+          "${PACKAGES[@]}"
         echo "Uploaded the following files:"
-        basename -a ./pkgs/${{ inputs.subdir }}/${{ inputs.package-name }}-*{.tar.bz2,.conda}
+        basename -a "${PACKAGES[@]}"
         echo "::endgroup::"
 
         echo "Use this command to try out the build:"
