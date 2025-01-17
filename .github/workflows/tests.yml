@@ -47,9 +47,46 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  read-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Read Remote JSON
+        id: json
+        uses: ./read-file
+        env:
+          # `full_name` is the org/repo slug, extracting from `head` in case PR was opened via a fork
+          FULL_NAME: ${{ github.event.pull_request.head.repo.full_name || github.event.repository.full_name }}
+          # `head_ref` is the pull_request branch
+          # `ref_name` is the push/workflow_dispatch/schedule branch
+          REF: ${{ github.head_ref || github.ref_name }}
+        with:
+          path: https://raw.githubusercontent.com/${{ env.FULL_NAME }}/refs/heads/${{ env.REF }}/read-file/data/json.json
+          parser: json
+
+      - name: Read Local YAML
+        id: yaml
+        uses: ./read-file
+        with:
+          path: ./read-file/data/yaml.yaml
+          parser: yaml
+
+      - name: Setup Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: '>=3.9'
+
+      - name: Run Tests
+        shell: python
+        run: |
+          assert '''${{ steps.json.outputs.content }}''' == '''${{ steps.yaml.outputs.content }}'''
+          assert '''${{ fromJSON(steps.json.outputs.content)['foo'] }}''' == '''${{ fromJSON(steps.yaml.outputs.content)['foo'] }}'''
+
   # required check
   analyze:
-    needs: [pytest]
+    needs: [pytest, read-file]
     if: '!cancelled()'
     runs-on: ubuntu-latest
     steps:

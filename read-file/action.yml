@@ -1,0 +1,59 @@
+name: Read File
+description: Read a local file or remote URL.
+author: Anaconda Inc.
+branding:
+  icon: book-open
+  color: green
+
+inputs:
+  path:
+    description: Local path or remote URL to the file to read.
+    required: true
+  parser:
+    description: Parser to use for the file. Choose json, yaml, or null (to leave it as plain text).
+  default:
+    description: File contents to use if the file is not found.
+outputs:
+  content:
+    description: File contents as a JSON object (if a parser is specified) or the raw text.
+    value: ${{ steps.read.outputs.content }}
+
+runs:
+  using: composite
+  steps:
+    # `hashFiles` only works on files within the working directory, since `requirements.txt`
+    # is not in the working directory we need to manually compute the SHA256 hash
+    - name: Compute Hash
+      id: hash
+      shell: bash
+      run: echo hash=$(sha256sum ${{ github.action_path }}/requirements.txt | awk '{print $1}') >> $GITHUB_OUTPUT
+
+    - name: Pip Cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      with:
+        path: ~/.cache/pip
+        key: ${{ github.workflow }}-read-file-${{ steps.hash.outputs.hash }}
+
+    - name: Setup Python
+      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+      with:
+        python-version: '>=3.9'
+
+    - name: Pip Install
+      shell: bash
+      run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
+
+    - name: Pip List
+      shell: bash
+      run: pip list
+
+    - name: Read JSON
+      id: read
+      shell: bash
+      run: >
+        python ${{ github.action_path }}/read_file.py
+        ${{ inputs.path }}
+        ${{ inputs.parser && format('"--parser={0}"', inputs.parser) || '' }}
+        ${{ inputs.default && format('"--default={0}"', inputs.default) || '' }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
