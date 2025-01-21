@@ -99,7 +99,7 @@ runs:
     - name: Create Fork
       id: create-fork
       if: steps.detect-signature.outputs.signed == 'false'
-      uses: conda/actions/create-fork@create-fork
+      uses: conda/actions/create-fork@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
       with:
         repository: ${{ inputs.repository }}
         token: ${{ inputs.fork-token || inputs.pr-token || inputs.token }}
