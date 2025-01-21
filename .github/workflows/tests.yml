@@ -61,7 +61,10 @@ jobs:
           label: cla-test
           repository: conda-sandbox/cla
           contributor-id: ${{ github.event.pull_request.number }}
-          contributor-login: random
+          # NOTE: using a real username here will will trigger GH notifications to that user, we wish
+          # to avoid that, GH restricts certain keywords, 'login' is one of those restricted keywords
+          # and hence is not a real username, https://github.com/login is the login page, not a user
+          contributor-login: login
           commit-status-label: CLA test
           token: ${{ secrets.SANDBOX_CLA_TOKEN }}
           pr-token: ${{ secrets.SANDBOX_CLA_PR_TOKEN }}
