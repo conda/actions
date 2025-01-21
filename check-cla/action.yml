@@ -90,11 +90,13 @@ runs:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
 
+    # cloning upstream (not fork) since main branch is not in sync
     - name: Clone CLA Repository
       if: steps.detect-signature.outputs.signed == 'false'
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         repository: ${{ inputs.repository }}
+        path: .github_cache/actions/cla
 
     - name: Create Fork
       id: create-fork
@@ -124,6 +126,7 @@ runs:
       if: steps.detect-signature.outputs.signed == 'false'
       uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f # v7.0.6
       with:
+        path: .github_cache/actions/cla
         # push to the fork
         branch-token: ${{ inputs.fork-token || inputs.pr-token || inputs.token }}
         push-to-fork: ${{ steps.create-fork.outputs.fork }}
