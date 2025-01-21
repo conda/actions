@@ -47,9 +47,34 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  check-cla:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check CLA
+        uses: ./check-cla
+        with:
+          label: cla-test
+          repository: conda-sandbox/cla
+          contributor-id: ${{ github.event.pull_request.number }}
+          contributor-login: random
+          commit-status-label: CLA test
+          token: ${{ secrets.SANDBOX_CLA_TOKEN }}
+          pr-token: ${{ secrets.SANDBOX_CLA_PR_TOKEN }}
+          fork-token: ${{ secrets.SANDBOX_CLA_FORK_TOKEN }}
+          # GitHub flavored markdown reinvents how paragraphs work, adjoined lines of text are not
+          # concatenated so instead we rely on YAML multi-line + extra newlines
+          comment-blurb: >-
+            > [!WARNING]
+
+            > This is a test of the CLA system. Review for correctness but otherwise ignore this comment.
+
   # required check
   analyze:
-    needs: [pytest]
+    needs: [pytest, check-cla]
     if: '!cancelled()'
     runs-on: ubuntu-latest
     steps:
@@ -57,6 +82,8 @@ jobs:
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         id: alls-green
         with:
+          # permit jobs to be skipped when triggered by a non-pull request event
+          allowed-skips: ${{ toJSON(needs) }}
           jobs: ${{ toJSON(needs) }}
 
       - name: Checkout our source

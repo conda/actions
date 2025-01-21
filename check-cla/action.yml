@@ -31,6 +31,17 @@ inputs:
       GitHub token to create and push to a `repository` fork.
       Fine-grained PAT: `administration: write; contents: write`
     # default: ${{ inputs.pr-token }}
+  contributor-id:
+    description: Contributor ID to check for CLA signature.
+    default: ${{ github.event.pull_request.user.id || github.event.issue.user.id }}
+  contributor-login:
+    description: Contributor login to check for CLA signature.
+    default: ${{ github.event.pull_request.user.login || github.event.issue.user.login }}
+  commit-status-label:
+    description: Commit status label/identifier.
+    default: CLA check
+  comment-blurb:
+    description: Comment to add to PRs for contributors who have not signed the CLA.
 
 runs:
   using: composite
@@ -48,16 +59,9 @@ runs:
       uses: conda/actions/set-commit-status@6e72e0db87e72f0020e493aeb02f864363bd9258 # v24.11.1
       with:
         token: ${{ inputs.token }}
-        context: CLA check
+        context: ${{ inputs.commit-status-label }}
         description: Checking conda CLA...
         state: pending
-
-    - name: Detect Contributor
-      id: detect-contributor
-      shell: bash
-      run: |
-        echo id=${{ github.event.pull_request.user.id || github.event.issue.user.id }} >> $GITHUB_OUTPUT
-        echo login=${{ github.event.pull_request.user.login || github.event.issue.user.login }} >> $GITHUB_OUTPUT
 
     - name: Read CLA Signees
       id: read-cla
@@ -70,18 +74,18 @@ runs:
     - name: Detect Signature
       id: detect-signature
       shell: bash
-      run: echo signed=${{ contains(fromJSON(steps.read-cla.outputs.content), steps.detect-contributor.outputs.id) }} >> $GITHUB_OUTPUT
+      run: echo signed=${{ contains(fromJSON(steps.read-cla.outputs.content), inputs.contributor-id) }} >> $GITHUB_OUTPUT
 
     - name: Add PR Label
       uses: actions-ecosystem/action-add-labels@18f1af5e3544586314bbe15c0273249c770b2daf # v1.1.3
-      if: steps.detect-signature.outputs.signed == 'true' && !contains(github.event.pull_request.labels || github.event.issue.labels, inputs.label)
+      if: inputs.label && steps.detect-signature.outputs.signed == 'true' && !contains(github.event.pull_request.labels || github.event.issue.labels, inputs.label)
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
 
     - name: Remove PR Label
       uses: actions-ecosystem/action-remove-labels@2ce5d41b4b6aa8503e285553f75ed56e0a40bae0 # v1.3.0
-      if: steps.detect-signature.outputs.signed == 'false' && contains(github.event.pull_request.labels || github.event.issue.labels, inputs.label)
+      if: inputs.label && steps.detect-signature.outputs.signed == 'false' && contains(github.event.pull_request.labels || github.event.issue.labels, inputs.label)
       with:
         github_token: ${{ inputs.token }}
         labels: ${{ inputs.label }}
@@ -112,8 +116,8 @@ runs:
       run: >
         python ${{ github.action_path }}/check_cla.py
         ${{ inputs.path }}
-        --id=${{ steps.detect-contributor.outputs.id }}
-        --login=${{ steps.detect-contributor.outputs.login }}
+        --id=${{ inputs.contributor-id }}
+        --login=${{ inputs.contributor-login }}
 
     - name: Create PR
       id: pull
@@ -123,14 +127,14 @@ runs:
         # push to the fork
         branch-token: ${{ inputs.fork-token || inputs.pr-token || inputs.token }}
         push-to-fork: ${{ steps.create-fork.outputs.fork }}
-        branch: cla-${{ steps.detect-contributor.outputs.id }}
-        commit-message: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
+        branch: cla-${{ inputs.contributor-id }}
+        commit-message: 🤖 Add ${{ inputs.contributor-login }} (${{ inputs.contributor-id }}) as CLA signee
         author: ${{ inputs.author }}
         committer: ${{ inputs.author }}
         # create PR
         token: ${{ inputs.pr-token || inputs.token }}
         delete-branch: true
-        title: 🤖 Add ${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}) as CLA signee
+        title: 🤖 Add ${{ inputs.contributor-login }} (${{ inputs.contributor-id }}) as CLA signee
         body: Xref ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
 
     - name: Create Comment
@@ -144,15 +148,11 @@ runs:
           [cla]: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
 
 
-          > [!NOTE]
-
-          > You may have previously signed the conda CLA. That signature is still valid
-          for any prior contributions however conda is now a fiscally sponsored project
-          by NumFOCUS and hence requires new CLAs to be signed for any new contributions.
+          ${{ inputs.comment-blurb }}
 
 
           We require contributors to sign our [Contributor License Agreement][cla] and we don't
-          have one on file for @${{ steps.detect-contributor.outputs.login }} (${{ steps.detect-contributor.outputs.id }}).
+          have one on file for @${{ inputs.contributor-login }} (${{ inputs.contributor-id }}).
 
 
           In order for us to review and merge your code, please e-sign the
@@ -180,7 +180,7 @@ runs:
       uses: conda/actions/set-commit-status@6e72e0db87e72f0020e493aeb02f864363bd9258 # v24.11.1
       with:
         token: ${{ inputs.token }}
-        context: CLA check
+        context: ${{ inputs.commit-status-context }}
         description: CLA signed, thank you!
         state: success
 
@@ -189,7 +189,7 @@ runs:
       uses: conda/actions/set-commit-status@6e72e0db87e72f0020e493aeb02f864363bd9258 # v24.11.1
       with:
         token: ${{ inputs.token }}
-        context: CLA check
+        context: ${{ inputs.commit-status-context }}
         description: Please follow the details link to sign the conda CLA. →
         target_url: https://conda.io/en/latest/contributing.html#conda-contributor-license-agreement
         state: error
