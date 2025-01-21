@@ -156,7 +156,7 @@ runs:
 
     # if unsigned, create sticky comment
     - name: Create comment regarding missing CLA signature
-      uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728
+      uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # v2.9.1
       if: steps.metadata.outputs.has_signed == 'false'
       with:
         number: ${{ steps.metadata.outputs.number }}
