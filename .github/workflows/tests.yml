@@ -85,9 +85,17 @@ jobs:
         with:
           message: |
             ### Template Success
+
+            > [!WARNING]
+            > This is what the audit looks like when the templating has no errors.
+
             ${{ steps.templates-success.outputs.summary }}
 
             ### Template Error
+
+            > [!WARNING]
+            > This is what the audit looks like when templating results in errors.
+
             ${{ steps.templates-error.outputs.summary }}
           GITHUB_TOKEN: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
 
