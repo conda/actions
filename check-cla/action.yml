@@ -56,7 +56,7 @@ runs:
         reactions-edit-mode: replace
 
     - name: Set Commit Status [pending]
-      uses: conda/actions/set-commit-status@6e72e0db87e72f0020e493aeb02f864363bd9258 # v24.11.1
+      uses: conda/actions/set-commit-status@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
       with:
         token: ${{ inputs.token }}
         context: ${{ inputs.commit-status-label }}
@@ -141,7 +141,7 @@ runs:
         body: Xref ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
 
     - name: Create Comment
-      uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31 # v2.9.0
+      uses: marocchino/sticky-pull-request-comment@52423e01640425a022ef5fd42c6fb5f633a02728 # v2.9.1
       if: steps.detect-signature.outputs.signed == 'false'
       with:
         number: ${{ github.event.number || github.event.issue.number }}
@@ -180,7 +180,7 @@ runs:
 
     - name: Set Commit Status [success]
       if: steps.detect-signature.outputs.signed == 'true'
-      uses: conda/actions/set-commit-status@6e72e0db87e72f0020e493aeb02f864363bd9258 # v24.11.1
+      uses: conda/actions/set-commit-status@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
       with:
         token: ${{ inputs.token }}
         context: ${{ inputs.commit-status-context }}
@@ -189,7 +189,7 @@ runs:
 
     - name: Set Commit Status [error]
       if: steps.detect-signature.outputs.signed == 'false'
-      uses: conda/actions/set-commit-status@6e72e0db87e72f0020e493aeb02f864363bd9258 # v24.11.1
+      uses: conda/actions/set-commit-status@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
       with:
         token: ${{ inputs.token }}
         context: ${{ inputs.commit-status-context }}
