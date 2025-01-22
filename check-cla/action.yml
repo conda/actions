@@ -121,6 +121,10 @@ runs:
         --id=${{ inputs.contributor-id }}
         --login=${{ inputs.contributor-login }}
 
+    - name: Diff
+      shell: bash
+      run: git diff
+
     - name: Create PR
       id: pull
       if: steps.detect-signature.outputs.signed == 'false'
