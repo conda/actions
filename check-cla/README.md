@@ -17,7 +17,7 @@ conda contributor license agreement.
 | `fork-token` | GitHub token to create and push to a `repository` fork.<br>Fine-grained PAT: `administration: write; contents: write` | `${{ inputs.pr-token }}` |
 | `contributor-id` | Contributor ID to check for CLA signature. | `${{ github.event.pull_request.user.id || github.event.issue.user.id }}` |
 | `contributor-login` | Contributor login to check for CLA signature. | `${{ github.event.pull_request.user.login || github.event.issue.user.login }}` |
-| `commit-status-label` | Commit status label/identifier. | `CLA check` |
+| `commit-status-context` | Commit status label/identifier. | `CLA check` |
 | `comment-blurb` | Additional comment to add to PRs for contributors who have not signed the CLA. | |
 
 ## Sample Workflows

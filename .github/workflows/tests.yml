@@ -64,7 +64,7 @@ jobs:
           # to avoid that, GH restricts certain keywords, 'login' is one of those restricted keywords
           # and hence is not a real username, https://github.com/login is the login page, not a user
           contributor-login: login
-          commit-status-label: CLA test
+          commit-status-context: CLA test
           token: ${{ secrets.SANDBOX_CLA_TOKEN }}
           pr-token: ${{ secrets.SANDBOX_CLA_PR_TOKEN }}
           fork-token: ${{ secrets.SANDBOX_CLA_FORK_TOKEN }}

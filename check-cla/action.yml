@@ -37,7 +37,7 @@ inputs:
   contributor-login:
     description: Contributor login to check for CLA signature.
     default: ${{ github.event.pull_request.user.login || github.event.issue.user.login }}
-  commit-status-label:
+  commit-status-context:
     description: Commit status label/identifier.
     default: CLA check
   comment-blurb:
@@ -59,7 +59,7 @@ runs:
       uses: conda/actions/set-commit-status@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
       with:
         token: ${{ inputs.token }}
-        context: ${{ inputs.commit-status-label }}
+        context: ${{ inputs.commit-status-context }}
         description: Checking conda CLA...
         state: pending
 
