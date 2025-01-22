@@ -117,7 +117,7 @@ runs:
       shell: bash
       run: >
         python ${{ github.action_path }}/check_cla.py
-        ${{ inputs.path }}
+        .github_cache/actions/cla/${{ inputs.path }}
         --id=${{ inputs.contributor-id }}
         --login=${{ inputs.contributor-login }}
 
