@@ -154,7 +154,7 @@ jobs:
           version: ${{ github.event.pull_request.number }}.0.0
           branch: ${{ github.event.pull_request.number }}.0.x
           branch-sha: main
-          token: ${{ secrets.SANDBOX_RELEASES_PR_TOKEN }}
+          token: ${{ secrets.SANDBOX_RELEASES_TOKEN }}
           fork-token: ${{ secrets.FORK_TOKEN }}
 
       - name: Prepare Patch Release
@@ -165,7 +165,7 @@ jobs:
           version: 0.0.${{ github.event.pull_request.number }}
           branch: 0.0.x
           branch-sha: main
-          token: ${{ secrets.SANDBOX_RELEASES_PR_TOKEN }}
+          token: ${{ secrets.SANDBOX_RELEASES_TOKEN }}
           fork-token: ${{ secrets.FORK_TOKEN }}
 
   # required check
