@@ -1,0 +1,15 @@
+# file1
+
+This is a template and only uses the default context.
+
+| context | value |
+|---|---|
+| repo.html_url | [[ repo.html_url ]] |
+| repo.full_name | [[ repo.full_name ]] |
+| source.user | [[ source.user ]] |
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque aliquet justo ipsum, nec dapibus ex congue ac. Fusce non vulputate libero. Nulla fermentum nisl finibus turpis tempor, non porttitor massa rutrum. Sed suscipit metus arcu, eu blandit ante condimentum in. Proin vehicula various risus eget fermentum. Duis in sollicitudin ante. Curabitur aliquam elit vel dictum sagittis. Proin nec ultrices sem, ac sodales leo. Duis vehicula, metus nec tristique vestibulum, massa mi faucibus urna, quis pulvinar neque neque congue felis. Nulla lobortis ullamcorper imperdiet. Fusce justo arcu, tristique nec tincidunt commodo, porttitor sit amet neque. Nullam tincidunt orci a enim fringilla sodales. Morbi ut dui vitae justo interdum ullamcorper.
+
+[% include 'stub1.txt' ignore missing -%]
+
+EOF

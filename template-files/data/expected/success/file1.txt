@@ -1,0 +1,21 @@
+# file1
+
+This is a template and only uses the default context.
+
+| context | value |
+|---|---|
+| repo.html_url | https://github.com/conda/actions |
+| repo.full_name | conda/actions |
+| source.user | <local> |
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque aliquet justo ipsum, nec dapibus ex congue ac. Fusce non vulputate libero. Nulla fermentum nisl finibus turpis tempor, non porttitor massa rutrum. Sed suscipit metus arcu, eu blandit ante condimentum in. Proin vehicula various risus eget fermentum. Duis in sollicitudin ante. Curabitur aliquam elit vel dictum sagittis. Proin nec ultrices sem, ac sodales leo. Duis vehicula, metus nec tristique vestibulum, massa mi faucibus urna, quis pulvinar neque neque congue felis. Nulla lobortis ullamcorper imperdiet. Fusce justo arcu, tristique nec tincidunt commodo, porttitor sit amet neque. Nullam tincidunt orci a enim fringilla sodales. Morbi ut dui vitae justo interdum ullamcorper.
+
+# stub1
+
+Nullam blandit nisi non elit efficitur porttitor quis a justo. Sed venenatis, eros quis malesuada aliquet, ligula purus cursus velit, eget efficitur libero ante id ipsum. Aliquam et neque id justo tempus egestas quis ut augue. Curabitur eu sem velit. Phasellus sed nunc ipsum. Sed rhoncus luctus turpis, eu rutrum ipsum dictum nec. Curabitur vulputate dolor non ipsum ultrices, ut ultricies nibh vestibulum. Donec molestie scelerisque interdum. Vestibulum et finibus purus, rhoncus porttitor ligula.
+
+# stub2
+
+Curabitur metus libero, lacinia nec magna euismod, pellentesque lacinia sem. Nullam tempor vitae ex ut tincidunt. Etiam ullamcorper et nisi at cursus. Praesent ac mauris vel mauris ornare consequat sit amet ut magna. Integer luctus, ante at rhoncus cursus, est erat aliquam magna, et pretium urna felis eget lorem. Etiam tristique, justo viverra cursus congue, quam odio sagittis dolor, quis dictum risus tortor et turpis. Donec arcu urna, dapibus eget metus ac, consequat feugiat velit. Integer aliquet velit quis sollicitudin luctus. Maecenas aliquam arcu non urna maximus hendrerit. Integer porta efficitur blandit. Donec interdum nec metus at iaculis. Donec pellentesque enim turpis. Nulla facilisi. In hac habitasse platea dictumst.
+
+EOF

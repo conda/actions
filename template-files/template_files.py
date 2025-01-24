@@ -7,41 +7,61 @@ import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from collections import defaultdict
 from contextlib import contextmanager
-from enum import Enum, nonmember
+from enum import Enum
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 from github import Auth, Github, UnknownObjectException
-from jinja2 import Environment, FileSystemLoader
-from jinja2.exceptions import TemplateError, TemplateNotFound
+from jinja2.environment import Environment
+from jinja2.loaders import FileSystemLoader
+from jinja2.runtime import Context, Undefined
+from jinja2.utils import missing
 from jsonschema import validate
 from rich import box
-from rich.console import Console
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
 from rich.padding import Padding
 from rich.table import Table
+from wrapt import ObjectProxy
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from typing import Any, Callable
+    import weakref
+    from collections.abc import Iterator, MutableMapping, Sequence
+    from typing import Any
 
     from github.Repository import Repository
+    from jinja2.environment import Template
+    from jinja2.loaders import BaseLoader
+    from jinja2.style import Style
+
+    AuditCurrent = tuple[str, str, str]
+    AuditCounter = dict[str, int]
+    AuditRegister = dict[str, Any]
+    StubsCacheKey = tuple[weakref.ref[BaseLoader], str]
+
 
 INDENT = 4
-console = Console(color_system="standard", width=100_000_000, record=True)
+CONSOLE = Console(color_system="standard", width=100_000_000, record=True)
 
 
-def print(renderable, *, indent: int = 0, **kwargs) -> None:
+def print(renderable, *, indent: int = 0, console: Console = CONSOLE, **kwargs) -> None:
     if indent:
         renderable = Padding.indent(renderable, indent)
     console.print(renderable, **kwargs)
 
 
-def perror(renderable, **kwargs) -> None:
-    kwargs.setdefault("style", "bold red")
+def perror(
+    renderable,
+    *,
+    console: Console = CONSOLE,
+    style: Style | str | None = "bold red",
+    **kwargs,
+) -> None:
     try:
         console.stderr = True
-        print(renderable, **kwargs)
+        print(renderable, console=console, style=style, **kwargs)
     finally:
         console.stderr = False
 
@@ -55,66 +75,161 @@ class TemplateState(Enum):
     MISSING = "missing"
     USED = "used"
     CONTEXT = "context"
-    WIDTH = nonmember(12)
+    OPTIONAL = "optional"
 
-    def __rich__(self) -> str:
-        if self == self.UNUSED:
-            return f"[yellow]⚠️ ({self.value})[/yellow]"
-        elif self == self.MISSING:
-            return f"[red]❌ ({self.value})[/red]"
-        elif self == self.USED:
-            return f"[green]✅ ({self.value})[/green]"
-        elif self == self.CONTEXT:
-            return f"[blue]📑 ({self.value})[/blue]"
+    @classmethod
+    def from_count(cls, count: int) -> TemplateState:
+        if count < 0:
+            return cls.MISSING
+        if count == 0:
+            return cls.UNUSED
+        return cls.USED
+
+    @classmethod
+    def from_value(cls, value: Any) -> TemplateState:
+        if isinstance(value, Undefined):
+            return cls.MISSING
+        if value is missing:
+            return cls.OPTIONAL
+        return cls.CONTEXT
+
+    @cache
+    def _get_emoji_style(self) -> tuple[str, str]:
+        match self:
+            case self.UNUSED:
+                return ":warning-emoji:", "yellow"
+            case self.MISSING:
+                return ":cross_mark:", "red"
+            case self.USED:
+                return ":white_check_mark:", "green"
+            case self.CONTEXT:
+                return ":books:", "blue"
+            case self.OPTIONAL:
+                return ":heavy_plus_sign:", "yellow"
+            case _:  # pragma: no cover
+                raise ValueError("Invalid TemplateState")
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        emoji, style = self._get_emoji_style()
+        # trying to return this in any other way will result in rich splitting the emoji
+        # and the text into separate lines
+        yield console.render_str(f"{emoji} [{style}]({self.value})[/]")
+
+    def __rich_measure__(
+        self, console: Console, options: ConsoleOptions
+    ) -> Measurement:
+        # explicitly calculate the size of the emoji and the text, otherwise, rich will
+        # decide the emoji has no width and use the default/terminal width as the max
+        emoji, style = self._get_emoji_style()
+        # len(emoji) + space + parenthesis + len(value)
+        size = console.measure(emoji).maximum + 1 + 2 + len(self.value)
+        return Measurement(size, size)
+
+
+class AuditStubs(ObjectProxy):
+    # see jinja2.environment.Environment._load_template
+    def __init__(
+        self, environment: Environment, cache: MutableMapping[StubsCacheKey, Template]
+    ) -> None:
+        super().__init__(cache)
+        self._self_environment = environment
+
+    @property
+    def environment(self) -> Environment:
+        return self._self_environment
+
+    def count(
+        self,
+        key: str,
+        increment: int | None = None,
+        *,
+        hit: bool = False,
+    ) -> None:
+        # count template usage
+        if None not in (
+            current := getattr(self.environment, "current", None),
+            stubs := getattr(self.environment, "stubs", None),
+        ):
+            if increment is not None:
+                stubs[current][key] += increment
+            elif hit:
+                # check cache was previously a bust
+                assert stubs[current][key] == -1
+                # override cache bust with a hit
+                stubs[current][key] = +1
+
+    def get(self, key: StubsCacheKey, default: Any = None) -> Template:
+        try:
+            value = self.__wrapped__[key]
+        except KeyError:
+            # KeyError: key does not exist
+            self.count(key[-1], -1)
+            return default
         else:
-            raise ValueError("Invalid TemplateState")
+            self.count(key[-1], +1)
+            return value
+
+    def __setitem__(self, key: StubsCacheKey, value: Template) -> None:
+        self.__wrapped__[key] = value
+        self.count(key[-1], hit=True)
 
 
-class StubLoader(FileSystemLoader):
-    current: tuple[str, str, str] | None
-    stubs: dict[str, TemplateState]
-    templates: dict[tuple[str, str, str], dict[str, TemplateState]]
+class AuditContext(Context):
+    def register(self, environment: Environment, key: str, value: Any) -> None:
+        # register variable usage, no point to count usage since it will always be 1
+        if None not in (
+            current := getattr(environment, "current", None),
+            variables := getattr(environment, "variables", None),
+        ):
+            variables[current][key] = value
+
+    def resolve_or_missing(self, key: str) -> Any:
+        # delegate to Context
+        value = super().resolve_or_missing(key)
+        # register variable usage
+        self.register(self.environment, key, value)
+        return value
+
+
+class AuditEnvironment(Environment):
+    current: tuple[str, str, str] | None = None
+    stubs: dict[AuditCurrent, AuditCounter]
+    variables: dict[AuditCurrent, AuditRegister]
+
+    context_class: type[Context] = AuditContext
+    undefined: type[Undefined]
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.templates = defaultdict(dict)
-        self.stubs = dict.fromkeys(self.list_templates(), TemplateState.UNUSED)
-
-    def get_source(
-        self,
-        environment: Environment,
-        stub: str,
-    ) -> tuple[str, str, Callable[[], bool]]:
-        # assume template is used, track for current file and globally
-        if self.current:
-            self.templates[self.current][stub] = TemplateState.USED
-        self.stubs[stub] = TemplateState.USED
-
-        try:
-            # delegate to FileSystemLoader
-            return super().get_source(environment, stub)
-        except TemplateNotFound:
-            # TemplateNotFound: template does not exist, mark it as missing
-            if self.current:
-                self.templates[self.current][stub] = TemplateState.MISSING
-            self.stubs[stub] = TemplateState.MISSING
-            raise
+        self.stubs = defaultdict(lambda: defaultdict(int))
+        self.variables = defaultdict(dict)
+        self.cache = AuditStubs(self, self.cache)
 
     @contextmanager
-    def get_stubs(
-        self,
-        file: str,
-        src: str,
-        dst: str,
-    ) -> Iterator[dict[str, TemplateState]]:
-        try:
-            # set current file
-            self.current = (file, src, dst)
+    def audit(
+        self, file: str, src: str, dst: str
+    ) -> Iterator[tuple[AuditCounter, AuditRegister]]:
+        class AuditUndefined(Undefined):
+            # this is used to distinguish between optional and missing context values
+            def __str__(slf) -> str:
+                # only store undefined variables, ignore missing attributes/elements
+                if slf._undefined_obj is missing and self.current:
+                    self.variables[self.current][slf._undefined_name] = slf
+                return super().__str__()
 
-            yield self.templates[self.current]
+        stored_undefined = self.undefined
+        try:
+            # set current file & custom undefined
+            self.current = (file, src, dst)
+            self.undefined = AuditUndefined
+
+            yield self.stubs[self.current], self.variables[self.current]
         finally:
-            # clear current file
+            # clear current file & reset undefined
             self.current = None
+            self.undefined = stored_undefined
 
 
 def validate_file(value: str) -> Path | None:
@@ -145,18 +260,18 @@ def validate_dir(value: str) -> Path:
         raise ArgumentTypeError(f"{value} is not a valid directory: {err}")
 
 
-def parse_args() -> Namespace:
+def parse_args(args: Sequence[str] | None = None) -> Namespace:
     # parse CLI for inputs
     parser = ArgumentParser()
     parser.add_argument("--config", type=validate_file, required=True)
     parser.add_argument("--stubs", type=validate_dir, required=True)
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
-def read_config(args: Namespace) -> dict:
+def read_config(config: Path) -> dict:
     # read and validate configuration file
     config = yaml.load(
-        args.config.read_text(),
+        config.read_text(),
         Loader=yaml.SafeLoader,
     )
     validate(
@@ -164,7 +279,8 @@ def read_config(args: Namespace) -> dict:
         schema={
             "type": "object",
             "patternProperties": {
-                r"\w+/\w+": {
+                # GitHub repository name or local directory
+                r"\w+/\w+|\..+": {
                     "type": "array",
                     "items": {
                         "type": ["string", "object"],
@@ -211,18 +327,21 @@ def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, An
     elif isinstance(file, dict):
         src = file.get("src", None)
         if (tmp := file.get("dst", src)) is None:
-            perror(f"* ❌ Invalid file definition (`{file}`), expected `dst`")
+            perror(f"* :cross_mark: Invalid file definition (`{file}`), expected `dst`")
             raise ActionError
         dst = Path(tmp)
         remove = file.get("remove", False)
         context = file.get("with", {})
     else:
-        perror(f"* ❌ Invalid file definition (`{file}`), expected `str` or `dict`")
+        perror(
+            f"* :cross_mark: Invalid file definition (`{file}`), "
+            f"expected `str` or `dict`"
+        )
         raise ActionError
 
     # to template a file we need a source file
     if not remove and src is None:
-        perror(f"* ❌ Invalid file definition (`{file}`), expected `src`")
+        perror(f"* :cross_mark: Invalid file definition (`{file}`), expected `src`")
         raise ActionError
 
     return src, dst, remove, context
@@ -233,20 +352,20 @@ def remove_file(dst: Path) -> int:
         dst.unlink()
     except FileNotFoundError:
         # FileNotFoundError: dst does not exist
-        print(f"* ⚠️ `{dst}` already removed", indent=INDENT)
-    except PermissionError as err:
+        print(f"* :warning-emoji: `{dst}` already removed", indent=INDENT)
+    except (IsADirectoryError, PermissionError) as err:
+        # IsADirectoryError: dst is a directory
         # PermissionError: not possible to remove dst
-        perror(f"* ❌ Failed to remove `{dst}`: {err}", indent=INDENT)
+        perror(f"* :cross_mark: Failed to remove `{dst}`: {err}", indent=INDENT)
         return 1
     else:
-        print(f"* ❎ `{dst}` removed")
+        print(f"* :cross_mark_button: `{dst}` removed")
     return 0  # no errors
 
 
 def template_file(
     env: Environment,
     current_repo: Repository,
-    upstream_name: str,
     upstream_repo: Repository,
     src: str | None,
     dst: Path,
@@ -256,7 +375,7 @@ def template_file(
     try:
         content = upstream_repo.get_contents(src).decoded_content.decode()
     except UnknownObjectException as err:
-        perror(f"* ❌ Failed to fetch `{src}`: {err}", indent=INDENT)
+        perror(f"* :cross_mark: Failed to fetch `{src}`: {err}", indent=INDENT)
         return 1
 
     # standard context with source and destination details
@@ -272,32 +391,85 @@ def template_file(
         "source": upstream_repo,
     }
 
-    with env.loader.get_stubs(upstream_name, src, dst) as stubs:
+    with env.audit(upstream_repo.full_name, src, dst) as (stubs, variables):
         try:
             template = env.from_string(content)
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_text(template.render(**{**context, **standard_context}))
-        except TemplateError as err:
-            perror(f"* ❌ Failed to template `{src}`: {err}", indent=INDENT)
+        except Exception as err:
+            # Exception: catch all errors whether they are Jinja2 or Python errors
+            perror(f"* :cross_mark: Failed to template `{src}`: {err}", indent=INDENT)
             return 1
 
-        print(f"* ✅ `{src}` → `{dst}`", indent=INDENT)
-
         # display stubs & context for this file
-        if stubs or context:
-            table = Table.grid(padding=1)
-            table.add_column()
-            table.add_column(max_width=TemplateState.WIDTH)
-            table.add_column()
-            for stub, state in stubs.items():
+        table = None
+        error = False
+        warning = False
+        if stubs or variables:
+            table = Table.grid(padding=(0, 1))
+            # stubs
+            for stub, count in stubs.items():
+                state = TemplateState.from_count(count)
                 table.add_row("*", state, f"`{stub}`")
-            for key, value in context.items():
-                table.add_row("*", TemplateState.CONTEXT, f"`{key}={value}`")
+            # variables
+            for variable, value in variables.items():
+                if variable in standard_context:
+                    continue
+                state = TemplateState.from_value(value)
+                if isinstance(value, Undefined):
+                    error = True
+                    value = ""
+                elif value is missing:
+                    warning = True
+                    value = ""
+                table.add_row("*", state, f"`{variable}={value}`")
+            for variable in set(context) - set(variables):
+                value = context[variable]
+                table.add_row("*", TemplateState.UNUSED, f"`{variable}={value}`")
+
+        if error:
+            perror(f"* :cross_mark: Context missing `{src}` → `{dst}`", indent=INDENT)
+        elif warning:
+            print(f"* :warning-emoji: `{src}` → `{dst}`", indent=INDENT)
+        else:
+            print(f"* :white_check_mark: `{src}` → `{dst}`", indent=INDENT)
+        if table:
             print(table, indent=INDENT * 2)
-    return 0  # no errors
+
+        return int(error)
+
+
+class LocalContents:
+    # mirror GitHub contents object
+    def __init__(self, path: Path):
+        try:
+            self.decoded_content = path.read_text().encode()
+        except FileNotFoundError as err:
+            raise UnknownObjectException(404, f"{path} not found") from err
+
+
+class LocalRepository:
+    # mirror GitHub repository object
+    def __init__(self, *paths: str | os.PathLike[str] | Path) -> None:
+        self.path = Path(*paths).resolve()
+        if not paths or not self.path.is_dir():
+            raise FileNotFoundError(f"{self.path} is not a directory")
+
+        # constants
+        self.html_url = f"file://{self.path}"
+        self.user = "<local>"
+        self.name = self.path
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.user}/{self.name}"
+
+    def get_contents(self, path: str) -> LocalContents:
+        return LocalContents(self.path / path)
 
 
 def iterate_config(
+    config_path: Path,
     config: dict,
     gh: Github,
     env: Environment,
@@ -307,13 +479,18 @@ def iterate_config(
     errors = 0
     for upstream_name, files in config.items():
         try:
-            upstream_repo = gh.get_repo(upstream_name)
-        except UnknownObjectException as err:
-            perror(f"* ❌ Failed to fetch `{upstream_name}`: {err}")
+            if upstream_name.startswith("."):
+                upstream_repo = LocalRepository(config_path.parent / upstream_name)
+            else:
+                upstream_repo = gh.get_repo(upstream_name)
+        except (UnknownObjectException, FileNotFoundError) as err:
+            # UnknownObjectException: repository does not exist
+            # FileNotFoundError: path does not exist
+            perror(f"* :cross_mark: Failed to fetch `{upstream_name}`: {err}")
             errors += 1
             continue
         else:
-            print(f"* 🔄 Fetching files from `{upstream_name}`")
+            print(f"* :arrows_counterclockwise: Fetching files from `{upstream_name}`")
 
         for file in files:
             try:
@@ -327,51 +504,59 @@ def iterate_config(
                 errors += remove_file(dst)
             else:
                 errors += template_file(
-                    env, current_repo, upstream_name, upstream_repo, src, dst, context
+                    env, current_repo, upstream_repo, src, dst, context
                 )
 
     return errors
 
 
-def dump_summary():
+def get_summary_text(html: str) -> str:
+    return f"### Templating Audit\n{html}"
+
+
+def get_output_text(errors: int, html: str) -> str:
+    return (
+        # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
+        # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
+        f"summary<<GITHUB_OUTPUT_summary\n"
+        f"<details{' open' if errors else ''}>\n"
+        f"<summary>Templating Audit</summary>\n"
+        f"\n"
+        f"{html}\n"
+        f"\n"
+        f"</details>\n"
+        f"GITHUB_OUTPUT_summary\n"
+    )
+
+
+def dump_summary(errors: int, *, console: Console = CONSOLE) -> None:
     # dump summary to GitHub Actions summary
-    summary = os.getenv("GITHUB_STEP_SUMMARY")
-    output = os.getenv("GITHUB_OUTPUT")
-    if summary or output:
+    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+    output_path = os.getenv("GITHUB_OUTPUT")
+    if summary_path or output_path:
         html = console.export_text()
-    if summary:
-        Path(summary).write_text(f"### Templating Audit\n{html}")
-    if output:
-        with Path(output).open("a") as fh:
-            fh.write(
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
-                # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
-                f"summary<<GITHUB_OUTPUT_summary\n"
-                f"<details>\n"
-                f"<summary>Templating Audit</summary>\n"
-                f"\n"
-                f"{html}\n"
-                f"\n"
-                f"</details>\n"
-                f"GITHUB_OUTPUT_summary\n"
-            )
+    if summary_path:
+        Path(summary_path).write_text(get_summary_text(html))
+    if output_path:
+        with Path(output_path).open("a") as fh:
+            fh.write(get_output_text(errors, html))
 
 
 def main():
     args = parse_args()
     if not args.config:
-        print("⚠️ No configuration file found, nothing to update")
+        print(":warning-emoji: No configuration file found, nothing to update")
         dump_summary()
         sys.exit(0)
     errors = 0
 
-    config = read_config(args)
+    config = read_config(args.config)
 
     # initialize stub loader
-    loader = StubLoader(args.stubs)
+    loader = FileSystemLoader(args.stubs)
 
     # initialize Jinja environment
-    env = Environment(
+    env = AuditEnvironment(
         loader=loader,
         # {{ }} is used in MermaidJS
         # ${{ }} is used in GitHub Actions
@@ -394,24 +579,29 @@ def main():
     try:
         current_repo = gh.get_repo(current_name)
     except UnknownObjectException as err:
-        perror(f"❌ Failed to fetch `{current_name}`: {err}")
+        perror(f":cross_mark: Failed to fetch `{current_name}`: {err}")
         errors += 1
 
     if not errors:
-        errors += iterate_config(config, gh, env, current_repo)
+        errors += iterate_config(args.config, config, gh, env, current_repo)
 
     # provide audit of stub usage
-    table = Table(box=box.MARKDOWN)
-    table.add_column("Stub")
-    table.add_column("State", max_width=TemplateState.WIDTH)
-    for stub, state in loader.stubs.items():
-        table.add_row(f"`{stub}`", state)
-    print(table)
+    stubs = defaultdict(int)
+    for counts in env.stubs.values():
+        for key, count in counts.items():
+            stubs[key] += count
+
+    if stubs:
+        table = Table("Stub", "State", "Count", box=box.MARKDOWN)
+        for stub, count in stubs.items():
+            state = TemplateState.from_count(count)
+            table.add_row(f"`{stub}`", state, str(abs(count)))
+        print(table)
 
     if errors:
         perror(f"Got {errors} error(s)")
 
-    dump_summary()
+    dump_summary(errors)
     sys.exit(errors)
 
 

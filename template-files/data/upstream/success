@@ -1,0 +1,6 @@
+Sample Template
+
+Destination repository: {{ dst.full_name }}
+Source repository: {{ src.full_name }}
+
+This will cause error if context is undefined: {{ variable }}
