@@ -17,6 +17,7 @@ omit = [
 [tool.pytest.ini_options]
 addopts = [
   "--color=yes",
+  "--cov=check-cla",
   "--cov=combine-durations",
   "--cov=read-file",
   "--cov=template-files",
@@ -49,6 +50,7 @@ select = [
 
 [tool.ruff.lint.isort]
 known-first-party = [
+  "check_cla",
   "combine_durations",
   "read_file",
   "template_files",
