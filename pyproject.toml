@@ -3,7 +3,10 @@
 skip = '.git'
 
 [tool.coverage.report]
-exclude_also = ["if TYPE_CHECKING:"]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  'if __name__ == "__main__":',
+]
 
 [tool.coverage.run]
 omit = [
@@ -16,6 +19,7 @@ addopts = [
   "--color=yes",
   "--cov=check-cla",
   "--cov=combine-durations",
+  "--cov=read-file",
   "--cov=template-files",
   "--cov-append",
   "--cov-branch",
@@ -48,5 +52,6 @@ select = [
 known-first-party = [
   "check_cla",
   "combine_durations",
+  "read_file",
   "template_files",
 ]

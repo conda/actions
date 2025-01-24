@@ -1,0 +1,14 @@
+# file2
+
+This is a template and expects additional context.
+
+| context | value |
+|---|---|
+| variable | [[ variable ]] |
+| optional | [[ optional or 12 ]] |
+
+Name finibus augue ac efficitur sodales. Donec facilisis lacus sit amet metus congue aliquam. Proin mollis, sapien sit amet iaculis congue, libero erat volutpat neque, in bibendum lacus massa eget eros. Mauris fringilla turpis id pulvinar ultricies. Cras dictum condimentum mauris sit amet lobortis. Maecenas ultrices in lectus eget tristique. Etiam sollicitudin tempus dolor sit amet tincidunt. Nulla nec mi eget est gravida elementum vitae vitae risus. Nullam eget urna dignissim, sollicitudin massa at, cursus urna.
+
+[% include 'stub2.txt' ignore missing -%]
+
+EOF
