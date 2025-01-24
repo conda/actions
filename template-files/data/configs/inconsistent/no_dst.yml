@@ -1,0 +1,4 @@
+org/repo:
+  - remove: true
+  - with:
+      variable: value
