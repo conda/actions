@@ -150,7 +150,7 @@ jobs:
           commit-status-context: CLA test
           token: ${{ secrets.SANDBOX_CLA_TOKEN }}
           pr-token: ${{ secrets.SANDBOX_CLA_PR_TOKEN }}
-          fork-token: ${{ secrets.SANDBOX_CLA_FORK_TOKEN }}
+          fork-token: ${{ secrets.SANDBOX_FORK_TOKEN }}
           # GitHub flavored markdown reinvents how paragraphs work, adjoined lines of text are not
           # concatenated so instead we rely on YAML multi-line + extra newlines
           comment-blurb: >-
