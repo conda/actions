@@ -56,7 +56,7 @@ runs:
         reactions-edit-mode: replace
 
     - name: Set Commit Status [pending]
-      uses: conda/actions/set-commit-status@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
+      uses: conda/actions/set-commit-status@7873f9d7c90877290866eb893b8f6eff2e88429a # v25.1.2
       with:
         token: ${{ inputs.token }}
         context: ${{ inputs.commit-status-context }}
@@ -65,7 +65,7 @@ runs:
 
     - name: Read CLA Signees
       id: read-cla
-      uses: conda/actions/read-file@read-file
+      uses: conda/actions/read-file@7873f9d7c90877290866eb893b8f6eff2e88429a # v25.1.2
       with:
         path: https://raw.githubusercontent.com/${{ inputs.repository }}/main/${{ inputs.path }}
         parser: json
@@ -101,7 +101,7 @@ runs:
     - name: Create Fork
       id: create-fork
       if: steps.detect-signature.outputs.signed == 'false'
-      uses: conda/actions/create-fork@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
+      uses: conda/actions/create-fork@7873f9d7c90877290866eb893b8f6eff2e88429a # v25.1.2
       with:
         repository: ${{ inputs.repository }}
         token: ${{ inputs.fork-token || inputs.pr-token || inputs.token }}
@@ -184,7 +184,7 @@ runs:
 
     - name: Set Commit Status [success]
       if: steps.detect-signature.outputs.signed == 'true'
-      uses: conda/actions/set-commit-status@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
+      uses: conda/actions/set-commit-status@7873f9d7c90877290866eb893b8f6eff2e88429a # v25.1.2
       with:
         token: ${{ inputs.token }}
         context: ${{ inputs.commit-status-context }}
@@ -193,7 +193,7 @@ runs:
 
     - name: Set Commit Status [error]
       if: steps.detect-signature.outputs.signed == 'false'
-      uses: conda/actions/set-commit-status@8ff3faa82ad80f5c05d91c22bcd37d897f80ca46 # v25.1.1
+      uses: conda/actions/set-commit-status@7873f9d7c90877290866eb893b8f6eff2e88429a # v25.1.2
       with:
         token: ${{ inputs.token }}
         context: ${{ inputs.commit-status-context }}
