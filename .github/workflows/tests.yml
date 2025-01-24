@@ -47,7 +47,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-read-file:
+  read-file:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
