@@ -115,6 +115,7 @@ jobs:
           filters: |
             code:
               - 'template-files/**'
+
       - name: Comment on PR
         if: github.event_name == 'pull_request' && steps.filter.outputs.code == 'true'
         uses: marocchino/sticky-pull-request-comment@331f8f5b4215f0445d3c07b4967662a32a2d3e31  # v2.9.0
@@ -129,6 +130,29 @@ jobs:
             > This is what the audit looks like when templating results in errors.
             ${{ steps.templates-error.outputs.summary }}
           GITHUB_TOKEN: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
+
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare Major Release
+        uses: ./prepare-release
+        with:
+          repository: conda-sandbox/releases
+          version: ${{ github.event.pull_request.number }}.0.0
+          branch: ${{ github.event.pull_request.number }}.0.x
+          branch-sha: main
+          token: ${{ secrets.SANDBOX_RELEASES_TOKEN }}
+          fork-token: ${{ secrets.FORK_TOKEN }}
+
+      - name: Prepare Patch Release
+        uses: ./prepare-release
+        with:
+          repository: conda-sandbox/releases
+          version: 0.0.${{ github.event.pull_request.number }}
+          branch: 0.0.x
+          branch-sha: main
+          token: ${{ secrets.SANDBOX_RELEASES_TOKEN }}
+          fork-token: ${{ secrets.FORK_TOKEN }}
 
   # required check
   analyze:
