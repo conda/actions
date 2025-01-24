@@ -37,27 +37,28 @@ runs:
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         fetch-depth: 0
-        path: .github_cache/actions/prepare-release
+        path: .github_cache/actions/prepare-release/${{ inputs.repository }}
         repository: ${{ inputs.repository }}
         token: ${{ inputs.token }}
 
     - name: Create Branch
       shell: bash
       run: |
-        if ! git fetch origin "${{ inputs.branch }}"; then
+        if ! git -C ${SOURCE} fetch origin "${{ inputs.branch }}"; then
           # if branch doesn't exist, create it from the default branch
           gh api \
             -X POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${{ inputs.repository }}/git/refs" \
             -f ref="refs/heads/${{ inputs.branch }}" \
-            -f sha="$(git rev-parse ${{ inputs.branch-sha }})"
+            -f sha="$(git -C ${SOURCE} rev-parse ${{ inputs.branch-sha }})"
         fi
-        git fetch origin
-        git checkout "${{ inputs.branch }}"
-        git pull origin "${{ inputs.branch }}"
+        git -C ${SOURCE} fetch origin
+        git -C ${SOURCE} checkout "${{ inputs.branch }}"
+        git -C ${SOURCE} pull origin "${{ inputs.branch }}"
       env:
         GH_TOKEN: ${{ inputs.token }}
+        SOURCE: .github_cache/actions/prepare-release/${{ inputs.repository }}
 
     # `hashFiles` only works on files within the working directory, since `requirements.txt`
     # is not in the working directory we need to manually compute the SHA256 hash
@@ -87,7 +88,10 @@ runs:
 
     - name: Run Towncrier
       shell: bash
-      run: towncrier build --version=${{ inputs.version }}
+      run: >-
+        towncrier build
+        --version=${{ inputs.version }}
+        --dir=.github_cache/actions/prepare-release/${{ inputs.repository }}
 
     # - name: Detect Contributors
 
