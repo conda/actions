@@ -1,0 +1,5 @@
+{
+    "tests/test_alpha.py::test_a": 2.1,
+    "tests/test_alpha.py::test_b": 2.1,
+    "tests/test_alpha.py::test_c": 2.1
+}
