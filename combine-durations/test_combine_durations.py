@@ -80,9 +80,9 @@ def test_aggregate_new_durations() -> None:
 
 
 @pytest.mark.parametrize(
-    "combined,num_combined,num_tests",
+    "combined,num_combined",
     [
-        pytest.param({}, 0, 6, id="no durations"),
+        pytest.param({}, 0, id="no durations"),
         pytest.param(
             {
                 path.stem: {
@@ -92,25 +92,19 @@ def test_aggregate_new_durations() -> None:
                 for path in DURATIONS_DIR.glob("*.json")
             },
             6,
-            6,
             id="unchanged durations",
         ),
         pytest.param(
             aggregate_new_durations(ARTIFACTS_DIR)[0],
             5,
-            6,
             id="updated durations",
         ),
     ],
 )
-def test_aggregate_old_durations(
-    combined: COMBINED_TYPE,
-    num_combined: int,
-    num_tests: int,
-) -> None:
-    combined, stats = aggregate_old_durations(DURATIONS_DIR, combined, unlink=False)
+def test_aggregate_old_durations(combined: COMBINED_TYPE, num_combined: int) -> None:
+    combined, old_stats = aggregate_old_durations(DURATIONS_DIR, combined, unlink=False)
     assert len(combined) == (2 if num_combined else 0)
-    assert len(stats) == 2
+    assert len(old_stats) == 2
     for os in ("OS1", "OS2"):
         assert len(combined.get(os, ())) == num_combined
-        assert stats[os].number_of_tests == num_tests
+        assert old_stats[os].number_of_tests == 6
