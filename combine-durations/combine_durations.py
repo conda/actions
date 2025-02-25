@@ -17,6 +17,8 @@ from rich.console import Console
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     COMBINED_TYPE = dict[str, dict[str, list[float]]]
 
 CONSOLE = Console(color_system="standard", soft_wrap=True, record=True)
@@ -58,6 +60,11 @@ class DurationStats:
     @property
     def average_run_time(self) -> float:
         return self.total_run_time / self.number_of_tests
+
+    def __iter__(self) -> Iterable[int, float]:
+        yield self.number_of_tests
+        yield self.total_run_time
+        yield self.average_run_time
 
 
 STATS_MAP = dict[str, DurationStats]
@@ -173,8 +180,8 @@ def main() -> None:
     table.add_column("Total run time")
     table.add_column("Average run time")
     for os_name in sorted({*new_stats, *old_stats}):
-        ncount, ntotal, naverage = new_stats.get(os_name, (0, 0.0, 0.0))
-        ocount, ototal, oaverage = old_stats.get(os_name, (0, 0.0, 0.0))
+        ncount, ntotal, naverage = new_stats.get(os_name, DurationStats())
+        ocount, ototal, oaverage = old_stats.get(os_name, DurationStats())
 
         dcount = ncount - ocount
         dtotal = ntotal - ototal
