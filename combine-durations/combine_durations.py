@@ -6,14 +6,18 @@ import json
 import os
 import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from statistics import fmean
-from typing import NamedTuple
+from typing import TYPE_CHECKING
 
 from rich import box
 from rich.console import Console
 from rich.table import Table
+
+if TYPE_CHECKING:
+    COMBINED_TYPE = dict[str, dict[str, list[float]]]
 
 CONSOLE = Console(color_system="standard", soft_wrap=True, record=True)
 print = CONSOLE.print
@@ -46,26 +50,82 @@ def parse_args() -> Namespace:
     return parser.parse_args()
 
 
-class DurationStats(NamedTuple):
-    number_of_tests: int
-    total_run_time: float
-    average_run_time: float
+@dataclass
+class DurationStats:
+    number_of_tests: int = 0
+    total_run_time: float = 0.0
+
+    @property
+    def average_run_time(self) -> float:
+        return self.total_run_time / self.number_of_tests
+
+
+STATS_MAP = dict[str, DurationStats]
 
 
 def read_durations(
-    path: Path, stats: dict[str, DurationStats]
+    path: Path,
+    stats: STATS_MAP,
 ) -> tuple[str, dict[str, float]]:
-    OS = path.stem
+    os_name = path.stem
     data = json.loads(path.read_text())
 
-    # new durations stats
-    stats[OS] = DurationStats(
-        number_of_tests=len(data),
-        total_run_time=sum(data.values()),
-        average_run_time=fmean(data.values()),
-    )
+    # update durations stats
+    os_stats = stats.setdefault(os_name, DurationStats())
+    os_stats.number_of_tests += len(data)
+    os_stats.total_run_time += sum(data.values())
 
-    return OS, data
+    return os_name, data
+
+
+def aggregate_new_durations(artifacts_dir: Path) -> tuple[COMBINED_TYPE, STATS_MAP]:
+    combined: COMBINED_TYPE = {}
+
+    new_stats: dict[str, DurationStats] = {}
+    for path in artifacts_dir.glob("**/*.json"):
+        # read new durations
+        os_name, new_data = read_durations(path, new_stats)
+
+        # insert new durations
+        os_combined = combined.setdefault(os_name, {})
+        for key, value in new_data.items():
+            os_combined.setdefault(key, []).append(value)
+
+    return combined, new_stats
+
+
+def aggregate_old_durations(
+    durations_dir: Path,
+    combined: COMBINED_TYPE,
+    unlink: bool = True,
+) -> tuple[COMBINED_TYPE, STATS_MAP]:
+    combined = combined or {}
+
+    old_stats: dict[str, DurationStats] = {}
+    for path in durations_dir.glob("*.json"):
+        # read old durations
+        os_name, old_data = read_durations(path, old_stats)
+
+        try:
+            os_combined = combined[os_name]
+        except KeyError:
+            # KeyError: OS not present in new durations
+            if unlink:
+                print(f"⚠️ {os_name} not present in new durations, removing")
+                path.unlink()
+            else:
+                print(f"⚠️ {os_name} not present in new durations, skipping")
+            continue
+
+        # warn about tests that are no longer present
+        for name in set(old_data) - set(combined[os_name]):
+            print(f"⚠️ {os_name}::{name} not present in new durations, removing")
+
+        # only copy over keys that are still present in new durations
+        for key in set(old_data) & set(combined[os_name]):
+            os_combined[key].append(old_data[key])
+
+    return combined, old_stats
 
 
 def get_step_summary(html: str) -> str:
@@ -103,40 +163,8 @@ def dump_summary(console: Console = CONSOLE) -> None:
 def main() -> None:
     args = parse_args()
 
-    combined: dict[str, dict[str, list[float]]] = {}
-
-    # aggregate new durations
-    new_stats: dict[str, DurationStats] = {}
-    for path in args.artifacts_dir.glob("**/*.json"):
-        # read new durations
-        OS, new_data = read_durations(path, new_stats)
-
-        # insert new durations
-        os_combined = combined.setdefault(OS, {})
-        for key, value in new_data.items():
-            os_combined.setdefault(key, []).append(value)
-
-    # aggregate old durations
-    old_stats: dict[str, DurationStats] = {}
-    for path in args.durations_dir.glob("*.json"):
-        # read old durations
-        OS, old_data = read_durations(path, old_stats)
-
-        try:
-            os_combined = combined[OS]
-        except KeyError:
-            # KeyError: OS not present in new durations
-            print(f"⚠️ {OS} not present in new durations, removing")
-            path.unlink()
-            continue
-
-        # warn about tests that are no longer present
-        for name in set(old_data) - set(combined[OS]):
-            print(f"⚠️ {OS}::{name} not present in new durations, removing")
-
-        # only copy over keys that are still present in new durations
-        for key in set(old_data) & set(combined[OS]):
-            os_combined[key].append(old_data[key])
+    combined, new_stats = aggregate_new_durations(args.artifacts_dir)
+    combined, old_stats = aggregate_old_durations(args.durations_dir, combined)
 
     # display stats
     table = Table(box=box.MARKDOWN)
@@ -144,16 +172,16 @@ def main() -> None:
     table.add_column("Number of tests")
     table.add_column("Total run time")
     table.add_column("Average run time")
-    for OS in sorted({*new_stats, *old_stats}):
-        ncount, ntotal, naverage = new_stats.get(OS, (0, 0.0, 0.0))
-        ocount, ototal, oaverage = old_stats.get(OS, (0, 0.0, 0.0))
+    for os_name in sorted({*new_stats, *old_stats}):
+        ncount, ntotal, naverage = new_stats.get(os_name, (0, 0.0, 0.0))
+        ocount, ototal, oaverage = old_stats.get(os_name, (0, 0.0, 0.0))
 
         dcount = ncount - ocount
         dtotal = ntotal - ototal
         daverage = naverage - oaverage
 
         table.add_row(
-            OS,
+            os_name,
             f"{ncount} ({dcount:+}) {'🟢' if dcount >= 0 else '🔴'}",
             f"{ntotal:.2f} ({dtotal:+.2f}) {'🔴' if dtotal >= 0 else '🟢'}",
             f"{naverage:.2f} ({daverage:+.2f}) {'🔴' if daverage >= 0 else '🟢'}",
@@ -161,8 +189,8 @@ def main() -> None:
     print(table)
 
     # write out averages
-    for OS, os_combined in combined.items():
-        (args.durations_dir / f"{OS}.json").write_text(
+    for os_name, os_combined in combined.items():
+        (args.durations_dir / f"{os_name}.json").write_text(
             json.dumps(
                 {key: fmean(values) for key, values in os_combined.items()},
                 indent=4,
