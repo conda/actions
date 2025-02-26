@@ -1,0 +1,9 @@
+{
+    "tests/test_alpha.py::test_a": 2,
+    "tests/test_alpha.py::test_b": 2,
+    "tests/test_beta.py::test_a": 2,
+    "tests/test_beta.py::test_b": 2,
+    "tests/test_gamma.py::test_a": 2,
+    "tests/test_gamma.py::test_b": 2
+
+}
