@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from statistics import fmean
@@ -54,8 +54,15 @@ def parse_args() -> Namespace:
 
 @dataclass
 class DurationStats:
-    number_of_tests: int = 0
-    total_run_time: float = 0.0
+    tests: dict[str, set[float]] = field(default_factory=dict)
+
+    @property
+    def number_of_tests(self) -> int:
+        return len(self.tests)
+
+    @property
+    def total_run_time(self) -> float:
+        return sum(fmean(values) for values in self.tests.values())
 
     @property
     def average_run_time(self) -> float:
@@ -65,6 +72,10 @@ class DurationStats:
         yield self.number_of_tests
         yield self.total_run_time
         yield self.average_run_time
+
+    def add(self, data: dict[str, float]) -> None:
+        for test, duration in data.items():
+            self.tests.setdefault(test, set()).add(duration)
 
 
 STATS_MAP = dict[str, DurationStats]
@@ -78,9 +89,7 @@ def read_durations(
     data = json.loads(path.read_text())
 
     # update durations stats
-    os_stats = stats.setdefault(os_name, DurationStats())
-    os_stats.number_of_tests += len(data)
-    os_stats.total_run_time += sum(data.values())
+    stats.setdefault(os_name, DurationStats()).add(data)
 
     return os_name, data
 
@@ -177,8 +186,8 @@ def main() -> None:
     table = Table(box=box.MARKDOWN)
     table.add_column("OS")
     table.add_column("Number of tests")
-    table.add_column("Total run time")
-    table.add_column("Average run time")
+    table.add_column("Total run time (min)")
+    table.add_column("Average run time (sec)")
     for os_name in sorted({*new_stats, *old_stats}):
         ncount, ntotal, naverage = new_stats.get(os_name, DurationStats())
         ocount, ototal, oaverage = old_stats.get(os_name, DurationStats())
@@ -189,9 +198,9 @@ def main() -> None:
 
         table.add_row(
             os_name,
-            f"{ncount} ({dcount:+}) {'🟢' if dcount >= 0 else '🔴'}",
-            f"{ntotal:.2f} ({dtotal:+.2f}) {'🔴' if dtotal >= 0 else '🟢'}",
-            f"{naverage:.2f} ({daverage:+.2f}) {'🔴' if daverage >= 0 else '🟢'}",
+            f"{ncount} ({dcount:+})",
+            f"{ntotal / 60:.2f} ({dtotal / 60:+.2f})",
+            f"{naverage:.2f} ({daverage:+.2f})",
         )
     print(table)
 
