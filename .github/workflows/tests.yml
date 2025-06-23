@@ -32,7 +32,7 @@ jobs:
           key: ${{ github.workflow }}-${{ hashFiles('**/requirements.txt') }}
 
       - name: Setup Python
-        uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '>=3.9'
 
@@ -43,7 +43,7 @@ jobs:
         run: pytest
 
       - name: Upload Coverage
-        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -74,7 +74,7 @@ jobs:
           parser: yaml
 
       - name: Setup Python
-        uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '>=3.9'
 
@@ -117,7 +117,7 @@ jobs:
               - 'template-files/**'
       - name: Comment on PR
         if: github.event_name == 'pull_request' && steps.filter.outputs.code == 'true'
-        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db  # v2.9.2
+        uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943  # v2.9.3
         with:
           message: |
             ### Template Success
