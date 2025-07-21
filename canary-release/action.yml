@@ -30,6 +30,10 @@ inputs:
     description: The path to the conda recipe passed to conda-build.
     required: false
     default: recipe
+  upload:
+    description: "Whether to upload to the target channel or not. Must be a boolean string: 'true' or 'false'."
+    required: false
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -96,23 +100,26 @@ runs:
           )
         )
         echo "::endgroup::"
+        if [[ "${{ inputs.upload }}" == "true" ]]; then
+          echo "::group::Uploading package"
+          anaconda \
+            --token="${{ inputs.anaconda-org-token }}" \
+            upload \
+            --force \
+            --register \
+            --no-progress \
+            --user="${{ inputs.anaconda-org-channel }}" \
+            --label="${{ inputs.anaconda-org-label }}" \
+            "${PACKAGES[@]}"
+          echo "Uploaded the following files:"
+          basename -a "${PACKAGES[@]}"
+          echo "::endgroup::"
 
-        echo "::group::Uploading package"
-        anaconda \
-          --token="${{ inputs.anaconda-org-token }}" \
-          upload \
-          --force \
-          --register \
-          --no-progress \
-          --user="${{ inputs.anaconda-org-channel }}" \
-          --label="${{ inputs.anaconda-org-label }}" \
-          "${PACKAGES[@]}"
-        echo "Uploaded the following files:"
-        basename -a "${PACKAGES[@]}"
-        echo "::endgroup::"
-
-        echo "Use this command to try out the build:"
-        echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
+          echo "Use this command to try out the build:"
+          echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
+        else
+          echo "Skipping upload because 'upload != true'."
+        fi
 
     - name: Leave comment after build
       if: inputs.comment-token != '' && success()
