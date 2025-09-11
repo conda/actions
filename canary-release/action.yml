@@ -63,6 +63,8 @@ runs:
     - name: Build & upload package
       id: build
       shell: bash -l {0}
+      env:
+        BINSTAR_API_TOKEN: ${{ inputs.anaconda-org-token }}
       run: |
         echo "::group::Setting up environment"
         set -euo pipefail
@@ -103,7 +105,6 @@ runs:
         if [[ "${{ inputs.upload }}" == "true" ]]; then
           echo "::group::Uploading package"
           anaconda \
-            --token="${{ inputs.anaconda-org-token }}" \
             upload \
             --force \
             --register \
