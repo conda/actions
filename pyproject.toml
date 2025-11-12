@@ -30,6 +30,7 @@ addopts = [
 ]
 
 [tool.ruff]
+show-fixes = true
 target-version = "py310"
 
 [tool.ruff.lint]
