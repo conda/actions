@@ -87,9 +87,15 @@ jobs:
 
       - name: Run Tests
         shell: python
+        env:
+          JSON_CONTENT: ${{ steps.json.outputs.content }}
+          YAML_CONTENT: ${{ steps.yaml.outputs.content }}
+          JSON_FOO: ${{ fromJSON(steps.json.outputs.content)['foo'] }}
+          YAML_FOO: ${{ fromJSON(steps.yaml.outputs.content)['foo'] }}
         run: |
-          assert '''${{ steps.json.outputs.content }}''' == '''${{ steps.yaml.outputs.content }}'''
-          assert '''${{ fromJSON(steps.json.outputs.content)['foo'] }}''' == '''${{ fromJSON(steps.yaml.outputs.content)['foo'] }}'''
+          import os
+          assert os.environ['JSON_CONTENT'] == os.environ['YAML_CONTENT']
+          assert os.environ['JSON_FOO'] == os.environ['YAML_FOO']
 
   template-files:
     runs-on: ubuntu-latest
