@@ -38,20 +38,24 @@ runs:
       shell: bash
       run: >
         gh run list
-        --repo ${{ inputs.repository }}
-        --branch ${{ inputs.branch }}
-        --workflow ${{ inputs.workflow }}
+        --repo "${INPUT_REPOSITORY}"
+        --branch "${INPUT_BRANCH}"
+        --workflow "${INPUT_WORKFLOW}"
         --limit 10
         --json databaseId
         --jq '.[].databaseId'
         | xargs -n 1
         gh run download
-        --repo ${{ inputs.repository }}
+        --repo "${INPUT_REPOSITORY}"
         --dir ${{ runner.temp }}/artifacts/
-        --pattern '${{ inputs.pattern }}'
+        --pattern "${INPUT_PATTERN}"
         || true
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_WORKFLOW: ${{ inputs.workflow }}
+        INPUT_PATTERN: ${{ inputs.pattern }}
 
     # `hashFiles` only works on files within the working directory, since `requirements.txt`
     # is not in the working directory we need to manually compute the SHA256 hash
@@ -84,5 +88,7 @@ runs:
       shell: bash
       run: >
         python ${{ github.action_path }}/combine_durations.py
-        --durations-dir=${{ inputs.durations-dir }}
+        --durations-dir="${INPUT_DURATIONS_DIR}"
         --artifacts-dir=${{ runner.temp }}/artifacts/
+      env:
+        INPUT_DURATIONS_DIR: ${{ inputs.durations-dir }}

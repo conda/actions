@@ -52,8 +52,11 @@ runs:
       shell: bash
       run: >
         python ${{ github.action_path }}/read_file.py
-        ${{ inputs.path }}
-        ${{ inputs.parser && format('"--parser={0}"', inputs.parser) || '' }}
-        ${{ inputs.default && format('"--default={0}"', inputs.default) || '' }}
+        "${INPUT_PATH}"
+        ${INPUT_PARSER:+"--parser=${INPUT_PARSER}"}
+        ${INPUT_DEFAULT:+"--default=${INPUT_DEFAULT}"}
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_PARSER: ${{ inputs.parser }}
+        INPUT_DEFAULT: ${{ inputs.default }}
