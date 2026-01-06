@@ -25,6 +25,11 @@ runs:
   using: composite
   steps:
     - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+      env:
+        INPUT_CONTEXT: ${{ inputs.context }}
+        INPUT_DESCRIPTION: ${{ inputs.description }}
+        INPUT_STATE: ${{ inputs.state }}
+        INPUT_TARGET_URL: ${{ inputs.target_url }}
       with:
         github-token: ${{ inputs.token }}
         script: |
@@ -39,12 +44,12 @@ runs:
           core.debug(`sha: ${sha}`);
 
           const { context: name, state } = (await github.rest.repos.createCommitStatus({
-            context: '${{ inputs.context }}',
-            description: '${{ inputs.description }}',
+            context: process.env.INPUT_CONTEXT,
+            description: process.env.INPUT_DESCRIPTION,
             owner: owner,
             repo: repo,
             sha: sha,
-            state: '${{ inputs.state }}',
-            target_url: '${{ inputs.target_url }}'
+            state: process.env.INPUT_STATE,
+            target_url: process.env.INPUT_TARGET_URL
           })).data;
           core.info(`${name} is ${state}`);
