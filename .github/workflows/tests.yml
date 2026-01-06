@@ -13,6 +13,11 @@ on:
     # https://crontab.guru/#15_14_*_*_*
     - cron: 15 14 * * *
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
