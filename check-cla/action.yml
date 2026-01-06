@@ -77,12 +77,12 @@ runs:
         github-token: ${{ inputs.token }}
         script: |
           const { owner, repo } = context.repo;
-          
+
           // Use provided inputs or fall back to context
-          const number = process.env.INPUT_PR_NUMBER 
+          const number = process.env.INPUT_PR_NUMBER
             ? parseInt(process.env.INPUT_PR_NUMBER, 10)
             : context.issue.number;
-          
+
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
           core.setOutput('number', number);

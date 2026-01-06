@@ -8,7 +8,7 @@ on:
 
   # Triggered after CLA Trigger workflow completes (safer than pull_request_target)
   workflow_run:
-    workflows: ["CLA Trigger"]
+    workflows: [CLA Trigger]
     types:
       - completed
 
@@ -76,4 +76,3 @@ jobs:
           pr_author: ${{ steps.pr-context.outputs.author }}
           pr_url: ${{ steps.pr-context.outputs.url }}
           pr_sha: ${{ steps.pr-context.outputs.sha }}
-
