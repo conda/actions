@@ -1,0 +1,23 @@
+# zizmor configuration file
+# https://docs.zizmor.sh/configuration/
+
+rules:
+  dangerous-triggers:
+    ignore:
+      # cla-trigger.yml uses pull_request_target but is safe because:
+      # - It does NOT checkout any code from the PR
+      # - It only saves PR metadata (number, author, url, sha) to artifacts
+      # - No secrets are used in this workflow
+      - cla-trigger.yml
+      
+      # cla.yml uses workflow_run which is the SAFE alternative to pull_request_target
+      # - Secrets are only accessed after the trigger workflow completes
+      # - PR context is passed via artifacts, not from untrusted event payload
+      # - No code from the PR is ever checked out or executed
+      - cla.yml
+      
+      # project.yml uses pull_request_target but is safe because:
+      # - It does NOT checkout any code from the PR
+      # - It only adds PRs to a GitHub project using actions/add-to-project
+      # - The only dynamic value used is github.event_name which cannot be spoofed
+      - project.yml

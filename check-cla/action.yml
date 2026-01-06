@@ -27,6 +27,19 @@ inputs:
   cla_author:
     description: Git-format author/committer to use for pull request commits
     default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+  # Optional inputs for workflow_run trigger (when context.issue is not available)
+  pr_number:
+    description: PR number (optional, for workflow_run triggers)
+    required: false
+  pr_author:
+    description: PR author username (optional, for workflow_run triggers)
+    required: false
+  pr_url:
+    description: PR URL (optional, for workflow_run triggers)
+    required: false
+  pr_sha:
+    description: PR head SHA (optional, for workflow_run triggers)
+    required: false
 
 runs:
   using: composite
@@ -57,10 +70,19 @@ runs:
         INPUT_LABEL: ${{ inputs.label }}
         INPUT_CLA_REPO: ${{ inputs.cla_repo }}
         INPUT_CLA_PATH: ${{ inputs.cla_path }}
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        INPUT_PR_AUTHOR: ${{ inputs.pr_author }}
+        INPUT_PR_URL: ${{ inputs.pr_url }}
       with:
         github-token: ${{ inputs.token }}
         script: |
-          const { owner, repo, number } = context.issue;
+          const { owner, repo } = context.repo;
+          
+          // Use provided inputs or fall back to context
+          const number = process.env.INPUT_PR_NUMBER 
+            ? parseInt(process.env.INPUT_PR_NUMBER, 10)
+            : context.issue.number;
+          
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
           core.setOutput('number', number);
@@ -89,12 +111,13 @@ runs:
           ).contributors;
           core.debug(`contributors: ${contributors}`);
 
-          const payload = context.payload.issue || context.payload.pull_request || context.payload;
-          const contributor = payload.user.login;
+          // Use provided author or get from PR data
+          const contributor = process.env.INPUT_PR_AUTHOR || raw.data.user.login;
           core.setOutput('contributor', contributor);
           core.debug(`contributor: ${contributor}`);
 
-          const url = payload.html_url;
+          // Use provided URL or get from PR data
+          const url = process.env.INPUT_PR_URL || raw.data.html_url;
           core.setOutput('url', url);
           core.debug(`url: ${url}`);
 
