@@ -65,6 +65,13 @@ runs:
       shell: bash -l {0}
       env:
         BINSTAR_API_TOKEN: ${{ inputs.anaconda-org-token }}
+        INPUT_CONDA_BUILD_ARGUMENTS: ${{ inputs.conda-build-arguments }}
+        INPUT_CONDA_BUILD_PATH: ${{ inputs.conda-build-path }}
+        INPUT_SUBDIR: ${{ inputs.subdir }}
+        INPUT_PACKAGE_NAME: ${{ inputs.package-name }}
+        INPUT_UPLOAD: ${{ inputs.upload }}
+        INPUT_ANACONDA_ORG_CHANNEL: ${{ inputs.anaconda-org-channel }}
+        INPUT_ANACONDA_ORG_LABEL: ${{ inputs.anaconda-org-label }}
       run: |
         echo "::group::Setting up environment"
         set -euo pipefail
@@ -89,36 +96,36 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Building package"
-        conda build --croot=./pkgs ${{ inputs.conda-build-arguments }} ${{ inputs.conda-build-path }}
+        conda build --croot=./pkgs ${INPUT_CONDA_BUILD_ARGUMENTS} ${INPUT_CONDA_BUILD_PATH}
         echo "::endgroup::"
 
         echo "::group::Find packages"
         PACKAGES=(
           $(
-            find "./pkgs/${{ inputs.subdir }}" -type f \
+            find "./pkgs/${INPUT_SUBDIR}" -type f \
             \( \
-              -name "${{ inputs.package-name }}-*.tar.bz2" -o \
-              -name "${{ inputs.package-name }}-*.conda" \
+              -name "${INPUT_PACKAGE_NAME}-*.tar.bz2" -o \
+              -name "${INPUT_PACKAGE_NAME}-*.conda" \
             \)
           )
         )
         echo "::endgroup::"
-        if [[ "${{ inputs.upload }}" == "true" ]]; then
+        if [[ "${INPUT_UPLOAD}" == "true" ]]; then
           echo "::group::Uploading package"
           anaconda \
             upload \
             --force \
             --register \
             --no-progress \
-            --user="${{ inputs.anaconda-org-channel }}" \
-            --label="${{ inputs.anaconda-org-label }}" \
+            --user="${INPUT_ANACONDA_ORG_CHANNEL}" \
+            --label="${INPUT_ANACONDA_ORG_LABEL}" \
             "${PACKAGES[@]}"
           echo "Uploaded the following files:"
           basename -a "${PACKAGES[@]}"
           echo "::endgroup::"
 
           echo "Use this command to try out the build:"
-          echo "conda install -c ${{ inputs.anaconda-org-channel }}/label/${{ inputs.anaconda-org-label }} ${{ inputs.package-name }}"
+          echo "conda install -c ${INPUT_ANACONDA_ORG_CHANNEL}/label/${INPUT_ANACONDA_ORG_LABEL} ${INPUT_PACKAGE_NAME}"
         else
           echo "Skipping upload because 'upload != true'."
         fi
