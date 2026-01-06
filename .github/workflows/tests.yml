@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
 
       - name: Cache Pip
         uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
@@ -52,6 +54,8 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
 
       - name: Read Remote JSON
         id: json
@@ -89,6 +93,8 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
 
       - name: Template Success
         id: templates-success
@@ -146,6 +152,8 @@ jobs:
       - name: Checkout our source
         if: always() && github.event_name != 'pull_request' && steps.alls-green.outputs.result == 'failure'
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
 
       - name: Report failures
         if: always() && github.event_name != 'pull_request' && steps.alls-green.outputs.result == 'failure'

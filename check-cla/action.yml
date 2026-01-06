@@ -120,6 +120,7 @@ runs:
       if: steps.metadata.outputs.has_signed == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
+        persist-credentials: false
 
     # if unsigned, update cla_path
     - name: Add contributor as a CLA signee
