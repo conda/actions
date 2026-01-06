@@ -4,22 +4,32 @@ updates:
     directory: /canary-release
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /check-cla
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /read-yaml
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /set-commit-status
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /.github/workflows
     schedule:
@@ -28,3 +38,5 @@ updates:
       workflows:
         patterns:
           - '*'
+    cooldown:
+      default-days: 7
