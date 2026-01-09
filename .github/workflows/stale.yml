@@ -96,5 +96,5 @@ jobs:
 
       - name: Print outputs
         env:
-          STALE_OUTPUTS: ${{ join(steps.stale.outputs.*, ',') }}
+          STALE_OUTPUTS: ${{ toJSON(steps.stale.outputs) }}
         run: echo "${STALE_OUTPUTS}"
