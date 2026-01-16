@@ -1,0 +1,251 @@
+name: Lint
+description: Run prek/pre-commit hooks with optional autofix and PR comments.
+inputs:
+  token:
+    description: GitHub token for PR comments and pushing
+    default: ${{ github.token }}
+  autofix:
+    description: Whether to commit and push fixes
+    default: 'false'
+  comment-id:
+    description: Comment ID to react to (for issue_comment triggers)
+    default: ''
+  pr-number:
+    description: PR number (defaults to current PR, override for issue_comment triggers)
+    default: ${{ github.event.pull_request.number }}
+  git-user-name:
+    description: Git user name for autofix commits
+    default: conda-bot
+  git-user-email:
+    description: Git user email for autofix commits
+    default: 18747875+conda-bot@users.noreply.github.com
+  python-version:
+    description: Python version for running prek hooks
+    default: '3.12'
+outputs:
+  outcome:
+    description: "'success' if no lint issues, 'failure' if issues found"
+    value: ${{ steps.prek.outputs.outcome }}
+  output:
+    description: The prek command output
+    value: ${{ steps.prek.outputs.output }}
+  diff:
+    description: The git diff of suggested fixes (only if outcome is failure)
+    value: ${{ steps.diff.outputs.diff }}
+
+runs:
+  using: composite
+  steps:
+    # Validate that pr-number is set when comment-id is provided
+    - name: Validate inputs
+      if: inputs.comment-id && !inputs.pr-number
+      shell: bash
+      run: |
+        echo "::error::pr-number is required when comment-id is provided"
+        exit 1
+
+    # React with eyes to indicate processing (autofix only)
+    - if: inputs.comment-id
+      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      with:
+        token: ${{ inputs.token }}
+        comment-id: ${{ inputs.comment-id }}
+        reactions: eyes
+        reactions-edit-mode: replace
+
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+    # Checkout PR branch for autofix (gh handles fork remotes automatically)
+    - if: inputs.pr-number
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: gh pr checkout ${{ inputs.pr-number }}
+
+    - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    # install-only so we can capture prek output
+    - uses: j178/prek-action@9d6a3097e0c1865ecce00cfb89fe80f2ee91b547 # v1.0.12
+      with:
+        install-only: true
+
+    - name: Run prek
+      id: prek
+      shell: bash
+      run: |
+        {
+          echo 'output<<EOF'
+          prek run --all-files --color never 2>&1 && exit_code=0 || exit_code=$?
+          echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
+        # fail if prek exited non-zero OR made changes
+        if [[ $exit_code -ne 0 ]] || [[ -n "$(git status --porcelain)" ]]; then
+          echo "outcome=failure" >> "$GITHUB_OUTPUT"
+        else
+          echo "outcome=success" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Capture diff
+      id: diff
+      if: steps.prek.outputs.outcome == 'failure'
+      shell: bash
+      run: |
+        {
+          echo 'diff<<EOF'
+          git diff --no-color
+          echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
+
+    # Find existing lint comment (skip on push events - no PR context)
+    - name: Find existing lint comment
+      if: inputs.pr-number
+      uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e # v3.1.0
+      id: lint-comment
+      with:
+        token: ${{ inputs.token }}
+        issue-number: ${{ inputs.pr-number }}
+        body-includes: <!-- lint-comment -->
+
+    # Commit and push fixes (autofix only)
+    - name: Commit and push fixes
+      id: push
+      if: steps.prek.outputs.outcome == 'failure' && inputs.autofix == 'true'
+      continue-on-error: true
+      shell: bash
+      run: |
+        git config user.name '${{ inputs.git-user-name }}'
+        git config user.email '${{ inputs.git-user-email }}'
+        git add -A
+        git commit --message 'style: auto-fix lint issues'
+        git push
+
+    # Reset changes if not autofix mode, or if autofix push failed
+    - name: Reset changes
+      if: steps.prek.outputs.outcome == 'failure' && (inputs.autofix != 'true' || steps.push.outcome == 'failure')
+      shell: bash
+      run: git checkout -- .
+
+    # React to command comment on successful autofix
+    - name: React on successful autofix
+      if: steps.push.outcome == 'success' && inputs.comment-id
+      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      with:
+        token: ${{ inputs.token }}
+        comment-id: ${{ inputs.comment-id }}
+        reactions: hooray
+        reactions-edit-mode: replace
+
+    # Update lint comment to show success (lint passed or autofix pushed)
+    - name: Update lint comment on success
+      if: (steps.prek.outputs.outcome == 'success' || steps.push.outcome == 'success') && steps.lint-comment.outputs.comment-id
+      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      with:
+        token: ${{ inputs.token }}
+        comment-id: ${{ steps.lint-comment.outputs.comment-id }}
+        edit-mode: replace
+        body: |
+          <!-- lint-comment -->
+          ## ✅ Lint issues fixed
+
+          All lint issues have been resolved.
+
+    # Check if this is a fork PR (autofix won't be able to push)
+    - name: Detect fork PR
+      id: fork
+      if: github.event_name == 'pull_request'
+      shell: bash
+      env:
+        IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+      run: echo "is_fork=$IS_FORK" >> "$GITHUB_OUTPUT"
+
+    # Prepare admonition for fork PRs or autofix failures
+    - name: Set admonition
+      id: error-comment
+      if: steps.push.outcome == 'failure' || steps.fork.outputs.is_fork == 'true'
+      shell: bash
+      env:
+        ADMONITION_FORK: |
+          > [!NOTE]
+          > This PR is from a fork. Autofix cannot push to forks, so please fix locally.
+        ADMONITION_FAILED: |
+          > [!WARNING]
+          > Autofix failed to push. This is likely because the PR is from a fork, and GitHub Actions cannot push to forks with the default token.
+      run: |
+        {
+          echo 'admonition<<EOF'
+          echo "${{ steps.push.outcome == 'failure' && env.ADMONITION_FAILED || env.ADMONITION_FORK }}"
+          echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
+
+    # Comment on PR with lint errors (after push so we know if autofix failed)
+    - name: Comment on PR with errors
+      if: steps.prek.outputs.outcome == 'failure' && (github.event_name == 'pull_request' || steps.push.outcome == 'failure')
+      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      with:
+        token: ${{ inputs.token }}
+        comment-id: ${{ steps.lint-comment.outputs.comment-id }}
+        issue-number: ${{ inputs.pr-number }}
+        edit-mode: replace
+        body: |
+          <!-- lint-comment -->
+          ## ⚠️ Lint issues found
+
+          ${{ steps.error-comment.outputs.admonition }}
+
+          prek found issues that need to be fixed. You can either:
+          1. Fix them locally and push
+          2. Comment `@conda-bot prek autofix` to auto-commit fixes (requires write access)
+
+          ```bash
+          # install prek: https://github.com/j178/prek?tab=readme-ov-file#installation
+          prek run --all-files
+          git add -A && git commit -m "style: auto-fix lint issues" && git push
+          ```
+
+          <details>
+          <summary>🔍 prek output (click to expand)</summary>
+
+          ```
+          ${{ steps.prek.outputs.output }}
+          ```
+
+          </details>
+
+          <details>
+          <summary>📝 Suggested fixes (click to expand)</summary>
+
+          ```diff
+          ${{ steps.diff.outputs.diff }}
+          ```
+
+          </details>
+
+          ###### See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details.
+
+    # React to command comment on failed autofix
+    - name: React on failed autofix
+      if: steps.push.outcome == 'failure' && inputs.comment-id
+      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      with:
+        token: ${{ inputs.token }}
+        comment-id: ${{ inputs.comment-id }}
+        reactions: confused
+        reactions-edit-mode: replace
+
+    # React to command comment if no lint issues (autofix only, no push needed)
+    - name: React on no issues
+      if: steps.prek.outputs.outcome == 'success' && inputs.comment-id
+      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      with:
+        token: ${{ inputs.token }}
+        comment-id: ${{ inputs.comment-id }}
+        reactions: hooray
+        reactions-edit-mode: replace
+
+    # Fail if lint found issues (not in autofix mode) or if autofix push failed
+    - name: Fail if lint found issues
+      if: (steps.prek.outputs.outcome == 'failure' && inputs.autofix != 'true') || steps.push.outcome == 'failure'
+      shell: bash
+      run: exit 1
