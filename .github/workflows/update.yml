@@ -12,6 +12,11 @@ on:
     types:
       - created
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   update:
     if: >-
@@ -41,14 +46,17 @@ jobs:
       - if: github.event.comment.body == '@conda-bot render'
         name: Configure git origin
         run: |
-          echo REPOSITORY=$(curl --silent ${{ github.event.issue.pull_request.url }} | jq --raw-output '.head.repo.full_name') >> $GITHUB_ENV
-          echo REF=$(curl --silent ${{ github.event.issue.pull_request.url }} | jq --raw-output '.head.ref') >> $GITHUB_ENV
+          echo "REPOSITORY=$(curl --silent "${PR_URL}" | jq --raw-output '.head.repo.full_name')" >> "$GITHUB_ENV"
+          echo "REF=$(curl --silent "${PR_URL}" | jq --raw-output '.head.ref')" >> "$GITHUB_ENV"
+        env:
+          PR_URL: ${{ github.event.issue.pull_request.url }}
 
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: ${{ env.REPOSITORY || github.repository }}
           ref: ${{ env.REF || '' }}
           token: ${{ secrets.SYNC_TOKEN }}
+          persist-credentials: false
 
       - name: Configure git user
         run: |
@@ -73,7 +81,7 @@ jobs:
       - if: github.event.comment.body != '@conda-bot render'
         name: Create fork
         # no-op if the repository is already forked
-        run: echo FORK=$(gh repo fork --clone=false --default-branch-only 2>&1 | awk '{print $1}') >> $GITHUB_ENV
+        run: echo "FORK=$(gh repo fork --clone=false --default-branch-only 2>&1 | awk '{print $1}')" >> "$GITHUB_ENV"
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
 

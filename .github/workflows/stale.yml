@@ -95,4 +95,6 @@ jobs:
           exempt-assignees: mingwandroid
 
       - name: Print outputs
-        run: echo ${{ join(steps.stale.outputs.*, ',') }}
+        env:
+          STALE_OUTPUTS: ${{ toJSON(steps.stale.outputs) }}
+        run: echo "${STALE_OUTPUTS}"

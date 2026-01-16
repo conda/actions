@@ -22,6 +22,9 @@ runs:
       shell: bash -l {0}
     - id: read_yaml
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_KEY: ${{ inputs.key }}
       with:
         script: |
           const yaml = require('js-yaml');
@@ -90,8 +93,8 @@ runs:
           }
 
           async function main() {
-            const path = "${{ inputs.path }}";
-            const key = `${{ inputs.key }}`.trim();
+            const path = process.env.INPUT_PATH;
+            const key = (process.env.INPUT_KEY || '').trim();
 
             let value = await readYaml(path);
             if (key) {

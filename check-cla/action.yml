@@ -27,6 +27,19 @@ inputs:
   cla_author:
     description: Git-format author/committer to use for pull request commits
     default: Conda Bot <18747875+conda-bot@users.noreply.github.com>
+  # Optional inputs for workflow_run trigger (when context.issue is not available)
+  pr_number:
+    description: PR number (optional, for workflow_run triggers)
+    required: false
+  pr_author:
+    description: PR author username (optional, for workflow_run triggers)
+    required: false
+  pr_url:
+    description: PR URL (optional, for workflow_run triggers)
+    required: false
+  pr_sha:
+    description: PR head SHA (optional, for workflow_run triggers)
+    required: false
 
 runs:
   using: composite
@@ -53,10 +66,23 @@ runs:
     - name: Collect PR metadata
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
       id: metadata
+      env:
+        INPUT_LABEL: ${{ inputs.label }}
+        INPUT_CLA_REPO: ${{ inputs.cla_repo }}
+        INPUT_CLA_PATH: ${{ inputs.cla_path }}
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        INPUT_PR_AUTHOR: ${{ inputs.pr_author }}
+        INPUT_PR_URL: ${{ inputs.pr_url }}
       with:
         github-token: ${{ inputs.token }}
         script: |
-          const { owner, repo, number } = context.issue;
+          const { owner, repo } = context.repo;
+
+          // Use provided inputs or fall back to context
+          const number = process.env.INPUT_PR_NUMBER
+            ? parseInt(process.env.INPUT_PR_NUMBER, 10)
+            : context.issue.number;
+
           core.debug(`owner: ${owner}`);
           core.debug(`repo: ${repo}`);
           core.setOutput('number', number);
@@ -70,27 +96,28 @@ runs:
           const labels = raw.data.labels.map(label => label.name);
           core.debug(`labels: ${labels}`);
 
-          const has_label = labels.includes('${{ inputs.label }}');
+          const has_label = labels.includes(process.env.INPUT_LABEL);
           core.setOutput('has_label', has_label);
           core.debug(`has_label: ${has_label}`);
 
-          const cla_repo = '${{ inputs.cla_repo }}'.split('/', 2);
+          const cla_repo = process.env.INPUT_CLA_REPO.split('/', 2);
           const { content, encoding } = (await github.rest.repos.getContent({
             owner: cla_repo[0],
             repo: cla_repo[1],
-            path: '${{ inputs.cla_path }}'
+            path: process.env.INPUT_CLA_PATH
           })).data;
           const contributors = JSON.parse(
             Buffer.from(content, encoding).toString('utf-8')
           ).contributors;
           core.debug(`contributors: ${contributors}`);
 
-          const payload = context.payload.issue || context.payload.pull_request || context.payload;
-          const contributor = payload.user.login;
+          // Use provided author or get from PR data
+          const contributor = process.env.INPUT_PR_AUTHOR || raw.data.user.login;
           core.setOutput('contributor', contributor);
           core.debug(`contributor: ${contributor}`);
 
-          const url = payload.html_url;
+          // Use provided URL or get from PR data
+          const url = process.env.INPUT_PR_URL || raw.data.html_url;
           core.setOutput('url', url);
           core.debug(`url: ${url}`);
 
@@ -120,18 +147,23 @@ runs:
       if: steps.metadata.outputs.has_signed == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
+        persist-credentials: false
 
     # if unsigned, update cla_path
     - name: Add contributor as a CLA signee
       shell: python
       if: steps.metadata.outputs.has_signed == 'false'
+      env:
+        INPUT_CLA_PATH: ${{ inputs.cla_path }}
+        CONTRIBUTOR: ${{ steps.metadata.outputs.contributor }}
       run: |
         import json
+        import os
         from pathlib import Path
 
-        path = Path("${{ inputs.cla_path }}")
+        path = Path(os.environ["INPUT_CLA_PATH"])
         signees = json.loads(path.read_text())
-        signees["contributors"].append("${{ steps.metadata.outputs.contributor }}")
+        signees["contributors"].append(os.environ["CONTRIBUTOR"])
         signees["contributors"].sort(key=str.lower)
         path.write_text(json.dumps(signees, indent=2) + "\n")
 
