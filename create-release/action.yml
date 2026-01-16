@@ -1,0 +1,81 @@
+name: Create Release
+description: Creates a release by archiving the source and creating a release on GitHub.
+inputs:
+  version:
+    description: Version to release.
+    required: true
+  branch:
+    description: Target branch for the release.
+    default: ${{ github.event.repository.default_branch }}
+  archive-name:
+    description: Name of the git archive.
+    default: ${{ github.event.repository.name }}-${{ inputs.version }}
+  output-directory:
+    description: Directory for the release artifacts.
+    default: release
+  release-notes:
+    description: Path to the release notes.
+    default: RELEASE_NOTES.md
+  token:
+    description: 'GitHub token to create the release. Fine-grained PAT: `contents: write`'
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - name: Checkout Source
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+    - name: Create Release Directory
+      shell: bash
+      run: mkdir -p ${{ inputs.output-directory }}
+
+    - name: Archive Source
+      shell: bash
+      run: >
+        git archive
+        --prefix="${{ inputs.archive-name }}/"
+        --output="${{ inputs.output-directory }}/${{ inputs.archive-name }}.tar.gz"
+        HEAD
+
+    - name: Compute Checksum
+      shell: bash
+      run: >
+        sha256sum "${{ inputs.output-directory }}/${{ inputs.archive-name }}.tar.gz"
+        | awk '{print $1}'
+        > "${{ inputs.output-directory }}/${{ inputs.archive-name }}.tar.gz.sha256sum"
+
+    - name: Load Pip Cache
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      with:
+        path: ~/.cache/pip
+        # invalidate the cache anytime a workflow changes
+        key: ${{ github.workflow }}-${{ hashFiles('.github/workflows/*') }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '>=3.7'
+
+    - name: Pip List
+      shell: bash
+      run: pip list
+
+    - name: Get Release Notes
+      shell: bash
+      run: >
+        python ${{ github.action_path }}/get_release_notes.py
+        --input="${{ inputs.changelog }}"
+        --version="${{ inputs.version }}"
+        --output="${{ inputs.output-directory }}/${{ inputs.release-notes }}"
+
+    - name: Create Release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ input.token }}
+      run: >
+        gh release create
+        --notes-file "${{ inputs.output-directory }}/${{ inputs.release-notes }}"
+        --target "${{ inputs.branch }}"
+        --title "${{ inputs.version }}"
+        "${{ inputs.version }}"
+        ${{ inputs.output-directory }}/${{ env.ARCHIVE_NAME }}.*
