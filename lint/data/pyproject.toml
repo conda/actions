@@ -1,0 +1,5 @@
+# Minimal ruff config for testing lint action
+# This file stops ruff from using the parent pyproject.toml
+
+[tool.ruff.lint]
+select = ["F"]  # pyflakes, includes F401 (unused-import)
