@@ -100,29 +100,6 @@ This is useful for:
 - CI test scenarios where you don't want test comments cluttering PRs
 - Conditional commenting based on file changes (see tests.yml for an example)
 
-## Behavior by Event Type
-
-### `push`
-
-- Runs prek on the pushed branch
-- Fails if lint issues found (no PR comment - no PR context)
-
-### `pull_request`
-
-- Runs prek on the PR
-- On failure: creates/updates PR comment with issues and diff
-- On success (after previous failure): updates comment to "✅ Lint issues fixed"
-- Detects fork PRs and shows a note that autofix won't work
-
-### `issue_comment` (with `autofix: true`)
-
-- Reacts to trigger comment with 👀
-- Checks out PR branch via `gh pr checkout`
-- Runs prek
-- On success (fixes pushed): reacts 🎉, updates comment to "✅ Lint issues fixed"
-- On push failure (fork): reacts 😕, updates comment with warning
-- On no issues: reacts 🎉
-
 ## PR Comments
 
 The action creates a sticky comment (identified by `<!-- lint-comment -->`) that:
