@@ -160,10 +160,11 @@ jobs:
           # Only comment on PR if lint code changed
           pr-number: ${{ steps.filter.outputs.lint == 'true' && github.event.pull_request.number || '' }}
           comment-anchor: lint-comment-test-success
+          comment-on-success: ${{ steps.filter.outputs.lint == 'true' }}
           comment-header: |
             > [!WARNING]
             > **Working directory:** `${{ env.WORKING_DIRECTORY }}`
-            > This comment should not appear - success test should not produce lint comments.
+            > This is what the lint comment looks like when there are no lint issues.
 
       # Test 2: Error case - code with issues should fail lint
       - name: Run lint on error test data

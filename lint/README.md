@@ -75,6 +75,7 @@ jobs:
 | `config` | Path to pre-commit config file (defaults to auto-discovery) | No | `''` |
 | `comment-anchor` | Unique anchor for sticky comment (customize to avoid conflicts with parallel workflows) | No | `'lint-comment'` |
 | `comment-header` | Optional header text to prepend to comments (e.g., to mark test comments) | No | `''` |
+| `comment-on-success` | Create success comment even without prior lint failure (useful for testing) | No | `'false'` |
 
 ## Outputs
 

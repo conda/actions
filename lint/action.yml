@@ -37,6 +37,9 @@ inputs:
   comment-header:
     description: Optional header text to prepend to comments (e.g., to mark test comments)
     default: ''
+  comment-on-success:
+    description: Create success comment even without prior lint failure (useful for testing)
+    default: 'false'
 outputs:
   outcome:
     description: "'success' if no lint issues, 'failure' if issues found"
@@ -159,11 +162,12 @@ runs:
 
     # Update lint comment to show success (lint passed or autofix pushed)
     - name: Update lint comment on success
-      if: (steps.prek.outputs.outcome == 'success' || steps.push.outcome == 'success') && steps.lint-comment.outputs.comment-id
+      if: (steps.prek.outputs.outcome == 'success' || steps.push.outcome == 'success') && (steps.lint-comment.outputs.comment-id || inputs.comment-on-success == 'true')
       uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
       with:
         token: ${{ inputs.token }}
         comment-id: ${{ steps.lint-comment.outputs.comment-id }}
+        issue-number: ${{ inputs.pr-number }}
         edit-mode: replace
         body: |
           <!-- ${{ inputs.comment-anchor }} -->
@@ -171,6 +175,8 @@ runs:
           ## ✅ Lint issues fixed
 
           All lint issues have been resolved.
+
+          ###### See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} for details.
 
     # Admonition for autofix failures or fork PRs
     - name: Set fork/failure admonition
