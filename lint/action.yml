@@ -172,27 +172,18 @@ runs:
 
           All lint issues have been resolved.
 
-    # Check if this is a fork PR (autofix won't be able to push)
-    - name: Detect fork PR
-      id: fork
-      if: github.event_name == 'pull_request'
-      shell: bash
-      env:
-        IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-      run: echo "is_fork=$IS_FORK" >> "$GITHUB_OUTPUT"
-
-    # Prepare admonition for fork PRs or autofix failures
+    # Prepare admonition for autofix failures or fork PRs
     - name: Set admonition
       id: error-comment
-      if: steps.push.outcome == 'failure' || steps.fork.outputs.is_fork == 'true'
+      if: steps.push.outcome == 'failure' || github.event.pull_request.head.repo.full_name != github.repository
       shell: bash
       env:
-        ADMONITION_FORK: |
-          > [!NOTE]
-          > This PR is from a fork. Autofix cannot push to forks, so please fix locally.
         ADMONITION_FAILED: |
           > [!WARNING]
           > Autofix failed to push. This is likely because the PR is from a fork, and GitHub Actions cannot push to forks with the default token.
+        ADMONITION_FORK: |
+          > [!NOTE]
+          > This PR is from a fork. Autofix cannot push to forks, so please fix locally.
       run: |
         {
           echo 'admonition<<EOF'
