@@ -1,3 +1,6 @@
+# exclude test files with intentional lint issues
+exclude: ^lint/data/with_issues\.py$
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
