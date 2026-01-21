@@ -56,7 +56,9 @@ runs:
       shell: bash
       run: >
         python ${{ github.action_path }}/template_files.py
-        --config ${{ inputs.config }}
-        --stubs ${{ inputs.stubs }}
+        --config "${INPUT_CONFIG}"
+        --stubs "${INPUT_STUBS}"
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_STUBS: ${{ inputs.stubs }}

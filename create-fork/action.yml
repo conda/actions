@@ -33,7 +33,7 @@ runs:
         RESPONSE=$(gh api \
           -X POST \
           -H "Accept: application/vnd.github+json" \
-          "/repos/${{ inputs.repository }}/forks" \
+          "/repos/${INPUT_REPOSITORY}/forks" \
           -f default_branch_only=true)
 
         # extract values with jq
@@ -43,9 +43,11 @@ runs:
         # wait a minute to ensure the fork is ready
         TIMESTAMP="$(date -d "${CREATED_AT}" +%s)"
         CURRENT="$(date +%s)"
-        [ $((CURRENT - TIMESTAMP)) -gt 60 ] || sleep ${{ inputs.timeout }}
+        [ $((CURRENT - TIMESTAMP)) -gt 60 ] || sleep "${INPUT_TIMEOUT}"
 
         # store values for subsequent usage
         echo fork="${FULL_NAME}" >> $GITHUB_OUTPUT
       env:
         GH_TOKEN: ${{ inputs.token }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
