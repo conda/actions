@@ -7,6 +7,20 @@ A composite GitHub Action that runs [prek](https://github.com/j178/prek) (a fast
 - `action.yml` - Composite action with all logic
 - `workflow.yml.tmpl` - Workflow template for syncing to repos
 
+## Syncing to Repositories
+
+To adopt this workflow via template-files, add to your `.github/template-files/config.yml`:
+
+```yaml
+- source: lint/workflow.yml.tmpl
+  target: .github/workflows/lint.yml
+  # Optional: additional branch patterns (main is always included)
+  # branches:
+  #   - '2[0-9].[0-9]+.x'  # CalVer release branches
+  # Optional: Python version for prek hooks
+  # python_version: '3.12'
+```
+
 ## Features
 
 - Installs and runs prek with your existing `.pre-commit-config.yaml`
