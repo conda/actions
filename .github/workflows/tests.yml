@@ -154,6 +154,7 @@ jobs:
           token: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
           checkout: false
           working-directory: lint/data/success
+          config: pre-commit-config.yaml
           # Only comment on PR if lint code changed
           pr-number: ${{ steps.filter.outputs.lint == 'true' && github.event.pull_request.number || '' }}
           comment-anchor: lint-comment-test-success
@@ -170,6 +171,7 @@ jobs:
           token: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
           checkout: false
           working-directory: lint/data/error
+          config: pre-commit-config.yaml
           # Only comment on PR if lint code changed
           pr-number: ${{ steps.filter.outputs.lint == 'true' && github.event.pull_request.number || '' }}
           comment-anchor: lint-comment-test-error

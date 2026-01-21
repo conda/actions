@@ -28,6 +28,9 @@ inputs:
   working-directory:
     description: Directory to run prek in (defaults to repo root)
     default: .
+  config:
+    description: Path to pre-commit config file (defaults to auto-discovery)
+    default: ''
   comment-anchor:
     description: Unique anchor for sticky comment (customize to avoid conflicts with parallel workflows)
     default: lint-comment
@@ -88,10 +91,12 @@ runs:
       id: prek
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        CONFIG_ARG: ${{ inputs.config && format('--config {0}', inputs.config) || '' }}
       run: |
         {
           echo 'output<<EOF'
-          prek run --all-files --color never 2>&1 && exit_code=0 || exit_code=$?
+          prek run --all-files --color never $CONFIG_ARG 2>&1 && exit_code=0 || exit_code=$?
           echo 'EOF'
         } >> "$GITHUB_OUTPUT"
         # fail if prek exited non-zero OR made changes

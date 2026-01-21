@@ -72,6 +72,7 @@ jobs:
 | `python-version` | Python version for running prek hooks | No | `'3.12'` |
 | `checkout` | Whether to checkout the repository (set to false if already checked out) | No | `'true'` |
 | `working-directory` | Directory to run prek in (defaults to repo root) | No | `'.'` |
+| `config` | Path to pre-commit config file (defaults to auto-discovery) | No | `''` |
 | `comment-anchor` | Unique anchor for sticky comment (customize to avoid conflicts with parallel workflows) | No | `'lint-comment'` |
 | `comment-header` | Optional header text to prepend to comments (e.g., to mark test comments) | No | `''` |
 
