@@ -172,9 +172,9 @@ runs:
 
           All lint issues have been resolved.
 
-    # Prepare admonition for autofix failures or fork PRs
-    - name: Set admonition
-      id: error-comment
+    # Admonition for autofix failures or fork PRs
+    - name: Set fork/failure admonition
+      id: admonition
       if: steps.push.outcome == 'failure' || github.event.pull_request.head.repo.full_name != github.repository
       shell: bash
       env:
@@ -205,7 +205,7 @@ runs:
           ${{ inputs.comment-header }}
           ## ⚠️ Lint issues found
 
-          ${{ steps.error-comment.outputs.admonition }}
+          ${{ steps.admonition.outputs.admonition }}
 
           prek found issues that need to be fixed. You can either:
           1. Fix them locally and push

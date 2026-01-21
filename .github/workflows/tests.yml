@@ -150,16 +150,19 @@ jobs:
         id: lint-success
         continue-on-error: true
         uses: ./lint
+        env:
+          WORKING_DIRECTORY: lint/data/success
         with:
           token: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
           checkout: false
-          working-directory: lint/data/success
+          working-directory: ${{ env.WORKING_DIRECTORY }}
           config: pre-commit-config.yaml
           # Only comment on PR if lint code changed
           pr-number: ${{ steps.filter.outputs.lint == 'true' && github.event.pull_request.number || '' }}
           comment-anchor: lint-comment-test-success
           comment-header: |
             > [!WARNING]
+            > **Working directory:** `${{ env.WORKING_DIRECTORY }}`
             > This comment should not appear - success test should not produce lint comments.
 
       # Test 2: Error case - code with issues should fail lint
@@ -167,16 +170,19 @@ jobs:
         id: lint-error
         continue-on-error: true
         uses: ./lint
+        env:
+          WORKING_DIRECTORY: lint/data/error
         with:
           token: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
           checkout: false
-          working-directory: lint/data/error
+          working-directory: ${{ env.WORKING_DIRECTORY }}
           config: pre-commit-config.yaml
           # Only comment on PR if lint code changed
           pr-number: ${{ steps.filter.outputs.lint == 'true' && github.event.pull_request.number || '' }}
           comment-anchor: lint-comment-test-error
           comment-header: |
             > [!WARNING]
+            > **Working directory:** `${{ env.WORKING_DIRECTORY }}`
             > This is what the lint comment looks like when there are lint issues.
 
       - name: Reset test data changes
