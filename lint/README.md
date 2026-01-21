@@ -133,6 +133,27 @@ The action creates a sticky comment (identified by `<!-- lint-comment -->`) that
 - Updates to "✅ Lint issues fixed" when resolved
 - Includes link to workflow run for details
 
-## Limitations
+## Fork PRs
 
-- **Fork PRs**: The default `GITHUB_TOKEN` cannot push to forks. Autofix will fail on fork PRs with a clear message explaining how to fix locally. A GitHub App with broader permissions could enable this in the future.
+By default, `GITHUB_TOKEN` cannot push to fork PRs. The action detects this and shows a helpful message explaining how to fix locally.
+
+To enable autofix for fork PRs, use a GitHub App token instead (**untested**):
+
+```yaml
+- uses: actions/create-github-app-token@v1
+  id: app-token
+  with:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+- uses: conda/actions/lint@main
+  with:
+    token: ${{ steps.app-token.outputs.token }}
+    autofix: true
+    comment-id: ${{ github.event.comment.id }}
+    pr-number: ${{ github.event.issue.number }}
+```
+
+Requirements:
+- GitHub App with `contents: write` and `pull-requests: write` permissions
+- PR author must enable "Allow edits from maintainers"
