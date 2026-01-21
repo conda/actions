@@ -1,4 +1,5 @@
 # Minimal pre-commit config for testing lint action (error case)
+files: ^lint/data/error/
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.11
