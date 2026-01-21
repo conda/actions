@@ -70,6 +70,10 @@ jobs:
 | `git-user-name` | Git user name for autofix commits | No | `conda-bot` |
 | `git-user-email` | Git user email for autofix commits | No | `18747875+conda-bot@users.noreply.github.com` |
 | `python-version` | Python version for running prek hooks | No | `'3.12'` |
+| `checkout` | Whether to checkout the repository (set to false if already checked out) | No | `'true'` |
+| `working-directory` | Directory to run prek in (defaults to repo root) | No | `'.'` |
+| `comment-anchor` | Unique anchor for sticky comment (customize to avoid conflicts with parallel workflows) | No | `'lint-comment'` |
+| `comment-header` | Optional header text to prepend to comments (e.g., to mark test comments) | No | `''` |
 
 ## Outputs
 
@@ -78,6 +82,21 @@ jobs:
 | `outcome` | `success` if no lint issues, `failure` if issues found |
 | `output` | The prek command output |
 | `diff` | The git diff of suggested fixes (only if outcome is failure) |
+
+## Disabling PR Comments
+
+To run lint without creating PR comments, omit the `pr-number` input:
+
+```yaml
+- uses: conda/actions/lint@main
+  with:
+    pr-number: ''  # No PR comments
+```
+
+This is useful for:
+- Running lint in contexts without a PR (e.g., scheduled runs)
+- CI test scenarios where you don't want test comments cluttering PRs
+- Conditional commenting based on file changes (see tests.yml for an example)
 
 ## Behavior by Event Type
 

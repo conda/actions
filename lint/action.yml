@@ -22,6 +22,18 @@ inputs:
   python-version:
     description: Python version for running prek hooks
     default: '3.12'
+  checkout:
+    description: Whether to checkout the repository (set to false if already checked out)
+    default: 'true'
+  working-directory:
+    description: Directory to run prek in (defaults to repo root)
+    default: .
+  comment-anchor:
+    description: Unique anchor for sticky comment (customize to avoid conflicts with parallel workflows)
+    default: lint-comment
+  comment-header:
+    description: Optional header text to prepend to comments (e.g., to mark test comments)
+    default: ''
 outputs:
   outcome:
     description: "'success' if no lint issues, 'failure' if issues found"
@@ -53,7 +65,8 @@ runs:
         reactions: eyes
         reactions-edit-mode: replace
 
-    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+    - if: inputs.checkout == 'true'
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
     # Checkout PR branch for autofix (gh handles fork remotes automatically)
     - if: inputs.pr-number
@@ -74,6 +87,7 @@ runs:
     - name: Run prek
       id: prek
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: |
         {
           echo 'output<<EOF'
@@ -91,6 +105,7 @@ runs:
       id: diff
       if: steps.prek.outputs.outcome == 'failure'
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: |
         {
           echo 'diff<<EOF'
@@ -106,7 +121,7 @@ runs:
       with:
         token: ${{ inputs.token }}
         issue-number: ${{ inputs.pr-number }}
-        body-includes: <!-- lint-comment -->
+        body-includes: <!-- ${{ inputs.comment-anchor }} -->
 
     # Commit and push fixes (autofix only)
     - name: Commit and push fixes
@@ -146,7 +161,8 @@ runs:
         comment-id: ${{ steps.lint-comment.outputs.comment-id }}
         edit-mode: replace
         body: |
-          <!-- lint-comment -->
+          <!-- ${{ inputs.comment-anchor }} -->
+          ${{ inputs.comment-header }}
           ## ✅ Lint issues fixed
 
           All lint issues have been resolved.
@@ -189,7 +205,8 @@ runs:
         issue-number: ${{ inputs.pr-number }}
         edit-mode: replace
         body: |
-          <!-- lint-comment -->
+          <!-- ${{ inputs.comment-anchor }} -->
+          ${{ inputs.comment-header }}
           ## ⚠️ Lint issues found
 
           ${{ steps.error-comment.outputs.admonition }}

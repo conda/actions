@@ -1,0 +1,8 @@
+# Minimal pre-commit config for testing
+# This mirrors what repos using the lint action would have
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff-check
+        args: [--fix]
