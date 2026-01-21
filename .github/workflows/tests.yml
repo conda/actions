@@ -145,33 +145,34 @@ jobs:
             lint:
               - 'lint/**'
 
-      # Test 1: Clean repo should pass lint (no comment created since it passes)
-      - name: Run lint on clean repo
-        id: lint-clean
+      # Test 1: Success case - clean code should pass lint
+      - name: Run lint on success test data
+        id: lint-success
         continue-on-error: true
         uses: ./lint
         with:
           token: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
           checkout: false
+          working-directory: lint/data/success
           # Only comment on PR if lint code changed
           pr-number: ${{ steps.filter.outputs.lint == 'true' && github.event.pull_request.number || '' }}
-          comment-anchor: lint-comment-test-clean
+          comment-anchor: lint-comment-test-success
           comment-header: |
             > [!WARNING]
-            > This comment should not appear - clean repos should not produce lint comments.
+            > This comment should not appear - success test should not produce lint comments.
 
-      # Test 2: File with issues should fail lint (using test data directory)
-      - name: Run lint on test data with issues
-        id: lint-issues
+      # Test 2: Error case - code with issues should fail lint
+      - name: Run lint on error test data
+        id: lint-error
         continue-on-error: true
         uses: ./lint
         with:
           token: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
           checkout: false
+          working-directory: lint/data/error
           # Only comment on PR if lint code changed
           pr-number: ${{ steps.filter.outputs.lint == 'true' && github.event.pull_request.number || '' }}
-          working-directory: lint/data
-          comment-anchor: lint-comment-test-issues
+          comment-anchor: lint-comment-test-error
           comment-header: |
             > [!WARNING]
             > This is what the lint comment looks like when there are lint issues.
@@ -184,27 +185,27 @@ jobs:
         run: |
           failed=0
 
-          # Test 1: Clean repo should pass
-          if [[ "${{ steps.lint-clean.outputs.outcome }}" != "success" ]]; then
-            echo "::error::Test 1: Expected outcome=success, got ${{ steps.lint-clean.outputs.outcome }}"
+          # Test 1: Success case should pass
+          if [[ "${{ steps.lint-success.outputs.outcome }}" != "success" ]]; then
+            echo "::error::Test 1 (success): Expected outcome=success, got ${{ steps.lint-success.outputs.outcome }}"
             failed=1
           fi
-          if [[ -z "${{ steps.lint-clean.outputs.output }}" ]]; then
-            echo "::error::Test 1: Expected output to be non-empty"
+          if [[ -z "${{ steps.lint-success.outputs.output }}" ]]; then
+            echo "::error::Test 1 (success): Expected output to be non-empty"
             failed=1
           fi
 
-          # Test 2: Issues should fail
-          if [[ "${{ steps.lint-issues.outputs.outcome }}" != "failure" ]]; then
-            echo "::error::Test 2: Expected outcome=failure, got ${{ steps.lint-issues.outputs.outcome }}"
+          # Test 2: Error case should fail
+          if [[ "${{ steps.lint-error.outputs.outcome }}" != "failure" ]]; then
+            echo "::error::Test 2 (error): Expected outcome=failure, got ${{ steps.lint-error.outputs.outcome }}"
             failed=1
           fi
-          if ! echo "${{ steps.lint-issues.outputs.output }}" | grep -q "F401"; then
-            echo "::error::Test 2: Expected output to contain F401 (unused import)"
+          if ! echo "${{ steps.lint-error.outputs.output }}" | grep -q "F401"; then
+            echo "::error::Test 2 (error): Expected output to contain F401 (unused import)"
             failed=1
           fi
-          if [[ -z "${{ steps.lint-issues.outputs.diff }}" ]]; then
-            echo "::error::Test 2: Expected diff output to be non-empty"
+          if [[ -z "${{ steps.lint-error.outputs.diff }}" ]]; then
+            echo "::error::Test 2 (error): Expected diff output to be non-empty"
             failed=1
           fi
 

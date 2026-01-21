@@ -1,0 +1,4 @@
+# Minimal ruff config for testing lint action (success case)
+
+[tool.ruff.lint]
+select = ["F"]  # pyflakes

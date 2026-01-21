@@ -31,7 +31,7 @@ addopts = [
 
 [tool.ruff]
 # exclude test files with intentional lint issues
-exclude = ["lint/data/with_issues.py"]
+exclude = ["lint/data/error/"]
 show-fixes = true
 target-version = "py310"
 
