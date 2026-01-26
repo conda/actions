@@ -1,0 +1,3 @@
+# Minimal ruff config for testing lint action (error case)
+[tool.ruff.lint]
+select = ["F"]  # pyflakes, includes F401 (unused-import)
