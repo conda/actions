@@ -53,6 +53,12 @@ DATA: Final = Path(__file__).parent / "data"
 CONFIGS: Final = DATA / "configs"
 UPSTREAM: Final = DATA / "upstream"
 
+WARNING_EMOJI: Final = "\N{WARNING SIGN}\N{VARIATION SELECTOR-16}"
+CROSS_MARK_EMOJI: Final = "\N{CROSS MARK}\N{VARIATION SELECTOR-16}"
+CHECK_MARK_EMOJI: Final = "\N{WHITE HEAVY CHECK MARK}\N{VARIATION SELECTOR-16}"
+BOOKS_EMOJI: Final = "\N{BOOKS}\N{VARIATION SELECTOR-16}"
+PLUS_SIGN_EMOJI: Final = "\N{HEAVY PLUS SIGN}\N{VARIATION SELECTOR-16}"
+
 
 @pytest.fixture
 def console() -> Console:
@@ -161,11 +167,11 @@ def test_TemplateState_get_emoji_style(
 @pytest.mark.parametrize(
     "state,emoji,style",
     [
-        (TemplateState.UNUSED, "\u26a0\ufe0f", "yellow"),  # ⚠️
-        (TemplateState.MISSING, "\u274c\ufe0f", "red"),  # ❌
-        (TemplateState.USED, "\u2705\ufe0f", "green"),  # ✅
-        (TemplateState.CONTEXT, "\U0001f4da\ufe0f", "blue"),  # 📚
-        (TemplateState.OPTIONAL, "\u2795\ufe0f", "yellow"),  # ➕
+        (TemplateState.UNUSED, WARNING_EMOJI, "yellow"),
+        (TemplateState.MISSING, CROSS_MARK_EMOJI, "red"),
+        (TemplateState.USED, CHECK_MARK_EMOJI, "green"),
+        (TemplateState.CONTEXT, BOOKS_EMOJI, "blue"),
+        (TemplateState.OPTIONAL, PLUS_SIGN_EMOJI, "yellow"),
     ],
     ids=ids,
 )
