@@ -21,7 +21,6 @@ from jinja2.utils import missing
 from jsonschema import validate
 from rich import box
 from rich.console import Console, ConsoleOptions, RenderResult
-from rich.emoji import Emoji
 from rich.measure import Measurement
 from rich.padding import Padding
 from rich.table import Table
@@ -95,18 +94,18 @@ class TemplateState(Enum):
         return cls.CONTEXT
 
     @cache
-    def _get_emoji_style(self) -> tuple[Emoji, str]:
+    def _get_emoji_style(self) -> tuple[str, str]:
         match self:
             case self.UNUSED:
-                return Emoji("warning", variant="emoji"), "yellow"
+                return ":warning-emoji:", "yellow"
             case self.MISSING:
-                return Emoji("cross_mark", variant="emoji"), "red"
+                return ":cross_mark:", "red"
             case self.USED:
-                return Emoji("white_check_mark", variant="emoji"), "green"
+                return ":white_check_mark:", "green"
             case self.CONTEXT:
-                return Emoji("books", variant="emoji"), "blue"
+                return ":books:", "blue"
             case self.OPTIONAL:
-                return Emoji("heavy_plus_sign", variant="emoji"), "yellow"
+                return ":heavy_plus_sign:", "yellow"
             case _:  # pragma: no cover
                 raise ValueError("Invalid TemplateState")
 
@@ -123,9 +122,9 @@ class TemplateState(Enum):
     ) -> Measurement:
         # explicitly calculate the size of the emoji and the text, otherwise, rich will
         # decide the emoji has no width and use the default/terminal width as the max
-        emoji, _ = self._get_emoji_style()
+        emoji, style = self._get_emoji_style()
         # len(emoji) + space + parenthesis + len(value)
-        size = console.measure(str(emoji)).maximum + 1 + 2 + len(self.value)
+        size = console.measure(emoji).maximum + 1 + 2 + len(self.value)
         return Measurement(size, size)
 
 

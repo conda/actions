@@ -141,32 +141,30 @@ def test_TemplateState_from_value(value: Any, expected: TemplateState) -> None:
 
 
 @pytest.mark.parametrize(
-    "state,expected_emoji,expected_style",
+    "state,emoji,style",
     [
-        (TemplateState.UNUSED, "warning", "yellow"),
-        (TemplateState.MISSING, "cross_mark", "red"),
-        (TemplateState.USED, "white_check_mark", "green"),
-        (TemplateState.CONTEXT, "books", "blue"),
-        (TemplateState.OPTIONAL, "heavy_plus_sign", "yellow"),
+        (TemplateState.UNUSED, ":warning-emoji:", "yellow"),
+        (TemplateState.MISSING, ":cross_mark:", "red"),
+        (TemplateState.USED, ":white_check_mark:", "green"),
+        (TemplateState.CONTEXT, ":books:", "blue"),
+        (TemplateState.OPTIONAL, ":heavy_plus_sign:", "yellow"),
     ],
     ids=ids,
 )
 def test_TemplateState_get_emoji_style(
-    state: TemplateState, expected_emoji: str, expected_style: str
+    state: TemplateState, emoji: str, style: str
 ) -> None:
-    emoji, style = state._get_emoji_style()
-    assert emoji.name == expected_emoji
-    assert style == expected_style
+    assert state._get_emoji_style() == (emoji, style)
 
 
 @pytest.mark.parametrize(
     "state,emoji,style",
     [
-        (TemplateState.UNUSED, "\u26a0\ufe0f", "yellow"),  # ⚠️
-        (TemplateState.MISSING, "\u274c\ufe0f", "red"),  # ❌
-        (TemplateState.USED, "\u2705\ufe0f", "green"),  # ✅
-        (TemplateState.CONTEXT, "\U0001f4da\ufe0f", "blue"),  # 📚
-        (TemplateState.OPTIONAL, "\u2795\ufe0f", "yellow"),  # ➕
+        (TemplateState.UNUSED, "⚠️", "yellow"),
+        (TemplateState.MISSING, "❌", "red"),
+        (TemplateState.USED, "✅", "green"),
+        (TemplateState.CONTEXT, "📚", "blue"),
+        (TemplateState.OPTIONAL, "➕", "yellow"),
     ],
     ids=ids,
 )
