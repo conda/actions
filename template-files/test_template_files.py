@@ -144,10 +144,10 @@ def test_TemplateState_from_value(value: Any, expected: TemplateState) -> None:
     "state,emoji,style",
     [
         (TemplateState.UNUSED, ":warning-emoji:", "yellow"),
-        (TemplateState.MISSING, ":cross_mark:", "red"),
-        (TemplateState.USED, ":white_check_mark:", "green"),
-        (TemplateState.CONTEXT, ":books:", "blue"),
-        (TemplateState.OPTIONAL, ":heavy_plus_sign:", "yellow"),
+        (TemplateState.MISSING, ":cross_mark-emoji:", "red"),
+        (TemplateState.USED, ":white_check_mark-emoji:", "green"),
+        (TemplateState.CONTEXT, ":books-emoji:", "blue"),
+        (TemplateState.OPTIONAL, ":heavy_plus_sign-emoji:", "yellow"),
     ],
     ids=ids,
 )
@@ -160,11 +160,11 @@ def test_TemplateState_get_emoji_style(
 @pytest.mark.parametrize(
     "state,emoji,style",
     [
-        (TemplateState.UNUSED, "⚠️", "yellow"),
-        (TemplateState.MISSING, "❌", "red"),
-        (TemplateState.USED, "✅", "green"),
-        (TemplateState.CONTEXT, "📚", "blue"),
-        (TemplateState.OPTIONAL, "➕", "yellow"),
+        (TemplateState.UNUSED, "\u26a0\ufe0f", "yellow"),  # ⚠️
+        (TemplateState.MISSING, "\u274c\ufe0f", "red"),  # ❌
+        (TemplateState.USED, "\u2705\ufe0f", "green"),  # ✅
+        (TemplateState.CONTEXT, "\U0001f4da\ufe0f", "blue"),  # 📚
+        (TemplateState.OPTIONAL, "\u2795\ufe0f", "yellow"),  # ➕
     ],
     ids=ids,
 )

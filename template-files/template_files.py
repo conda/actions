@@ -99,13 +99,13 @@ class TemplateState(Enum):
             case self.UNUSED:
                 return ":warning-emoji:", "yellow"
             case self.MISSING:
-                return ":cross_mark:", "red"
+                return ":cross_mark-emoji:", "red"
             case self.USED:
-                return ":white_check_mark:", "green"
+                return ":white_check_mark-emoji:", "green"
             case self.CONTEXT:
-                return ":books:", "blue"
+                return ":books-emoji:", "blue"
             case self.OPTIONAL:
-                return ":heavy_plus_sign:", "yellow"
+                return ":heavy_plus_sign-emoji:", "yellow"
             case _:  # pragma: no cover
                 raise ValueError("Invalid TemplateState")
 
