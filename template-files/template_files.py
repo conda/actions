@@ -109,22 +109,28 @@ class TemplateState(Enum):
             case _:  # pragma: no cover
                 raise ValueError("Invalid TemplateState")
 
+    @property
+    def emoji(self) -> str:
+        return self._get_emoji_style()[0]
+
+    @property
+    def style(self) -> str:
+        return self._get_emoji_style()[1]
+
     def __rich_console__(
         self, console: Console, options: ConsoleOptions
     ) -> RenderResult:
-        emoji, style = self._get_emoji_style()
         # trying to return this in any other way will result in rich splitting the emoji
         # and the text into separate lines
-        yield console.render_str(f"{emoji} [{style}]({self.value})[/]")
+        yield console.render_str(f"{self.emoji} [{self.style}]({self.value})[/]")
 
     def __rich_measure__(
         self, console: Console, options: ConsoleOptions
     ) -> Measurement:
         # explicitly calculate the size of the emoji and the text, otherwise, rich will
         # decide the emoji has no width and use the default/terminal width as the max
-        emoji, style = self._get_emoji_style()
         # len(emoji) + space + parenthesis + len(value)
-        size = console.measure(emoji).maximum + 1 + 2 + len(self.value)
+        size = console.measure(self.emoji).maximum + 1 + 2 + len(self.value)
         return Measurement(size, size)
 
 

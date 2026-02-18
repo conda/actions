@@ -154,7 +154,8 @@ def test_TemplateState_from_value(value: Any, expected: TemplateState) -> None:
 def test_TemplateState_get_emoji_style(
     state: TemplateState, emoji: str, style: str
 ) -> None:
-    assert state._get_emoji_style() == (emoji, style)
+    assert state.emoji == emoji
+    assert state.style == style
 
 
 @pytest.mark.parametrize(
