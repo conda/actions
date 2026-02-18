@@ -189,19 +189,18 @@ def test_TemplateState_rich_console(
 
 
 @pytest.mark.parametrize(
-    "state,size",
+    "state",
     [
-        (TemplateState.UNUSED, 10),
-        (TemplateState.MISSING, 12),
-        (TemplateState.USED, 9),
-        (TemplateState.CONTEXT, 12),
-        (TemplateState.OPTIONAL, 13),
+        TemplateState.UNUSED,
+        TemplateState.MISSING,
+        TemplateState.USED,
+        TemplateState.CONTEXT,
+        TemplateState.OPTIONAL,
     ],
     ids=ids,
 )
-def test_TemplateState_rich_measure(
-    console: Console, state: TemplateState, size: int
-) -> None:
+def test_TemplateState_rich_measure(console: Console, state: TemplateState) -> None:
+    size = console.measure(state.emoji).maximum + 1 + 2 + len(state.value)
     assert state.__rich_measure__(console, console.options) == Measurement(size, size)
 
 
