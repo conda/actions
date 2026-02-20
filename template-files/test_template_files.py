@@ -53,6 +53,12 @@ DATA: Final = Path(__file__).parent / "data"
 CONFIGS: Final = DATA / "configs"
 UPSTREAM: Final = DATA / "upstream"
 
+WARNING_EMOJI: Final = "\N{WARNING SIGN}\N{VARIATION SELECTOR-16}"
+CROSS_MARK_EMOJI: Final = "\N{CROSS MARK}\N{VARIATION SELECTOR-16}"
+CHECK_MARK_EMOJI: Final = "\N{WHITE HEAVY CHECK MARK}\N{VARIATION SELECTOR-16}"
+BOOKS_EMOJI: Final = "\N{BOOKS}\N{VARIATION SELECTOR-16}"
+PLUS_SIGN_EMOJI: Final = "\N{HEAVY PLUS SIGN}\N{VARIATION SELECTOR-16}"
+
 
 @pytest.fixture
 def console() -> Console:
@@ -144,27 +150,28 @@ def test_TemplateState_from_value(value: Any, expected: TemplateState) -> None:
     "state,emoji,style",
     [
         (TemplateState.UNUSED, ":warning-emoji:", "yellow"),
-        (TemplateState.MISSING, ":cross_mark:", "red"),
-        (TemplateState.USED, ":white_check_mark:", "green"),
-        (TemplateState.CONTEXT, ":books:", "blue"),
-        (TemplateState.OPTIONAL, ":heavy_plus_sign:", "yellow"),
+        (TemplateState.MISSING, ":cross_mark-emoji:", "red"),
+        (TemplateState.USED, ":white_check_mark-emoji:", "green"),
+        (TemplateState.CONTEXT, ":books-emoji:", "blue"),
+        (TemplateState.OPTIONAL, ":heavy_plus_sign-emoji:", "yellow"),
     ],
     ids=ids,
 )
 def test_TemplateState_get_emoji_style(
     state: TemplateState, emoji: str, style: str
 ) -> None:
-    assert state._get_emoji_style() == (emoji, style)
+    assert state.emoji == emoji
+    assert state.style == style
 
 
 @pytest.mark.parametrize(
     "state,emoji,style",
     [
-        (TemplateState.UNUSED, "⚠️", "yellow"),
-        (TemplateState.MISSING, "❌", "red"),
-        (TemplateState.USED, "✅", "green"),
-        (TemplateState.CONTEXT, "📚", "blue"),
-        (TemplateState.OPTIONAL, "➕", "yellow"),
+        (TemplateState.UNUSED, WARNING_EMOJI, "yellow"),
+        (TemplateState.MISSING, CROSS_MARK_EMOJI, "red"),
+        (TemplateState.USED, CHECK_MARK_EMOJI, "green"),
+        (TemplateState.CONTEXT, BOOKS_EMOJI, "blue"),
+        (TemplateState.OPTIONAL, PLUS_SIGN_EMOJI, "yellow"),
     ],
     ids=ids,
 )
@@ -182,19 +189,18 @@ def test_TemplateState_rich_console(
 
 
 @pytest.mark.parametrize(
-    "state,size",
+    "state",
     [
-        (TemplateState.UNUSED, 10),
-        (TemplateState.MISSING, 12),
-        (TemplateState.USED, 9),
-        (TemplateState.CONTEXT, 12),
-        (TemplateState.OPTIONAL, 13),
+        TemplateState.UNUSED,
+        TemplateState.MISSING,
+        TemplateState.USED,
+        TemplateState.CONTEXT,
+        TemplateState.OPTIONAL,
     ],
     ids=ids,
 )
-def test_TemplateState_rich_measure(
-    console: Console, state: TemplateState, size: int
-) -> None:
+def test_TemplateState_rich_measure(console: Console, state: TemplateState) -> None:
+    size = console.measure(state.emoji).maximum + 1 + 2 + len(state.value)
     assert state.__rich_measure__(console, console.options) == Measurement(size, size)
 
 
