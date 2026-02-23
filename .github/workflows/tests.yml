@@ -105,8 +105,26 @@ jobs:
           config: ./template-files/data/error.yml
           stubs: ./template-files/data/templates
 
-      - name: Run Tests
+      - name: Verify file contents
         run: diff --recursive .github_cache/template-files template-files/data/expected
+
+      - name: Verify test outcomes
+        run: |
+          failed=0
+
+          # Success case should succeed
+          if [[ "${{ steps.templates-success.outcome }}" != "success" ]]; then
+            echo "::error::Success case: Expected step to succeed"
+            failed=1
+          fi
+
+          # Error case should fail
+          if [[ "${{ steps.templates-error.outcome }}" != "failure" ]]; then
+            echo "::error::Error case: Expected step to fail"
+            failed=1
+          fi
+
+          exit $failed
 
       - name: Filter Changes
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
