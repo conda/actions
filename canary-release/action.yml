@@ -45,7 +45,7 @@ runs:
       run: echo "RUN_URL=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
 
     - name: Create comment if there is no status update
-      uses: marocchino/sticky-pull-request-comment@d4d6b0936434b21bc8345ad45a440c5f7d2c40ff # v3.0.3
+      uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
       if: inputs.comment-token != ''
       with:
         message: |
@@ -125,7 +125,7 @@ runs:
 
     - name: Leave comment after build
       if: inputs.comment-token != '' && success()
-      uses: marocchino/sticky-pull-request-comment@d4d6b0936434b21bc8345ad45a440c5f7d2c40ff # v3.0.3
+      uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
       with:
         append: true
         message: |
@@ -134,7 +134,7 @@ runs:
 
     - name: Leave comment after build
       if: inputs.comment-token != '' && failure()
-      uses: marocchino/sticky-pull-request-comment@d4d6b0936434b21bc8345ad45a440c5f7d2c40ff # v3.0.3
+      uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
       with:
         append: true
         message: |
