@@ -1,0 +1,51 @@
+name: Lint
+
+on:
+  # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#push
+  push:
+    branches:
+      - main
+[% for branch in branches | default([]) %]
+      - '[[ branch ]]'
+[% endfor %]
+
+  # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#pull_request
+  pull_request:
+
+  # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#issue_comment
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    # run on push/PR, or on "@conda-bot prek autofix" comment from maintainers or PR author
+    if: >-
+      !github.event.repository.fork
+      && (
+        github.event_name == 'push'
+        || github.event_name == 'pull_request'
+        || (
+          github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.comment.body == '@conda-bot prek autofix'
+          && (
+            contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+            || github.event.comment.user.login == github.event.issue.user.login
+          )
+        )
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: conda/actions/lint@main
+        with:
+          autofix: ${{ github.event_name == 'issue_comment' }}
+          comment-id: ${{ github.event.comment.id }}
+          pr-number: ${{ github.event.issue.number }}
+          python-version: '[[ python_version | default("3.12") ]]'
