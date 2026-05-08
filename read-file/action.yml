@@ -50,10 +50,13 @@ runs:
     - name: Read JSON
       id: read
       shell: bash
-      run: >
-        python ${{ github.action_path }}/read_file.py
-        ${{ inputs.path }}
-        ${{ inputs.parser && format('"--parser={0}"', inputs.parser) || '' }}
-        ${{ inputs.default && format('"--default={0}"', inputs.default) || '' }}
+      run: |
+        ARGS=("$INPUT_PATH")
+        [ -n "$INPUT_PARSER" ] && ARGS+=("--parser=$INPUT_PARSER")
+        [ -n "$INPUT_DEFAULT" ] && ARGS+=("--default=$INPUT_DEFAULT")
+        python ${{ github.action_path }}/read_file.py "${ARGS[@]}"
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_PARSER: ${{ inputs.parser }}
+        INPUT_DEFAULT: ${{ inputs.default }}
