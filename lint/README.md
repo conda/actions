@@ -1,0 +1,150 @@
+# Lint Action
+
+A composite GitHub Action that runs [prek](https://github.com/j178/prek) (a fast pre-commit hook runner) with optional autofix and PR comments.
+
+## Files
+
+- `action.yml` - Composite action with all logic
+- `workflow.yml.tmpl` - Workflow template for syncing to repos
+
+## Syncing to Repositories
+
+To adopt this workflow via template-files, add to your `.github/template-files/config.yml`:
+
+```yaml
+- source: lint/workflow.yml.tmpl
+  target: .github/workflows/lint.yml
+  # Optional: additional branch patterns (main is always included)
+  # branches:
+  #   - '2[0-9].[0-9]+.x'  # CalVer release branches
+  # Optional: Python version for prek hooks
+  # python_version: '3.12'
+```
+
+## Features
+
+- Installs and runs prek with your existing `.pre-commit-config.yaml`
+- Captures command output and git diff for PR comments
+- Creates/updates sticky PR comments showing lint issues and suggested fixes
+- Updates comment to show success when issues are resolved
+- Optionally commits and pushes fixes (autofix mode)
+- Reacts to trigger comments with 👀 → 🎉/😕
+
+## Usage
+
+### Basic Usage (lint check only)
+
+```yaml
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: conda/actions/lint@main
+```
+
+The action automatically fails if lint issues are found (unless `autofix: true`).
+
+### With Autofix via Comment Trigger
+
+```yaml
+on:
+  pull_request:
+  issue_comment:
+    types: [created]
+
+jobs:
+  lint:
+    if: >-
+      github.event_name == 'pull_request'
+      || (
+        github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && github.event.comment.body == '@conda-bot prek autofix'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: conda/actions/lint@main
+        with:
+          autofix: ${{ github.event_name == 'issue_comment' }}
+          comment-id: ${{ github.event.comment.id }}
+          pr-number: ${{ github.event.issue.number }}
+```
+
+## Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `token` | GitHub token for PR comments and pushing | No | `${{ github.token }}` |
+| `autofix` | Whether to commit and push fixes | No | `'false'` |
+| `comment-id` | Comment ID to react to (for issue_comment triggers) | No | `''` |
+| `pr-number` | PR number (defaults to current PR, override for issue_comment triggers) | No | `${{ github.event.pull_request.number }}` |
+| `git-user-name` | Git user name for autofix commits | No | `conda-bot` |
+| `git-user-email` | Git user email for autofix commits | No | `18747875+conda-bot@users.noreply.github.com` |
+| `python-version` | Python version for running prek hooks | No | `'3.12'` |
+| `checkout` | Whether to checkout the repository (set to false if already checked out) | No | `'true'` |
+| `working-directory` | Directory to run prek in (defaults to repo root) | No | `'.'` |
+| `config` | Path to pre-commit config file (defaults to auto-discovery) | No | `''` |
+| `comment-anchor` | Unique anchor for sticky comment (customize to avoid conflicts with parallel workflows) | No | `'lint-comment'` |
+| `comment-header` | Optional header text to prepend to comments (e.g., to mark test comments) | No | `''` |
+| `comment-on-success` | Create success comment even without prior lint failure (useful for testing) | No | `'false'` |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `outcome` | `success` if no lint issues, `failure` if issues found |
+| `output` | The prek command output |
+| `diff` | The git diff of suggested fixes (only if outcome is failure) |
+
+## Disabling PR Comments
+
+To run lint without creating PR comments, omit the `pr-number` input:
+
+```yaml
+- uses: conda/actions/lint@main
+  with:
+    pr-number: ''  # No PR comments
+```
+
+This is useful for:
+- Running lint in contexts without a PR (e.g., scheduled runs)
+- CI test scenarios where you don't want test comments cluttering PRs
+- Conditional commenting based on file changes (see tests.yml for an example)
+
+## PR Comments
+
+The action creates a sticky comment (identified by `<!-- lint-comment -->`) that:
+
+- Shows prek output and git diff on failure
+- Shows a note for fork PRs (autofix cannot push to forks)
+- Shows a warning if autofix was attempted but push failed
+- Updates to "✅ Lint issues fixed" when resolved
+- Includes link to workflow run for details
+
+## Fork PRs
+
+By default, `GITHUB_TOKEN` cannot push to fork PRs. The action detects this and shows a helpful message explaining how to fix locally.
+
+To enable autofix for fork PRs, use a GitHub App token instead (**untested**):
+
+```yaml
+- uses: actions/create-github-app-token@v1
+  id: app-token
+  with:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+- uses: conda/actions/lint@main
+  with:
+    token: ${{ steps.app-token.outputs.token }}
+    autofix: true
+    comment-id: ${{ github.event.comment.id }}
+    pr-number: ${{ github.event.issue.number }}
+```
+
+Requirements:
+- GitHub App with `contents: write` and `pull-requests: write` permissions
+- PR author must enable "Allow edits from maintainers"

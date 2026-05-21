@@ -7,7 +7,7 @@ conda/infrastructure:
   - .github/workflows/cla.yml
   - .github/workflows/update.yml
 
-  # [optional] to include repo in https://github.com/orgs/conda/projects/2
+  # [optional] project management workflows
   - .github/workflows/issues.yml
   - .github/workflows/labels.yml
   - .github/workflows/project.yml
@@ -48,3 +48,8 @@ conda/infrastructure:
   #   dst: rever.xsh  # codespell:ignore rever
   # - src: templates/releases/TEMPLATE
   #   dst: news/TEMPLATE
+
+conda/actions:
+  # [optional] lint workflow (requires .pre-commit-config.yaml)
+  - src: lint/workflow.yml.tmpl
+    dst: .github/workflows/lint.yml
