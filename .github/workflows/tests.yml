@@ -52,7 +52,7 @@ jobs:
       - name: Upload Coverage
         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}  # zizmor: ignore[secrets-outside-env] Repository-level CI upload token.
 
   read-file:
     name: Read file
@@ -154,7 +154,7 @@ jobs:
             > [!WARNING]
             > This is what the audit looks like when templating results in errors.
             ${{ steps.templates-error.outputs.summary }}
-          GITHUB_TOKEN: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}  # zizmor: ignore[secrets-outside-env] Repository-level token for sticky PR test comments.
 
   # required check
   analyze:
@@ -182,7 +182,7 @@ jobs:
         if: always() && github.event_name != 'pull_request' && steps.alls-green.outputs.result == 'failure'
         uses: JasonEtco/create-an-issue@1b14a70e4d8dc185e5cc76d3bec9eab20257b2c5 # v2.9.2
         env:
-          GITHUB_TOKEN: ${{ secrets.AUTO_REPORT_TEST_FAILURE }}
+          GITHUB_TOKEN: ${{ secrets.AUTO_REPORT_TEST_FAILURE }}  # zizmor: ignore[secrets-outside-env] Repository-level token for scheduled failure reports.
           RUN_ID: ${{ github.run_id }}
           TITLE: 🤖 Tests Failed
         with:

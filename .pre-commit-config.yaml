@@ -55,7 +55,7 @@ repos:
     rev: 9257c6050c0261b8c57e712f632dc4a8010109a9  # frozen: v1.25.2
     hooks:
       - id: zizmor
-        args: [--pedantic, --fix=safe]
+        args: [--persona=auditor, --fix=safe]
   - repo: https://github.com/rhysd/actionlint
     rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # frozen: v1.7.12
     hooks:

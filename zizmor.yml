@@ -41,6 +41,16 @@ rules:
       - stale.yml
       - update.yml
 
+  secrets-outside-env:
+    ignore:
+      # Synced from conda/infrastructure; any environment policy
+      # changes for these secrets should be applied upstream.
+      - cla.yml
+      - issues.yml
+      - project.yml
+      - stale.yml
+      - update.yml
+
   anonymous-definition:
     ignore:
       # Synced from conda/infrastructure; job names should be added
