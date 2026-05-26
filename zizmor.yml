@@ -35,7 +35,11 @@ rules:
     ignore:
       # Synced from conda/infrastructure; permission comments should
       # be added upstream.
+      - cla.yml
+      - issues.yml
+      - labels.yml
       - stale.yml
+      - update.yml
 
   anonymous-definition:
     ignore:
