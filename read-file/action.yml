@@ -26,7 +26,7 @@ runs:
     - name: Compute Hash
       id: hash
       shell: bash
-      run: echo hash=$(sha256sum ${{ github.action_path }}/requirements.txt | awk '{print $1}') >> $GITHUB_OUTPUT
+      run: echo hash="$(sha256sum "$GITHUB_ACTION_PATH/requirements.txt" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
     - name: Pip Cache
       uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
@@ -41,7 +41,7 @@ runs:
 
     - name: Pip Install
       shell: bash
-      run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
+      run: pip install --quiet -r "$GITHUB_ACTION_PATH/requirements.txt"
 
     - name: Pip List
       shell: bash
@@ -50,10 +50,13 @@ runs:
     - name: Read JSON
       id: read
       shell: bash
-      run: >
-        python ${{ github.action_path }}/read_file.py
-        ${{ inputs.path }}
-        ${{ inputs.parser && format('"--parser={0}"', inputs.parser) || '' }}
-        ${{ inputs.default && format('"--default={0}"', inputs.default) || '' }}
+      run: |
+        ARGS=("$INPUT_PATH")
+        [ -n "$INPUT_PARSER" ] && ARGS+=("--parser=$INPUT_PARSER")
+        [ -n "$INPUT_DEFAULT" ] && ARGS+=("--default=$INPUT_DEFAULT")
+        python "$GITHUB_ACTION_PATH/read_file.py" "${ARGS[@]}"
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_PARSER: ${{ inputs.parser }}
+        INPUT_DEFAULT: ${{ inputs.default }}
