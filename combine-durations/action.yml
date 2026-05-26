@@ -38,27 +38,31 @@ runs:
       shell: bash
       run: >
         gh run list
-        --repo ${{ inputs.repository }}
-        --branch ${{ inputs.branch }}
-        --workflow ${{ inputs.workflow }}
+        --repo "$INPUT_REPOSITORY"
+        --branch "$INPUT_BRANCH"
+        --workflow "$INPUT_WORKFLOW"
         --limit 10
         --json databaseId
         --jq '.[].databaseId'
         | xargs -n 1
         gh run download
-        --repo ${{ inputs.repository }}
-        --dir ${{ runner.temp }}/artifacts/
-        --pattern '${{ inputs.pattern }}'
+        --repo "$INPUT_REPOSITORY"
+        --dir "$RUNNER_TEMP/artifacts/"
+        --pattern "$INPUT_PATTERN"
         || true
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_WORKFLOW: ${{ inputs.workflow }}
+        INPUT_PATTERN: ${{ inputs.pattern }}
 
     # `hashFiles` only works on files within the working directory, since `requirements.txt`
     # is not in the working directory we need to manually compute the SHA256 hash
     - name: Compute Hash
       id: hash
       shell: bash
-      run: echo hash=$(sha256sum ${{ github.action_path }}/requirements.txt | awk '{print $1}') >> $GITHUB_OUTPUT
+      run: echo hash="$(sha256sum "$GITHUB_ACTION_PATH/requirements.txt" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
     - name: Pip Cache
       uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
@@ -73,7 +77,7 @@ runs:
 
     - name: Pip Install
       shell: bash
-      run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
+      run: pip install --quiet -r "$GITHUB_ACTION_PATH/requirements.txt"
 
     - name: Pip List
       shell: bash
@@ -83,6 +87,8 @@ runs:
       id: combine
       shell: bash
       run: >
-        python ${{ github.action_path }}/combine_durations.py
-        --durations-dir=${{ inputs.durations-dir }}
-        --artifacts-dir=${{ runner.temp }}/artifacts/
+        python "$GITHUB_ACTION_PATH/combine_durations.py"
+        --durations-dir="$INPUT_DURATIONS_DIR"
+        --artifacts-dir="$RUNNER_TEMP/artifacts/"
+      env:
+        INPUT_DURATIONS_DIR: ${{ inputs.durations-dir }}
