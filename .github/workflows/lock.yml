@@ -8,20 +8,14 @@ on:
   schedule:
     - cron: 0 6 * * *
 
-permissions: {}
-
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: false
+permissions:
+  issues: write
+  pull-requests: write
 
 jobs:
   lock:
-    name: Lock inactive threads
     if: '!github.event.repository.fork'
     runs-on: ubuntu-slim
-    permissions:
-      issues: write  # Lock inactive issues.
-      pull-requests: write  # Lock inactive pull requests.
     steps:
       - uses: dessant/lock-threads@7266a7ce5c1df01b1c6db85bf8cd86c737dadbe7 # v6.0.0
         with:
