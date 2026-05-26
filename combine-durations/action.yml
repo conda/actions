@@ -47,7 +47,7 @@ runs:
         | xargs -n 1
         gh run download
         --repo "$INPUT_REPOSITORY"
-        --dir "${{ runner.temp }}/artifacts/"
+        --dir "$RUNNER_TEMP/artifacts/"
         --pattern "$INPUT_PATTERN"
         || true
       env:
@@ -62,7 +62,7 @@ runs:
     - name: Compute Hash
       id: hash
       shell: bash
-      run: echo hash=$(sha256sum ${{ github.action_path }}/requirements.txt | awk '{print $1}') >> $GITHUB_OUTPUT
+      run: echo hash="$(sha256sum "$GITHUB_ACTION_PATH/requirements.txt" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
     - name: Pip Cache
       uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
@@ -77,7 +77,7 @@ runs:
 
     - name: Pip Install
       shell: bash
-      run: pip install --quiet -r ${{ github.action_path }}/requirements.txt
+      run: pip install --quiet -r "$GITHUB_ACTION_PATH/requirements.txt"
 
     - name: Pip List
       shell: bash
@@ -87,8 +87,8 @@ runs:
       id: combine
       shell: bash
       run: >
-        python ${{ github.action_path }}/combine_durations.py
+        python "$GITHUB_ACTION_PATH/combine_durations.py"
         --durations-dir="$INPUT_DURATIONS_DIR"
-        --artifacts-dir=${{ runner.temp }}/artifacts/
+        --artifacts-dir="$RUNNER_TEMP/artifacts/"
       env:
         INPUT_DURATIONS_DIR: ${{ inputs.durations-dir }}

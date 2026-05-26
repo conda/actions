@@ -28,6 +28,41 @@ rules:
       - issues.yml
       - labels.yml
       - project.yml
+      - stale.yml
+      - update.yml
+
+  undocumented-permissions:
+    ignore:
+      # Synced from conda/infrastructure; permission comments should
+      # be added upstream.
+      - stale.yml
+
+  anonymous-definition:
+    ignore:
+      # Synced from conda/infrastructure; job names should be added
+      # upstream.
+      - cla.yml
+      - issues.yml
+      - labels.yml
+      - project.yml
+      - stale.yml
+      - update.yml
+
+  concurrency-limits:
+    ignore:
+      # Synced from conda/infrastructure; concurrency settings should
+      # be added upstream.
+      - cla.yml
+      - issues.yml
+      - labels.yml
+      - project.yml
+      - stale.yml
+      - update.yml
+
+  superfluous-actions:
+    ignore:
+      # Synced from conda/infrastructure.
+      - issues.yml
       - update.yml
 
   artipacked:
