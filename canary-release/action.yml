@@ -96,6 +96,7 @@ runs:
         echo "::endgroup::"
 
         echo "::group::Building package"
+        # Keep build args unquoted so callers can pass multiple arguments.
         conda build --croot=./pkgs ${INPUT_BUILD_ARGS} "${INPUT_BUILD_PATH}"
         echo "::endgroup::"
 
