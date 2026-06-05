@@ -24,7 +24,7 @@ inputs:
     description: Git author email for the generated commit.
     default: 18747875+conda-bot@users.noreply.github.com
   token:
-    description: GitHub token with contents: write and pull-requests: write.
+    description: 'GitHub token with contents: write and pull-requests: write.'
     default: ${{ github.token }}
 outputs:
   version:
@@ -56,6 +56,7 @@ runs:
       with:
         ref: ${{ steps.context.outputs.head-sha }}
         fetch-depth: 0
+        persist-credentials: false
         token: ${{ inputs.token }}
 
     - name: Prepare Release Notes

@@ -31,6 +31,9 @@ addopts = [
   "--tb=native",
   "-vv",
 ]
+pythonpath = [
+  ".",
+]
 
 [tool.ruff]
 show-fixes = true

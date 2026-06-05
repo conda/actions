@@ -78,6 +78,9 @@ def prepare_release(args: Namespace) -> None:
     run(["git", "checkout", "-B", release_branch])
     run(["git", "config", "user.name", args.git_author_name])
     run(["git", "config", "user.email", args.git_author_email])
+    if not args.token:
+        raise ActionError("No GitHub token was provided.")
+    git_env = os.environ | {"GH_TOKEN": args.token}
 
     fragment_paths = news_fragment_paths(args.news_directory)
     fragments = collect_fragments(fragment_paths)
@@ -102,7 +105,8 @@ def prepare_release(args: Namespace) -> None:
 
     run(["git", "add", args.changelog_path, *map(str, fragment_paths)])
     run(["git", "commit", "-m", f"Prepare release notes for {version}"])
-    run(["git", "push", "--force-with-lease", "origin", release_branch])
+    run(["gh", "auth", "setup-git"], env=git_env)
+    run(["git", "push", "--force-with-lease", "origin", release_branch], env=git_env)
 
     url = create_or_update_pr(
         repository=args.repository,
