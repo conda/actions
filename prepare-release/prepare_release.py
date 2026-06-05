@@ -11,11 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from news_common import (
-    SECTION_ORDER,
-    iter_news_fragments,
-    parse_sectioned_news,
-)
+from news_common import SECTION_ORDER, is_news_fragment, parse_sectioned_news
 
 VERSION_BRANCH_RE = re.compile(r"^(?P<major_minor>\d+\.\d+)\.x$")
 TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.(?P<micro>\d+))$")
@@ -83,7 +79,7 @@ def prepare_release(args: Namespace) -> None:
     run(["git", "config", "user.name", args.git_author_name])
     run(["git", "config", "user.email", args.git_author_email])
 
-    fragment_paths = iter_news_fragments(args.news_directory)
+    fragment_paths = news_fragment_paths(args.news_directory)
     fragments = collect_fragments(fragment_paths)
     if not fragments:
         raise ActionError(f"No news fragments found under {args.news_directory!r}.")
@@ -212,6 +208,17 @@ def collect_fragments(paths: list[Path]) -> dict[str, list[str]]:
         raise ActionError("\n".join(errors))
 
     return {section: items for section, items in fragments.items() if items}
+
+
+def news_fragment_paths(news_directory: str | Path) -> list[Path]:
+    news_directory = Path(news_directory)
+    if not news_directory.is_dir():
+        return []
+    return sorted(
+        path
+        for path in news_directory.iterdir()
+        if path.is_file() and is_news_fragment(path, news_directory)
+    )
 
 
 def render_changelog_entry(

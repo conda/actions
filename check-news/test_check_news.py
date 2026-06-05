@@ -6,12 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from check_news import ActionError, check_news
-from news_common import (
-    fragment_mentions_pr,
-    is_news_fragment,
-    parse_sectioned_news,
-)
+from check_news import ActionError, check_news, fragment_mentions_pr
+from news_common import is_news_fragment, parse_sectioned_news
 
 if TYPE_CHECKING:
     from pathlib import Path

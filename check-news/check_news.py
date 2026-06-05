@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from argparse import ArgumentParser, Namespace
@@ -9,11 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from news_common import (
-    fragment_mentions_pr,
-    is_news_fragment,
-    parse_sectioned_news,
-)
+from news_common import is_news_fragment, parse_sectioned_news
+
+PR_RE = re.compile(r"(?<!\d)#?(?P<number>\d+)(?!\d)")
 
 
 @dataclass(frozen=True)
@@ -209,6 +208,15 @@ def diff_name_status(before: str, after: str) -> list[ChangedFile]:
         path = parts[-1]
         changed.append(ChangedFile(status=status, path=Path(path)))
     return changed
+
+
+def fragment_mentions_pr(path: str | Path, text: str, pr_number: int | str) -> bool:
+    pr_number = str(pr_number)
+    for value in (Path(path).name, text):
+        for match in PR_RE.finditer(value):
+            if match.group("number") == pr_number:
+                return True
+    return False
 
 
 def write_summary(text: str) -> None:
