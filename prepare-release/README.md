@@ -30,7 +30,6 @@ jobs:
         with:
           news-directory: news
           changelog-path: CHANGELOG.md
-          issue-reference: conda/infrastructure#556
 ```
 
 The action checks the same security conditions internally before checkout:
@@ -40,5 +39,3 @@ The action checks the same security conditions internally before checkout:
 - triggering workflow came from a `push`
 - triggering repository is the current repository
 - triggering branch matches the configured release branch pattern
-
-The generated PR body uses `Refs conda/infrastructure#556`.

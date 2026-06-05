@@ -14,9 +14,6 @@ inputs:
   release-branch-pattern:
     description: Comma- or newline-separated release branch glob patterns.
     default: '[0-9]*.[0-9]*.x'
-  issue-reference:
-    description: Issue reference to include in the generated PR body.
-    default: conda/infrastructure#556
   branch-prefix:
     description: Prefix for the generated release-notes branch.
     default: release-notes-
@@ -70,7 +67,6 @@ runs:
         --news-directory "$INPUT_NEWS_DIRECTORY"
         --changelog-path "$INPUT_CHANGELOG_PATH"
         --release-branch-pattern "$INPUT_RELEASE_BRANCH_PATTERN"
-        --issue-reference "$INPUT_ISSUE_REFERENCE"
         --branch-prefix "$INPUT_BRANCH_PREFIX"
         --git-author-name "$INPUT_GIT_AUTHOR_NAME"
         --git-author-email "$INPUT_GIT_AUTHOR_EMAIL"
@@ -80,7 +76,6 @@ runs:
         INPUT_NEWS_DIRECTORY: ${{ inputs.news-directory }}
         INPUT_CHANGELOG_PATH: ${{ inputs.changelog-path }}
         INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
-        INPUT_ISSUE_REFERENCE: ${{ inputs.issue-reference }}
         INPUT_BRANCH_PREFIX: ${{ inputs.branch-prefix }}
         INPUT_GIT_AUTHOR_NAME: ${{ inputs.git-author-name }}
         INPUT_GIT_AUTHOR_EMAIL: ${{ inputs.git-author-email }}
