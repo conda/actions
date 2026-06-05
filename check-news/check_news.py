@@ -83,9 +83,7 @@ def check_news(args: Namespace) -> None:
         return
 
     exempt_authors = {
-        author.strip()
-        for author in args.exempt_authors.split(",")
-        if author.strip()
+        author.strip() for author in args.exempt_authors.split(",") if author.strip()
     }
     if author and author in exempt_authors:
         write_summary(f"News check skipped for exempt author `{author}`.")

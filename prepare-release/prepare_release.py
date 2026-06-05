@@ -275,11 +275,7 @@ def ensure_allowed_paths(
     news_paths: list[Path],
 ) -> None:
     allowed_paths = {changelog_path, *news_paths}
-    unexpected = [
-        path
-        for path in paths
-        if path not in allowed_paths
-    ]
+    unexpected = [path for path in paths if path not in allowed_paths]
     if unexpected:
         raise ActionError(
             "prepare-release produced unexpected file changes: "

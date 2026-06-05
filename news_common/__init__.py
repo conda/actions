@@ -35,10 +35,7 @@ def normalize_heading(value: str) -> str:
     return " ".join(value.strip().strip("#").strip().casefold().split())
 
 
-SECTION_ALIASES = {
-    normalize_heading(section): section
-    for section in SECTION_ORDER
-}
+SECTION_ALIASES = {normalize_heading(section): section for section in SECTION_ORDER}
 
 
 def is_news_fragment(path: str | Path, news_directory: str | Path = "news") -> bool:
@@ -91,13 +88,11 @@ def parse_sectioned_news(path: str | Path, text: str) -> NewsFragment:
 
             if current_section is None:
                 errors.append(
-                    f"{path}:{lineno}: unknown news heading "
-                    f"{match.group('title')!r}"
+                    f"{path}:{lineno}: unknown news heading {match.group('title')!r}"
                 )
             elif current_section in seen_sections:
                 errors.append(
-                    f"{path}:{lineno}: duplicate news heading "
-                    f"{current_section!r}"
+                    f"{path}:{lineno}: duplicate news heading {current_section!r}"
                 )
             else:
                 seen_sections.add(current_section)
