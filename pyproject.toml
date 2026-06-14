@@ -17,7 +17,10 @@ omit = [
 [tool.pytest.ini_options]
 addopts = [
   "--color=yes",
+  "--cov=check-news",
   "--cov=combine-durations",
+  "--cov=news_common",
+  "--cov=prepare-release",
   "--cov=read-file",
   "--cov=template-files",
   "--cov-append",
@@ -27,6 +30,9 @@ addopts = [
   "--strict-markers",
   "--tb=native",
   "-vv",
+]
+pythonpath = [
+  ".",
 ]
 
 [tool.ruff]
@@ -50,7 +56,10 @@ select = [
 
 [tool.ruff.lint.isort]
 known-first-party = [
+  "check_news",
   "combine_durations",
+  "news_common",
+  "prepare_release",
   "read_file",
   "template_files",
 ]
