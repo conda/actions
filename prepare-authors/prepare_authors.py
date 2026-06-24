@@ -114,7 +114,8 @@ def check_authors(args: Namespace) -> None:
     if analysis.missing_github_keys:
         for _, name in analysis.missing_github_keys:
             print(
-                f"::warning::Author {name!r} is missing a github key in `.authors.yml`.",
+                f"::warning::Author {name!r} is missing a github key "
+                f"in `.authors.yml`.",
                 file=sys.stderr,
             )
         summary_lines.append(
