@@ -226,8 +226,8 @@ def analyze_authors(
     repo_full: str,
     get_github_login_fn: Callable[[str, str], str | None],
 ) -> AuthorAnalysis:
-    _, by_names, by_github, last_github_index, known_emails = (
-        build_author_indexes(metadata)
+    _, by_names, by_github, last_github_index, known_emails = build_author_indexes(
+        metadata
     )
 
     commits, since_label = get_commits_since(since)
