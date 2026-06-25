@@ -289,6 +289,29 @@ def test_load_and_save_metadata_roundtrip(tmp_path: Path) -> None:
     assert updated[-1]["email"] == "bob@example.com"
 
 
+def test_load_and_save_metadata_preserves_garbled_email(tmp_path: Path) -> None:
+    garbled_email = (
+        "jhultman@novateurresearch.comgit config --global user.email "
+        "jhultman@novateurresearch.com"
+    )
+    authors = tmp_path / ".authors.yml"
+    write_authors(
+        authors,
+        (
+            "- name: Jacob Hultman\n"
+            "  email: jhultman@novateurresearch.com\n"
+            "  alternate_emails:\n"
+            f"  - {garbled_email}\n"
+        ),
+    )
+
+    metadata, yaml_engine = load_metadata(authors)
+    save_metadata(metadata, yaml_engine, authors)
+
+    updated, _ = load_metadata(authors)
+    assert updated[0]["alternate_emails"] == [garbled_email]
+
+
 def test_ensure_allowed_paths() -> None:
     ensure_allowed_paths([Path(".authors.yml")], authors_path=Path(".authors.yml"))
 
