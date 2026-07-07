@@ -136,10 +136,10 @@ runs:
               "${PACKAGES[@]}"
             USER_FACING_CHANNEL="${INPUT_CHANNEL}/label/${INPUT_LABEL}"
           elif [[ -n "${INPUT_GITHUB_RELEASES_REPOSITORY}" && -n "${INPUT_GITHUB_RELEASES_CHANNEL_NAME}" ]]; then
-            TAG="${INPUT_GITHUB_RELEASES_CHANNEL_NAME}/${SUBDIR}"
+            TAG="${INPUT_GITHUB_RELEASES_CHANNEL_NAME}/${INPUT_SUBDIR}"
 
             # We may need to run conda-index on the release channel (if existing) plus the new artifacts
-            STAGING_DIR="./channel_staging/${SUBDIR}"
+            STAGING_DIR="./channel_staging/${INPUT_SUBDIR}"
             mkdir -p "$STAGING_DIR"
 
             # Ensure the release exists
@@ -151,7 +151,7 @@ runs:
             cp "${PACKAGES[@]}" "$STAGING_DIR/"
 
             # Regenerate repodata.json (plus zst compression)
-            conda index --zst --write-monolithic --subdir "${SUBDIR}" "./channel_staging"
+            conda index --zst --write-monolithic --subdir "${INPUT_SUBDIR}" "./channel_staging"
 
             # Reupload existing and new artifacts plus updated repodata
             gh release upload "$TAG" "$STAGING_DIR/"* --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --clobber
