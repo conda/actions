@@ -1,7 +1,7 @@
 # Canary release
 
 This is a custom GitHub action to be used in the conda GitHub organization
-for doing development/canary releases to anaconda.org.
+for doing development/canary releases to anaconda.org or a Github repository releases.
 
 ## GitHub Action Usage
 
@@ -58,15 +58,21 @@ jobs:
           # the subdiretory, e.g. linux-64
           subdir: ${{ matrix.subdir }}
 
-          # [required]
-          # the anaconda.org channel
+          # [one of these two groups is required]
+          # anaconda.org configuration:
+          #   the anaconda.org channel
           anaconda-org-channel: conda-canary
-          # [required]
-          # the anaconda.org label to apply
+          #   the anaconda.org label to apply
           anaconda-org-label: dev
-          # [required]
-          # the anaconda.org token to upload to the channel
+          #   the anaconda.org token to upload to the channel
           anaconda-org-token: ${{ secrets.CANARY_ANACONDA_ORG_TOKEN }}
+          # Github Releases configuration:
+          #   target repository
+          github-releases-repository: my-org/my-repo
+          #   chosen name for the channel
+          github-releases-channel-name: conda-canary-on-github
+          #   github token if the repo is a different one
+          github-releases-token: ${{ secrets.GITHUB_RELEASES_TOKEN }}
 
           # [optional]
           # the GitHub Personal Access Token to comment with

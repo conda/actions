@@ -1,5 +1,5 @@
 name: Canary releases
-description: This builds and uploads canary releases of conda to the provided channel and label on anaconda.org.
+description: This builds and uploads canary releases of conda to the provided channel and label on anaconda.org or a Github Releases tag in a given repository.
 inputs:
   package-name:
     description: Name of package on anaconda.org, needs to match build file name.
@@ -16,13 +16,22 @@ inputs:
     required: false
   anaconda-org-channel:
     description: Channel on anaconda.org
-    required: true
+    required: false
   anaconda-org-label:
     description: Label to use on anaconda.org
-    required: true
+    required: false
   anaconda-org-token:
     description: Upload token for anaconda.org
-    required: true
+    required: false
+  github-releases-repository:
+    description: Target repository where packages will be uploaded as Github Release assets
+    required: false
+  github-releases-channel-name:
+    description: The channel name. Final channel URL will be `https://github.com/{github-releases-repository}/releases/download/{github-releases-channel-name}`
+    required: false
+  github-releases-token:
+    description: 'Token with upload access for releases in the target repository. Generate a PAT if the target repository is different that the one where the action runs. Otherwise `secrets.GITHUB_TOKEN` works but make sure to configure `permissions: content: write` accordingly.'
+    required: false
   conda-build-arguments:
     description: Command line arguments for conda-build, inserted before recipe path with no processing.
     required: false
@@ -70,8 +79,11 @@ runs:
         INPUT_SUBDIR: ${{ inputs.subdir }}
         INPUT_PACKAGE_NAME: ${{ inputs.package-name }}
         INPUT_UPLOAD: ${{ inputs.upload }}
-        INPUT_CHANNEL: ${{ inputs.anaconda-org-channel }}
-        INPUT_LABEL: ${{ inputs.anaconda-org-label }}
+        INPUT_ANACONDA_CHANNEL: ${{ inputs.anaconda-org-channel }}
+        INPUT_ANACONDA_LABEL: ${{ inputs.anaconda-org-label }}
+        INPUT_GITHUB_RELEASES_REPOSITORY: ${{ inputs.github-releases-repository }}
+        INPUT_GITHUB_RELEASES_CHANNEL_NAME: ${{ inputs.github-releases-channel-name }}
+        GH_TOKEN: ${{ inputs.github-releases-token }}
       run: |
         echo "::group::Setting up environment"
         set -euo pipefail
@@ -113,20 +125,48 @@ runs:
         echo "::endgroup::"
         if [[ "${INPUT_UPLOAD}" == "true" ]]; then
           echo "::group::Uploading package"
-          anaconda \
-            upload \
-            --force \
-            --register \
-            --no-progress \
-            --user="${INPUT_CHANNEL}" \
-            --label="${INPUT_LABEL}" \
-            "${PACKAGES[@]}"
+          if [[ -n "${INPUT_ANACONDA_CHANNEL}" && -n "${INPUT_ANACONDA_LABEL}" ]]; then
+            anaconda \
+              upload \
+              --force \
+              --register \
+              --no-progress \
+              --user="${INPUT_CHANNEL}" \
+              --label="${INPUT_LABEL}" \
+              "${PACKAGES[@]}"
+            USER_FACING_CHANNEL="${INPUT_CHANNEL}/label/${INPUT_LABEL}"
+          elif [[ -n "${INPUT_GITHUB_RELEASES_REPOSITORY}" && -n "${INPUT_GITHUB_RELEASES_CHANNEL_NAME}" ]]; then
+            TAG="${INPUT_GITHUB_RELEASES_CHANNEL_NAME}/${SUBDIR}"
+
+            # We may need to run conda-index on the release channel (if existing) plus the new artifacts
+            STAGING_DIR="./channel_staging/${SUBDIR}"
+            mkdir -p "$STAGING_DIR"
+
+            # Ensure the release exists
+            gh release create "$TAG" --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --title "$TAG" --notes "Conda channel subdir for $TAG" --overwrite
+
+            # Download existing artifacts, if any
+            gh release download "$TAG" --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --dir "$STAGING_DIR" || true
+            # ... and copy our new packages on top
+            cp "${PACKAGES[@]}" "$STAGING_DIR/"
+
+            # Regenerate repodata.json (plus zst compression)
+            conda index --zst --write-monolithic --subdir "${SUBDIR}" "./channel_staging"
+
+            # Reupload existing and new artifacts plus updated repodata
+            gh release upload "$TAG" "$STAGING_DIR/"* --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --clobber
+
+            USER_FACING_CHANNEL="https://github.com/${INPUT_GITHUB_RELEASES_REPOSITORY}/releases/download/${INPUT_GITHUB_RELEASES_CHANNEL_NAME}"
+          else
+            echo "::error::Please provide either 'anaconda-org-channel' and 'anaconda-org-label' inputs, or 'github-releases-repository' and 'github-releases-tag'"
+            exit 1
+          fi
           echo "Uploaded the following files:"
           basename -a "${PACKAGES[@]}"
           echo "::endgroup::"
 
           echo "Use this command to try out the build:"
-          echo "conda install -c ${INPUT_CHANNEL}/label/${INPUT_LABEL} ${INPUT_PACKAGE_NAME}"
+          echo "conda install -c "${USER_FACING_CHANNEL}" ${INPUT_PACKAGE_NAME}"
         else
           echo "Skipping upload because 'upload != true'."
         fi
