@@ -143,8 +143,9 @@ runs:
             mkdir -p "$STAGING_DIR"
 
             # Ensure the release exists
-            gh release create "$TAG" --prerelease --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --title "$TAG" --notes "Conda channel subdir for $TAG" --overwrite
-
+            if ! gh release view "$TAG" --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" >/dev/null 2>&1; then
+              gh release create "$TAG" --prerelease --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --title "$TAG" --notes "Conda channel for $TAG"
+            fi
             # Download existing artifacts, if any
             gh release download "$TAG" --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --dir "$STAGING_DIR" || true
             # ... and copy our new packages on top
