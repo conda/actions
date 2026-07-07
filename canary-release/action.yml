@@ -90,7 +90,7 @@ runs:
         conda activate
         conda update --yes --quiet conda
         conda remove --force anaconda-auth
-        conda install --yes --quiet conda-build anaconda-client
+        conda install --yes --quiet conda-build anaconda-client conda-index
         # git needs to be installed after conda-build
         # see https://github.com/conda/conda/issues/11758
         # see https://github.com/conda/actions/pull/47
