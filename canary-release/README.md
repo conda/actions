@@ -3,6 +3,16 @@
 This is a custom GitHub action to be used in the conda GitHub organization
 for doing development/canary releases to anaconda.org or a Github repository releases.
 
+## Channel backends
+
+Two channel backends are provided:
+
+- A channel at anaconda.org, to be configured with `anaconda-org-channel`, `anaconda-org-label` and `anaconda-org-token`. The final channel can be accessed via `https://conda.anaconda.org/{anaconda-org-channel}/label/{anaconda-org-label}`.
+- A channel backed by Github Releases, to be configured by `github-releases-repository`, `github-releases-channel-name`, `github-releases-token`.
+  - Each subdir will be backed by a release tag in the target repository.
+  - The final channel can be accessed via `https://github.com/{github-releases-repository}/releases/download/{github-releases-channel-name}`.
+  - Github limits each release to 1000 artifacts, 2GB max each. That said, you should only upload only a few artifacts per channel for indexing performance. For example, use a timestamped `github-releases-channel-name` value like `canary-{package-name}-{YYYY-MM-DD}`
+
 ## GitHub Action Usage
 
 In your GitHub repository include the action in your workflows,
