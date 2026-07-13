@@ -125,6 +125,7 @@ runs:
         echo "::endgroup::"
         if [[ "${INPUT_UPLOAD}" == "true" ]]; then
           echo "::group::Uploading package"
+          uploaded=no
           if [[ -n "${INPUT_ANACONDA_CHANNEL}" && -n "${INPUT_ANACONDA_LABEL}" ]]; then
             anaconda \
               upload \
@@ -135,7 +136,9 @@ runs:
               --label="${INPUT_LABEL}" \
               "${PACKAGES[@]}"
             USER_FACING_CHANNEL="${INPUT_CHANNEL}/label/${INPUT_LABEL}"
-          elif [[ -n "${INPUT_GITHUB_RELEASES_REPOSITORY}" && -n "${INPUT_GITHUB_RELEASES_CHANNEL_NAME}" ]]; then
+            uploaded=yes
+          fi
+          if [[ -n "${INPUT_GITHUB_RELEASES_REPOSITORY}" && -n "${INPUT_GITHUB_RELEASES_CHANNEL_NAME}" ]]; then
             TAG="${INPUT_GITHUB_RELEASES_CHANNEL_NAME}/${INPUT_SUBDIR}"
 
             # We may need to run conda-index on the release channel (if existing) plus the new artifacts
@@ -158,8 +161,11 @@ runs:
             gh release upload "$TAG" "$STAGING_DIR/"* --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --clobber
 
             USER_FACING_CHANNEL="https://github.com/${INPUT_GITHUB_RELEASES_REPOSITORY}/releases/download/${INPUT_GITHUB_RELEASES_CHANNEL_NAME}"
-          else
-            echo "::error::Please provide either 'anaconda-org-channel' and 'anaconda-org-label' inputs, or 'github-releases-repository' and 'github-releases-tag'"
+            uploaded=yes
+          fi
+
+          if [[ "$uploaded" == "no" ]]; then
+            echo "::error::Please provide 'anaconda-org-channel' and 'anaconda-org-label' inputs, and/or 'github-releases-repository' and 'github-releases-tag'"
             exit 1
           fi
           echo "Uploaded the following files:"
