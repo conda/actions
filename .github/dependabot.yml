@@ -13,12 +13,6 @@ updates:
     cooldown:
       default-days: 7
   - package-ecosystem: github-actions
-    directory: /read-yaml
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-  - package-ecosystem: github-actions
     directory: /set-commit-status
     schedule:
       interval: weekly
