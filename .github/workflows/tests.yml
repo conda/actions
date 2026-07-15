@@ -32,14 +32,14 @@ jobs:
           persist-credentials: false
 
       - name: Cache Pip
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pip
           # invalidate the cache anytime a requirements.txt changes
           key: ${{ github.workflow }}-${{ hashFiles('**/requirements.txt') }}
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '>=3.9'
 
@@ -86,7 +86,7 @@ jobs:
           parser: yaml
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '>=3.9'
 
@@ -134,7 +134,7 @@ jobs:
         run: diff --recursive .github_cache/template-files template-files/data/expected
 
       - name: Filter Changes
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: filter
         with:
           filters: |
@@ -142,7 +142,7 @@ jobs:
               - 'template-files/**'
       - name: Comment on PR
         if: github.event_name == 'pull_request' && steps.filter.outputs.code == 'true'
-        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0  # v3.0.4
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88  # v3.0.5
         with:
           message: |
             ### Template Success
