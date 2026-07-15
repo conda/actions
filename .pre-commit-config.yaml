@@ -21,7 +21,7 @@ repos:
           )
         args: [--unique]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 3b3f7c3f57fe9925356faf5fe6230835138be230  # frozen: v0.15.17
+    rev: 01a675ea018f2fb714478a5ffb83fcea8374bb06  # frozen: v0.15.21
     hooks:
       # lint & attempt to correct failures (e.g. pyupgrade)
       - id: ruff-check
@@ -42,7 +42,7 @@ repos:
         # list fragment included by templates/dependabot.yml
         exclude: ^\.github/template-files/templates/dependabot_extras\.yml$
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 8ef330cbb7204d388aa7a620f9549bcea8009663  # frozen: 0.37.3
+    rev: 1a4bb160cab6417b3045e1b37b6b72449243e658  # frozen: 0.37.4
     hooks:
       # verify github syntaxes
       - id: check-github-actions
@@ -56,7 +56,7 @@ repos:
       - id: codespell
         args: [--write-changes]
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: 9257c6050c0261b8c57e712f632dc4a8010109a9  # frozen: v1.25.2
+    rev: e3eebf65325ccc992422292cb7a4baee967cf815  # frozen: v1.26.1
     hooks:
       - id: zizmor
         args: [--persona=auditor, --fix=safe]
