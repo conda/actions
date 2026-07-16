@@ -135,7 +135,7 @@ runs:
               --user="${INPUT_CHANNEL}" \
               --label="${INPUT_LABEL}" \
               "${PACKAGES[@]}"
-            USER_FACING_CHANNEL="${INPUT_CHANNEL}/label/${INPUT_LABEL}"
+            ANACONDA_ORG_CHANNEL="${INPUT_CHANNEL}/label/${INPUT_LABEL}"
             uploaded=yes
           fi
           if [[ -n "${INPUT_GITHUB_RELEASES_REPOSITORY}" && -n "${INPUT_GITHUB_RELEASES_CHANNEL_NAME}" ]]; then
@@ -160,12 +160,12 @@ runs:
             # Reupload existing and new artifacts plus updated repodata
             gh release upload "$TAG" "$STAGING_DIR/"* --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --clobber
 
-            USER_FACING_CHANNEL="https://github.com/${INPUT_GITHUB_RELEASES_REPOSITORY}/releases/download/${INPUT_GITHUB_RELEASES_CHANNEL_NAME}"
+            GITHUB_RELEASE_CHANNEL="https://github.com/${INPUT_GITHUB_RELEASES_REPOSITORY}/releases/download/${INPUT_GITHUB_RELEASES_CHANNEL_NAME}"
             uploaded=yes
           fi
 
           if [[ "$uploaded" == "no" ]]; then
-            echo "::error::Please provide 'anaconda-org-channel' and 'anaconda-org-label' inputs, and/or 'github-releases-repository' and 'github-releases-tag'"
+            echo "::error::Please provide 'anaconda-org-*' inputs, and/or 'github-releases-*' inputs"
             exit 1
           fi
           echo "Uploaded the following files:"
@@ -173,7 +173,8 @@ runs:
           echo "::endgroup::"
 
           echo "Use this command to try out the build:"
-          echo "conda install -c "${USER_FACING_CHANNEL}" ${INPUT_PACKAGE_NAME}"
+          [[ -n "${ANACONDA_ORG_CHANNEL}" ]] && echo "conda install ${ANACONDA_ORG_CHANNEL}::${INPUT_PACKAGE_NAME}"
+          [[ -n "${GITHUB_RELEASE_CHANNEL}" ]] && echo "conda install ${GITHUB_RELEASE_CHANNEL}::${INPUT_PACKAGE_NAME}"
         else
           echo "Skipping upload because 'upload != true'."
         fi
