@@ -1,7 +1,17 @@
 # Canary release
 
 This is a custom GitHub action to be used in the conda GitHub organization
-for doing development/canary releases to anaconda.org.
+for doing development/canary releases to anaconda.org or a Github repository releases.
+
+## Channel backends
+
+Two channel backends are provided:
+
+- A channel at anaconda.org, to be configured with `anaconda-org-channel`, `anaconda-org-label` and `anaconda-org-token`. The final channel can be accessed via `https://conda.anaconda.org/{anaconda-org-channel}/label/{anaconda-org-label}`.
+- A channel backed by Github Releases, to be configured by `github-releases-repository`, `github-releases-channel-name`, `github-releases-token`.
+  - Each subdir will be backed by a release tag in the target repository.
+  - The final channel can be accessed via `https://github.com/{github-releases-repository}/releases/download/{github-releases-channel-name}`.
+  - Github limits each release to 1000 artifacts, 2GB max each. That said, you should only upload only a few artifacts per channel for indexing performance. For example, use a timestamped `github-releases-channel-name` value like `canary-{package-name}-{YYYY-MM-DD}`
 
 ## GitHub Action Usage
 
@@ -58,15 +68,21 @@ jobs:
           # the subdiretory, e.g. linux-64
           subdir: ${{ matrix.subdir }}
 
-          # [required]
-          # the anaconda.org channel
+          # [one of these two groups is required]
+          # anaconda.org configuration:
+          #   the anaconda.org channel
           anaconda-org-channel: conda-canary
-          # [required]
-          # the anaconda.org label to apply
+          #   the anaconda.org label to apply
           anaconda-org-label: dev
-          # [required]
-          # the anaconda.org token to upload to the channel
+          #   the anaconda.org token to upload to the channel
           anaconda-org-token: ${{ secrets.CANARY_ANACONDA_ORG_TOKEN }}
+          # Github Releases configuration:
+          #   target repository
+          github-releases-repository: my-org/my-repo
+          #   chosen name for the channel
+          github-releases-channel-name: conda-canary-on-github
+          #   github token if the repo is a different one
+          github-releases-token: ${{ secrets.GITHUB_RELEASES_TOKEN }}
 
           # [optional]
           # the GitHub Personal Access Token to comment with
