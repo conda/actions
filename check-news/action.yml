@@ -1,0 +1,47 @@
+name: Check News
+description: Validate that pull requests include a conda news fragment.
+branding:
+  icon: file-text
+  color: green
+
+inputs:
+  skip-label:
+    description: Label that marks a pull request as not needing a news fragment.
+    default: no-news
+  require-pr-number:
+    description: Require the PR number in the news fragment filename or contents.
+    default: 'true'
+  fragment-format:
+    description: News fragment format to validate.
+    default: sectioned
+  news-directory:
+    description: Directory containing news fragments.
+    default: news
+  exempt-authors:
+    description: Comma-separated GitHub logins that do not need a news fragment.
+    default: pre-commit-ci[bot],dependabot[bot],conda-bot,github-actions[bot]
+outputs:
+  summary:
+    description: Summary of the news check result.
+    value: ${{ steps.check.outputs.summary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check News
+      id: check
+      shell: bash
+      run: >
+        python "$GITHUB_ACTION_PATH/check_news.py"
+        --skip-label "$INPUT_SKIP_LABEL"
+        --require-pr-number "$INPUT_REQUIRE_PR_NUMBER"
+        --fragment-format "$INPUT_FRAGMENT_FORMAT"
+        --news-directory "$INPUT_NEWS_DIRECTORY"
+        --exempt-authors "$INPUT_EXEMPT_AUTHORS"
+      env:
+        INPUT_SKIP_LABEL: ${{ inputs.skip-label }}
+        INPUT_REQUIRE_PR_NUMBER: ${{ inputs.require-pr-number }}
+        INPUT_FRAGMENT_FORMAT: ${{ inputs.fragment-format }}
+        INPUT_NEWS_DIRECTORY: ${{ inputs.news-directory }}
+        INPUT_EXEMPT_AUTHORS: ${{ inputs.exempt-authors }}
+        PYTHONPATH: ${{ github.action_path }}/..
