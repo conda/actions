@@ -12,6 +12,8 @@ updates:
           - '*'
     cooldown:
       default-days: 7
+      exclude:
+        - conda/actions
   - package-ecosystem: pre-commit
     directory: /
     schedule:
@@ -30,6 +32,12 @@ updates:
       default-days: 7
   - package-ecosystem: github-actions
     directory: /check-cla
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  - package-ecosystem: github-actions
+    directory: /read-yaml
     schedule:
       interval: weekly
     cooldown:
