@@ -8,11 +8,12 @@ on:
   schedule:
     - cron: 0 6 * * *
 
-permissions: {}
-
 concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.repository }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   lock:
@@ -20,10 +21,10 @@ jobs:
     if: '!github.event.repository.fork'
     runs-on: ubuntu-slim
     permissions:
-      issues: write  # Lock inactive issues.
-      pull-requests: write  # Lock inactive pull requests.
+      issues: write  # Required to lock inactive issues.
+      pull-requests: write  # Required to lock inactive pull requests.
     steps:
-      - uses: dessant/lock-threads@7266a7ce5c1df01b1c6db85bf8cd86c737dadbe7 # v6.0.0
+      - uses: dessant/lock-threads@89ae32b08ed1a541efecbab17912962a5e38981c # v6.0.2
         with:
           # Number of days of inactivity before a closed issue is locked
           issue-inactive-days: 180

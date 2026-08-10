@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from combine_durations import (
+    DurationStats,
     aggregate_new_durations,
     aggregate_old_durations,
     read_durations,
@@ -67,6 +68,42 @@ def test_read_durations(path: Path) -> None:
     assert stats[os].number_of_tests == len(data)
     assert stats[os].total_run_time == sum(data.values())
     assert stats[os].average_run_time == sum(data.values()) / len(data)
+
+
+def test_duration_stats_empty() -> None:
+    stats = DurationStats()
+    assert stats.number_of_tests == 0
+    assert stats.total_run_time == 0.0
+    assert stats.average_run_time == 0.0
+    assert list(stats) == [0, 0.0, 0.0]
+
+
+def test_stats_table_with_missing_new_durations(tmp_path: Path) -> None:
+    """No downloaded artifacts, but existing duration files (conda-build failure)."""
+    durations_dir = tmp_path / "durations"
+    durations_dir.mkdir()
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+
+    for path in DURATIONS_DIR.glob("*.json"):
+        (durations_dir / path.name).write_text(path.read_text())
+
+    combined, new_stats = aggregate_new_durations(artifacts_dir)
+    _, old_stats = aggregate_old_durations(durations_dir, combined, unlink=False)
+
+    assert not new_stats
+    assert len(old_stats) == 2
+
+    # main() unpacks stats this way for the summary table
+    for os_name in sorted({*new_stats, *old_stats}):
+        ncount, ntotal, naverage = new_stats.get(os_name, DurationStats())
+        ocount, ototal, oaverage = old_stats.get(os_name, DurationStats())
+        assert ncount == 0
+        assert ntotal == 0.0
+        assert naverage == 0.0
+        assert ocount == 6
+        assert ototal > 0
+        assert oaverage > 0
 
 
 def test_aggregate_new_durations() -> None:

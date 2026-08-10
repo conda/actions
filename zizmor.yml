@@ -2,9 +2,9 @@
 # https://docs.zizmor.sh/configuration/
 #
 # Workflows synced from conda/infrastructure (cla.yml, issues.yml,
-# labels.yml, project.yml, stale.yml) cannot be modified in this
-# repo. Findings in those files are suppressed here; fixes should
-# be applied upstream in conda/infrastructure.
+# labels.yml, lock.yml, project.yml, stale.yml, update.yml) cannot
+# be modified in this repo. Findings in those files are suppressed
+# here; fixes should be applied upstream in conda/infrastructure.
 
 rules:
   dangerous-triggers:
@@ -27,6 +27,7 @@ rules:
       - cla.yml
       - issues.yml
       - labels.yml
+      - lock.yml
       - project.yml
       - stale.yml
       - update.yml
@@ -38,6 +39,7 @@ rules:
       - cla.yml
       - issues.yml
       - labels.yml
+      - lock.yml
       - stale.yml
       - update.yml
 
@@ -58,6 +60,7 @@ rules:
       - cla.yml
       - issues.yml
       - labels.yml
+      - lock.yml
       - project.yml
       - stale.yml
       - update.yml
@@ -69,6 +72,7 @@ rules:
       - cla.yml
       - issues.yml
       - labels.yml
+      - lock.yml
       - project.yml
       - stale.yml
       - update.yml
