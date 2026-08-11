@@ -17,6 +17,7 @@ from prepare_authors import (
     classify_commits,
     ensure_allowed_paths,
     find_existing_entry,
+    get_changed_paths,
     get_commits_since,
     load_metadata,
     save_metadata,
@@ -317,3 +318,22 @@ def test_ensure_allowed_paths() -> None:
 
     with pytest.raises(ActionError, match="unexpected file changes"):
         ensure_allowed_paths([Path("README.md")], authors_path=Path(".authors.yml"))
+
+
+def test_get_changed_paths_preserves_dotfile_prefix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Porcelain ' M .authors.yml' must not become 'authors.yml' via strip()."""
+    init_repo(tmp_path, monkeypatch)
+    authors = tmp_path / ".authors.yml"
+    write_authors(authors, "- name: Alice Example\n  email: alice@example.com\n")
+    subprocess.run(["git", "add", ".authors.yml"], check=True)
+    subprocess.run(["git", "commit", "-m", "authors"], check=True, capture_output=True)
+    write_authors(
+        authors,
+        "- name: Alice Example\n  email: alice@example.com\n  github: alice\n",
+    )
+
+    assert get_changed_paths() == [Path(".authors.yml")]
+    ensure_allowed_paths(get_changed_paths(), authors_path=Path(".authors.yml"))

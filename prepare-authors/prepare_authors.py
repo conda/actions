@@ -604,7 +604,8 @@ def run(
     except subprocess.CalledProcessError as err:
         detail = err.stderr.strip() if err.stderr else str(err)
         raise ActionError(f"Command failed: {' '.join(command)}\n{detail}") from err
-    return result.stdout.strip() if capture else ""
+    # Preserve leading spaces (e.g. git porcelain " M path"); only trim newlines.
+    return result.stdout.rstrip("\n") if capture else ""
 
 
 def run_json(
