@@ -105,8 +105,7 @@ def emit_missing_github_warnings(missing: list[tuple[str, str]]) -> list[str]:
         return []
     for _, name in missing:
         print(
-            f"::warning::Author {name!r} is missing a github key "
-            f"in `.authors.yml`.",
+            f"::warning::Author {name!r} is missing a github key in `.authors.yml`.",
             file=sys.stderr,
         )
     summary_lines = [
@@ -206,9 +205,7 @@ def prepare_authors(args: Namespace) -> None:
         repo_full=repo_full,
         get_github_login_fn=login_fn,
     )
-    unresolved = unresolved_missing_github_keys(
-        metadata, analysis.missing_github_keys
-    )
+    unresolved = unresolved_missing_github_keys(metadata, analysis.missing_github_keys)
     warning_summary = emit_missing_github_warnings(unresolved)
     if unresolved:
         write_summary("\n".join(warning_summary))
