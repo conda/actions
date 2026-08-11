@@ -99,6 +99,37 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def emit_missing_github_warnings(missing: list[tuple[str, str]]) -> list[str]:
+    """Print ::warning:: per author; return summary bullet lines."""
+    if not missing:
+        return []
+    for _, name in missing:
+        print(
+            f"::warning::Author {name!r} is missing a github key "
+            f"in `.authors.yml`.",
+            file=sys.stderr,
+        )
+    summary_lines = [
+        f"Found {len(missing)} author(s) missing github keys:",
+    ]
+    for _, name in missing:
+        summary_lines.append(f"- {name}")
+    return summary_lines
+
+
+def unresolved_missing_github_keys(
+    metadata: list[dict[str, Any]],
+    missing: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Return (email, name) pairs still lacking github after apply_updates."""
+    by_email = {entry["email"]: entry for entry in metadata}
+    return [
+        (email, name)
+        for email, name in missing
+        if "github" not in by_email.get(email, {})
+    ]
+
+
 def check_authors(args: Namespace) -> None:
     read_token = require_github_token()
     authors_path = Path(args.authors_path)
@@ -112,19 +143,7 @@ def check_authors(args: Namespace) -> None:
         get_github_login_fn=make_github_login_fn(read_token),
     )
 
-    summary_lines: list[str] = []
-    if analysis.missing_github_keys:
-        for _, name in analysis.missing_github_keys:
-            print(
-                f"::warning::Author {name!r} is missing a github key "
-                f"in `.authors.yml`.",
-                file=sys.stderr,
-            )
-        summary_lines.append(
-            f"Found {len(analysis.missing_github_keys)} author(s) missing github keys:"
-        )
-        for _, name in analysis.missing_github_keys:
-            summary_lines.append(f"- {name}")
+    summary_lines = emit_missing_github_warnings(analysis.missing_github_keys)
 
     if not analysis.alternate_email_updates and not analysis.new_authors:
         if summary_lines:
@@ -187,6 +206,17 @@ def prepare_authors(args: Namespace) -> None:
         repo_full=repo_full,
         get_github_login_fn=login_fn,
     )
+    unresolved = unresolved_missing_github_keys(
+        metadata, analysis.missing_github_keys
+    )
+    warning_summary = emit_missing_github_warnings(unresolved)
+    if unresolved:
+        write_summary("\n".join(warning_summary))
+        write_output("changed", "false")
+        raise ActionError(
+            f"{len(unresolved)} author(s) missing github keys in `.authors.yml`."
+        )
+
     if not changed:
         write_summary("`.authors.yml` is already complete.")
         write_output("changed", "false")

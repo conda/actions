@@ -3,8 +3,10 @@
 A composite GitHub Action to keep `.authors.yml` current for rever by scanning
 recent commits, updating author metadata, and opening or updating a pull request.
 In `check` mode it validates only and fails when new contributors or
-alternate-email updates are needed. Rever still updates `.mailmap` and
-`AUTHORS.md` at release time.
+alternate-email updates are needed; missing `github:` keys warn but do not fail.
+In `prepare` mode unresolved missing `github:` keys fail the step after lookup
+attempts (no commit or PR). Rever still updates `.mailmap` and `AUTHORS.md` at
+release time.
 
 ## Action Inputs
 
@@ -60,8 +62,10 @@ jobs:
 ### Check mode
 
 Use `mode: check` to validate `.authors.yml` without writing files or opening a
-PR; missing `github:` keys emit warnings but do not fail the step. Lookups use
-the job `GITHUB_TOKEN` (`contents: read` is enough).
+PR. New contributors and alternate-email updates fail the step; missing
+`github:` keys emit warnings but do not fail (unlike prepare mode, which fails
+when those keys stay unresolved after lookup). Lookups use the job
+`GITHUB_TOKEN` (`contents: read` is enough).
 
 ```yaml
 - uses: conda/actions/prepare-authors@main

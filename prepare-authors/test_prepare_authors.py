@@ -16,14 +16,17 @@ from prepare_authors import (
     build_author_indexes,
     check_authors,
     classify_commits,
+    emit_missing_github_warnings,
     ensure_allowed_paths,
     find_existing_entry,
     get_changed_paths,
     get_commits_since,
     get_github_login,
     load_metadata,
+    prepare_authors,
     require_github_token,
     save_metadata,
+    unresolved_missing_github_keys,
     update_existing_entry,
 )
 
@@ -278,6 +281,175 @@ def test_check_authors_passes_when_complete(
         git_remote = "origin"
 
     check_authors(Args())
+
+
+def test_unresolved_missing_github_keys() -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "bob@example.com", "github": "bob"},
+        {"name": "Carol Example", "email": "carol@example.com"},
+    ]
+    missing = [
+        ("bob@example.com", "Bob Example"),
+        ("carol@example.com", "Carol Example"),
+    ]
+
+    assert unresolved_missing_github_keys(metadata, missing) == [
+        ("carol@example.com", "Carol Example"),
+    ]
+    assert unresolved_missing_github_keys(metadata, []) == []
+
+
+def test_emit_missing_github_warnings_empty() -> None:
+    assert emit_missing_github_warnings([]) == []
+
+
+def test_check_authors_warns_but_passes_on_missing_github_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "read-token")
+    authors = tmp_path / ".authors.yml"
+    write_authors(
+        authors,
+        (
+            "- name: Alice Example\n"
+            "  email: alice@example.com\n"
+            "  github: alice\n"
+            "- name: Bob Example\n"
+            "  email: bob@example.com\n"
+        ),
+    )
+    subprocess.run(["git", "add", ".authors.yml"], check=True)
+    subprocess.run(["git", "commit", "-m", "authors"], check=True, capture_output=True)
+    subprocess.run(["git", "tag", "1.0.0"], check=True)
+
+    class Args:
+        authors_path = ".authors.yml"
+        since = "tag"
+        git_remote = "origin"
+
+    check_authors(Args())
+    captured = capsys.readouterr()
+    assert "missing a github key" in captured.err
+    assert "Bob Example" in captured.err
+
+
+def test_prepare_authors_fails_when_missing_github_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "read-token")
+    authors = tmp_path / ".authors.yml"
+    write_authors(
+        authors,
+        (
+            "- name: Alice Example\n"
+            "  email: alice@example.com\n"
+            "  github: alice\n"
+            "- name: Bob Example\n"
+            "  email: bob@example.com\n"
+        ),
+    )
+    subprocess.run(["git", "add", ".authors.yml"], check=True)
+    subprocess.run(["git", "commit", "-m", "authors"], check=True, capture_output=True)
+    subprocess.run(["git", "tag", "1.0.0"], check=True)
+    github_output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    class Args:
+        authors_path = ".authors.yml"
+        since = "tag"
+        git_remote = "origin"
+        base_branch = "main"
+        branch_prefix = "prepare-authors-"
+        git_author_name = "Conda Bot"
+        git_author_email = "bot@example.com"
+        repository = "conda/example"
+        token = "write-token"
+
+    with pytest.raises(ActionError, match="missing github keys"):
+        prepare_authors(Args())
+
+    captured = capsys.readouterr()
+    assert "missing a github key" in captured.err
+    assert "already complete" not in captured.out
+    assert "changed=false" in github_output.read_text(encoding="utf-8")
+    bob = load_metadata(authors)[0][1]
+    assert "github" not in bob
+
+
+def test_prepare_authors_succeeds_when_missing_github_filled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "read-token")
+    authors = tmp_path / ".authors.yml"
+    write_authors(
+        authors,
+        (
+            "- name: Alice Example\n"
+            "  email: alice@example.com\n"
+            "  github: alice\n"
+            "- name: Bob Example\n"
+            "  email: bob@example.com\n"
+        ),
+    )
+    subprocess.run(["git", "add", ".authors.yml"], check=True)
+    subprocess.run(["git", "commit", "-m", "authors"], check=True, capture_output=True)
+    subprocess.run(["git", "tag", "1.0.0"], check=True)
+    (tmp_path / "feature.txt").write_text("feature\n", encoding="utf-8")
+    subprocess.run(["git", "add", "feature.txt"], check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "feature", "--author", "Bob Example <bob@example.com>"],
+        check=True,
+        capture_output=True,
+    )
+    github_output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    class Args:
+        authors_path = ".authors.yml"
+        since = "tag"
+        git_remote = "origin"
+        base_branch = "main"
+        branch_prefix = "prepare-authors-"
+        git_author_name = "Conda Bot"
+        git_author_email = "bot@example.com"
+        repository = "conda/example"
+        token = "write-token"
+
+    from prepare_authors import run as real_run
+
+    def selective_run(
+        command: list[str],
+        *,
+        capture: bool = False,
+        env: dict[str, str] | None = None,
+    ) -> str:
+        if command[0] == "gh" or command[:2] == ["git", "push"]:
+            return ""
+        return real_run(command, capture=capture, env=env)
+
+    with (
+        patch("prepare_authors.get_repo_full", return_value="conda/example"),
+        patch("prepare_authors.get_github_login", return_value="bob"),
+        patch(
+            "prepare_authors.create_or_update_pr",
+            return_value="https://example/pr/1",
+        ),
+        patch("prepare_authors.run", side_effect=selective_run),
+    ):
+        prepare_authors(Args())
+
+    updated, _ = load_metadata(authors)
+    assert updated[1]["github"] == "bob"
+    assert "changed=true" in github_output.read_text(encoding="utf-8")
 
 
 def test_require_github_token_fails_when_missing(
