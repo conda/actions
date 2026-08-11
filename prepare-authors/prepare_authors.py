@@ -467,9 +467,7 @@ def get_commits_since(since: str) -> tuple[list[CommitAuthor], str]:
 def require_github_token() -> str:
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
-        raise ActionError(
-            "GITHUB_TOKEN is required for commit author lookups."
-        )
+        raise ActionError("GITHUB_TOKEN is required for commit author lookups.")
     return token
 
 
@@ -497,8 +495,7 @@ def get_github_login(repo: str, commit_hash: str, *, token: str) -> str | None:
     login = author.get("login")
     if not login:
         print(
-            f"::warning::No GitHub login associated with commit "
-            f"{repo}@{commit_hash}.",
+            f"::warning::No GitHub login associated with commit {repo}@{commit_hash}.",
             file=sys.stderr,
         )
         return None
