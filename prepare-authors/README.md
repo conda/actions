@@ -18,7 +18,7 @@ alternate-email updates are needed. Rever still updates `.mailmap` and
 | `mode` | `prepare` updates `.authors.yml` and opens a PR; `check` validates only. | `prepare` |
 | `git-author-name` | Git author name for the generated commit. | `Conda Bot` |
 | `git-author-email` | Git author email for the generated commit. | `18747875+conda-bot@users.noreply.github.com` |
-| `token` | GitHub token with `contents:write` and `pull-requests:write` for prepare mode. | `${{ github.token }}` |
+| `token` | Token for checkout and prepare-mode push/PR (`contents:write`, `pull-requests:write`). Author login lookups use `GITHUB_TOKEN` / `github.token`. | `${{ github.token }}` |
 
 ## Action Outputs
 
@@ -60,7 +60,8 @@ jobs:
 ### Check mode
 
 Use `mode: check` to validate `.authors.yml` without writing files or opening a
-PR; missing `github:` keys emit warnings but do not fail the step.
+PR; missing `github:` keys emit warnings but do not fail the step. Lookups use
+the job `GITHUB_TOKEN` (`contents: read` is enough).
 
 ```yaml
 - uses: conda/actions/prepare-authors@main

@@ -100,14 +100,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def check_authors(args: Namespace) -> None:
+    read_token = require_github_token()
     authors_path = Path(args.authors_path)
     metadata, _ = load_metadata(authors_path)
     repo_full = get_repo_full(args.git_remote)
+    warn_if_missing_repo_full(repo_full, args.git_remote)
     analysis = analyze_authors(
         metadata,
         since=args.since,
         repo_full=repo_full,
-        get_github_login_fn=get_github_login,
+        get_github_login_fn=make_github_login_fn(read_token),
     )
 
     summary_lines: list[str] = []
@@ -153,17 +155,20 @@ def check_authors(args: Namespace) -> None:
 
 
 def prepare_authors(args: Namespace) -> None:
+    read_token = require_github_token()
     if not args.token:
         raise ActionError("No GitHub token was provided.")
 
     authors_path = Path(args.authors_path)
     metadata, yaml_engine = load_metadata(authors_path)
     repo_full = get_repo_full(args.git_remote)
+    warn_if_missing_repo_full(repo_full, args.git_remote)
+    login_fn = make_github_login_fn(read_token)
     analysis = analyze_authors(
         metadata,
         since=args.since,
         repo_full=repo_full,
-        get_github_login_fn=get_github_login,
+        get_github_login_fn=login_fn,
     )
 
     if (
@@ -180,7 +185,7 @@ def prepare_authors(args: Namespace) -> None:
         metadata,
         analysis,
         repo_full=repo_full,
-        get_github_login_fn=get_github_login,
+        get_github_login_fn=login_fn,
     )
     if not changed:
         write_summary("`.authors.yml` is already complete.")
@@ -459,16 +464,54 @@ def get_commits_since(since: str) -> tuple[list[CommitAuthor], str]:
     return commits, since_label
 
 
-def get_github_login(repo: str, commit_hash: str) -> str | None:
+def require_github_token() -> str:
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
+        raise ActionError(
+            "GITHUB_TOKEN is required for commit author lookups."
+        )
+    return token
+
+
+def make_github_login_fn(token: str) -> Callable[[str, str], str | None]:
+    def _login(repo: str, commit_hash: str) -> str | None:
+        return get_github_login(repo, commit_hash, token=token)
+
+    return _login
+
+
+def get_github_login(repo: str, commit_hash: str, *, token: str) -> str | None:
     try:
         data = run_json(
             ["gh", "api", f"repos/{repo}/commits/{commit_hash}"],
+            env=os.environ | {"GH_TOKEN": token},
         )
-    except ActionError:
+    except ActionError as err:
+        print(
+            f"::warning::Failed to resolve GitHub login for "
+            f"{repo}@{commit_hash}: {err}",
+            file=sys.stderr,
+        )
         return None
     author = data.get("author") or {}
     login = author.get("login")
-    return str(login) if login else None
+    if not login:
+        print(
+            f"::warning::No GitHub login associated with commit "
+            f"{repo}@{commit_hash}.",
+            file=sys.stderr,
+        )
+        return None
+    return str(login)
+
+
+def warn_if_missing_repo_full(repo_full: str, remote_alias: str) -> None:
+    if not repo_full:
+        print(
+            f"::warning::Could not resolve owner/repo from git remote "
+            f"{remote_alias!r}; GitHub login lookup will be skipped.",
+            file=sys.stderr,
+        )
 
 
 def get_repo_full(remote_alias: str) -> str:

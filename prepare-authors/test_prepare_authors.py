@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -19,7 +20,9 @@ from prepare_authors import (
     find_existing_entry,
     get_changed_paths,
     get_commits_since,
+    get_github_login,
     load_metadata,
+    require_github_token,
     save_metadata,
     update_existing_entry,
 )
@@ -234,6 +237,7 @@ def test_check_authors_fails_when_updates_needed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     init_repo(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "read-token")
     authors = tmp_path / ".authors.yml"
     write_authors(authors, "- name: Alice Example\n  email: alice@example.com\n")
     subprocess.run(["git", "add", ".authors.yml"], check=True)
@@ -261,6 +265,7 @@ def test_check_authors_passes_when_complete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     init_repo(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "read-token")
     authors = tmp_path / ".authors.yml"
     write_authors(authors, "- name: Test User\n  email: test@example.com\n")
     subprocess.run(["git", "add", ".authors.yml"], check=True)
@@ -273,6 +278,57 @@ def test_check_authors_passes_when_complete(
         git_remote = "origin"
 
     check_authors(Args())
+
+
+def test_require_github_token_fails_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    with pytest.raises(ActionError, match="GITHUB_TOKEN is required"):
+        require_github_token()
+
+
+def test_check_authors_requires_github_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    authors = tmp_path / ".authors.yml"
+    write_authors(authors, "- name: Test User\n  email: test@example.com\n")
+
+    class Args:
+        authors_path = ".authors.yml"
+        since = "tag"
+        git_remote = "origin"
+
+    with pytest.raises(ActionError, match="GITHUB_TOKEN is required"):
+        check_authors(Args())
+
+
+def test_get_github_login_passes_read_token_as_gh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_run_json(command: list[str], *, env: dict[str, str] | None = None):
+        captured["command"] = command
+        captured["env"] = env
+        return {"author": {"login": "alice"}}
+
+    monkeypatch.setenv("GITHUB_TOKEN", "job-token")
+    with patch("prepare_authors.run_json", side_effect=fake_run_json):
+        login = get_github_login(
+            "conda/example",
+            "abc123",
+            token="read-token",
+        )
+
+    assert login == "alice"
+    assert captured["command"] == ["gh", "api", "repos/conda/example/commits/abc123"]
+    assert captured["env"] is not None
+    assert captured["env"]["GH_TOKEN"] == "read-token"
+    assert captured["env"]["GITHUB_TOKEN"] == "job-token"
 
 
 def test_load_and_save_metadata_roundtrip(tmp_path: Path) -> None:

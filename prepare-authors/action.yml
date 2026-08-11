@@ -30,7 +30,10 @@ inputs:
     description: Git author email for the generated commit.
     default: 18747875+conda-bot@users.noreply.github.com
   token:
-    description: GitHub token with contents:write and pull-requests:write for prepare mode.
+    description: >-
+      Token for checkout and, in prepare mode, push/PR writes
+      (contents:write and pull-requests:write). Commit author lookups always
+      use GITHUB_TOKEN / github.token instead.
     default: ${{ github.token }}
 
 outputs:
@@ -97,6 +100,8 @@ runs:
         fi
         python "$GITHUB_ACTION_PATH/prepare_authors.py" "${args[@]}"
       env:
+        # Keep reads on the job token; do not set GH_TOKEN to inputs.token here.
+        GITHUB_TOKEN: ${{ github.token }}
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_AUTHORS_PATH: ${{ inputs.authors-path }}
         INPUT_SINCE: ${{ inputs.since }}
