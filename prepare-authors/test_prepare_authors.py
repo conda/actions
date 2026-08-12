@@ -79,13 +79,24 @@ def test_build_author_indexes_tracks_alternate_emails_and_github() -> None:
 def test_find_existing_entry_matches_name_or_github() -> None:
     metadata = [
         {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "bob@example.com", "github": "bob"},
+        {"name": "Carol Example", "email": "carol@example.com"},
     ]
-    by_emails, by_names, by_github, _, _ = build_author_indexes(metadata)
+    _, by_names, by_github, _, _ = build_author_indexes(metadata)
 
     assert (
         find_existing_entry(
             "Alice Example",
             None,
+            by_names,
+            by_github,
+        )
+        is metadata[0]
+    )
+    assert (
+        find_existing_entry(
+            "Alice Example",
+            "alice",
             by_names,
             by_github,
         )
@@ -99,6 +110,33 @@ def test_find_existing_entry_matches_name_or_github() -> None:
             by_github,
         )
         is metadata[0]
+    )
+    assert (
+        find_existing_entry(
+            "Alice Example",
+            "unknown",
+            by_names,
+            by_github,
+        )
+        is None
+    )
+    assert (
+        find_existing_entry(
+            "Alice Example",
+            "bob",
+            by_names,
+            by_github,
+        )
+        is metadata[1]
+    )
+    assert (
+        find_existing_entry(
+            "Carol Example",
+            "anyone",
+            by_names,
+            by_github,
+        )
+        is metadata[2]
     )
 
 
@@ -121,8 +159,8 @@ def test_classify_commits_splits_new_and_existing_authors() -> None:
         CommitAuthor("def", "bob@example.com", "Bob Example", "feat"),
     ]
 
-    def fake_login(_repo: str, _commit_hash: str) -> str | None:
-        return "bob"
+    def fake_login(_repo: str, commit_hash: str) -> str | None:
+        return {"abc": "alice", "def": "bob"}[commit_hash]
 
     alternate_updates, new_authors = classify_commits(
         commits,
@@ -138,6 +176,32 @@ def test_classify_commits_splits_new_and_existing_authors() -> None:
     assert alternate_updates[0][1].email == "alice.work@example.com"
     assert len(new_authors) == 1
     assert new_authors[0]["email"] == "bob@example.com"
+    assert new_authors[0]["github"] == "bob"
+
+
+def test_classify_commits_rejects_name_match_on_conflicting_github() -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("abc", "bob@example.com", "Alice Example", "fix"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, _hash: "bob",
+    )
+
+    assert alternate_updates == []
+    assert len(new_authors) == 1
+    assert new_authors[0]["email"] == "bob@example.com"
+    assert new_authors[0]["name"] == "Alice Example"
     assert new_authors[0]["github"] == "bob"
 
 

@@ -402,10 +402,18 @@ def find_existing_entry(
     by_names: dict[str, dict[str, Any]],
     by_github: dict[str, dict[str, Any]],
 ) -> dict[str, Any] | None:
-    if name in by_names:
-        return by_names[name]
-    if github_login and github_login in by_github:
-        return by_github[github_login]
+    name_entry = by_names.get(name)
+    github_entry = by_github.get(github_login) if github_login else None
+
+    if name_entry is not None:
+        entry_github = name_entry.get("github")
+        if github_login and entry_github and github_login != entry_github:
+            name_entry = None
+
+    if name_entry is not None:
+        return name_entry
+    if github_entry is not None:
+        return github_entry
     return None
 
 

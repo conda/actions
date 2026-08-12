@@ -3,7 +3,9 @@
 A composite GitHub Action to keep `.authors.yml` current for rever by scanning
 recent commits, updating author metadata, and opening or updating a pull request.
 Existing emails with a new commit author name get an `aliases` update; new emails
-for an existing contributor are added to `alternate_emails`.
+for an existing contributor are added to `alternate_emails`. A name match is not
+used when the commit’s resolved GitHub login conflicts with the entry’s `github`
+key (the commit is treated as a different person, or matched by that login).
 In `check` mode it validates only and fails when new contributors or
 alternate-email/alias updates are needed; missing `github:` keys warn but do not fail.
 In `prepare` mode unresolved missing `github:` keys fail the step after lookup
