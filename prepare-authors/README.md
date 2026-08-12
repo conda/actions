@@ -13,7 +13,7 @@ release time.
 | Name | Description | Default |
 |------|-------------|---------|
 | `authors-path` | Path to the rever authors metadata file. | `.authors.yml` |
-| `since` | Commit range to scan. Use `tag` for commits since the latest tag, or `all`. | `tag` |
+| `since` | Commit range to scan. Use `tag` for commits since the highest final release tag (`X.Y.Z` or `vX.Y.Z`; pre-releases ignored), or `all`. Fails if no such tag exists. | `tag` |
 | `base-branch` | Base branch for the generated authors PR. | `main` |
 | `branch-prefix` | Prefix for the generated authors branch. | `prepare-authors-` |
 | `git-remote` | Git remote alias used to resolve owner/repo for gh api. | `origin` |

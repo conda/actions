@@ -9,7 +9,10 @@ inputs:
     description: Path to the rever authors metadata file.
     default: .authors.yml
   since:
-    description: Commit range to scan. Use tag for commits since the latest tag, or all.
+    description: >-
+      Commit range to scan. Use tag for commits since the highest final release
+      tag (X.Y.Z or vX.Y.Z; pre-releases ignored), or all. Fails if no such tag
+      exists.
     default: tag
   base-branch:
     description: Base branch for the generated authors PR.

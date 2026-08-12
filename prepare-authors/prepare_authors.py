@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 AuthorEntry = dict[str, Any]
 AuthorIndex = dict[str, AuthorEntry]
 
+RELEASE_TAG_PATTERN = re.compile(r"^v?(\d+(?:\.\d+)*)$")
+
 
 class ActionError(Exception):
     pass
@@ -448,9 +450,30 @@ def classify_commits(
     return alternate_email_updates, new_authors
 
 
+def normalize_release_tag(tag: str) -> tuple[int, ...] | None:
+    """Return numeric version parts for a final release tag, else None."""
+    match = RELEASE_TAG_PATTERN.fullmatch(tag)
+    if not match:
+        return None
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def select_latest_release_tag(tags: list[str]) -> str:
+    """Pick the highest final release tag by normalized numeric version."""
+    scored = [
+        (version, tag)
+        for tag in tags
+        if (version := normalize_release_tag(tag)) is not None
+    ]
+    if not scored:
+        return ""
+    return max(scored)[1]
+
+
 def get_latest_tag() -> str:
-    output = run(["git", "tag", "--sort=-version:refname"], capture=True)
-    return output.splitlines()[0] if output else ""
+    output = run(["git", "tag"], capture=True)
+    tags = output.splitlines() if output else []
+    return select_latest_release_tag(tags)
 
 
 def get_commits_since(since: str) -> tuple[list[CommitAuthor], str]:
@@ -460,8 +483,10 @@ def get_commits_since(since: str) -> tuple[list[CommitAuthor], str]:
     elif since == "tag":
         tag = get_latest_tag()
         if not tag:
-            print("No tags found; skipping author scan.")
-            return [], "no tags"
+            raise ActionError(
+                "No final release tags found (expected X.Y.Z or vX.Y.Z). "
+                "Fetch tags with full history, or set since: all."
+            )
         print(f"Checking commits since tag: {tag}")
         commits_range = f"{tag}..HEAD"
         since_label = f"tag {tag}"

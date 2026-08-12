@@ -23,9 +23,11 @@ from prepare_authors import (
     get_commits_since,
     get_github_login,
     load_metadata,
+    normalize_release_tag,
     prepare_authors,
     require_github_token,
     save_metadata,
+    select_latest_release_tag,
     unresolved_missing_github_keys,
     update_existing_entry,
 )
@@ -169,6 +171,26 @@ def test_apply_updates_appends_new_author_and_github_key() -> None:
     assert metadata[1]["github"] == "bob"
 
 
+def test_normalize_release_tag() -> None:
+    assert normalize_release_tag("26.7.0") == (26, 7, 0)
+    assert normalize_release_tag("v3.20.4") == (3, 20, 4)
+    assert normalize_release_tag("1.10.0") == (1, 10, 0)
+    assert normalize_release_tag("26.8.0rc1") is None
+    assert normalize_release_tag("4.14.0b2") is None
+    assert normalize_release_tag("pre-commit-hooks-v1") is None
+
+
+def test_select_latest_release_tag_prefers_numeric_over_v_prefix() -> None:
+    assert (
+        select_latest_release_tag(["v3.20.4", "26.7.0", "25.1.0", "26.7.0rc1"])
+        == "26.7.0"
+    )
+    assert select_latest_release_tag(["1.9.0", "1.10.0"]) == "1.10.0"
+    assert select_latest_release_tag(["v1.2.3", "1.2.3"]) in {"v1.2.3", "1.2.3"}
+    assert select_latest_release_tag([]) == ""
+    assert select_latest_release_tag(["26.8.0rc1", "hooks-v1"]) == ""
+
+
 def test_get_commits_since_tag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -190,16 +212,55 @@ def test_get_commits_since_tag(
     assert commits[0].email == "new@example.com"
 
 
-def test_get_commits_since_no_tags_is_noop(
+def test_get_commits_since_prefers_calver_over_legacy_v_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    subprocess.run(["git", "tag", "v3.20.4"], check=True)
+    (tmp_path / "mid.txt").write_text("mid\n", encoding="utf-8")
+    subprocess.run(["git", "add", "mid.txt"], check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "mid", "--author", "Mid Author <mid@example.com>"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "tag", "26.7.0"], check=True)
+    (tmp_path / "change.txt").write_text("change\n", encoding="utf-8")
+    subprocess.run(["git", "add", "change.txt"], check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "feature", "--author", "New Author <new@example.com>"],
+        check=True,
+        capture_output=True,
+    )
+
+    commits, since_label = get_commits_since("tag")
+
+    assert since_label == "tag 26.7.0"
+    assert len(commits) == 1
+    assert commits[0].email == "new@example.com"
+
+
+def test_get_commits_since_no_tags_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     init_repo(tmp_path, monkeypatch)
 
-    commits, since_label = get_commits_since("tag")
+    with pytest.raises(ActionError, match="No final release tags found"):
+        get_commits_since("tag")
 
-    assert commits == []
-    assert since_label == "no tags"
+
+def test_get_commits_since_no_release_shaped_tags_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    subprocess.run(["git", "tag", "26.8.0rc1"], check=True)
+    subprocess.run(["git", "tag", "pre-commit-hooks-v1"], check=True)
+
+    with pytest.raises(ActionError, match="No final release tags found"):
+        get_commits_since("tag")
 
 
 def test_analyze_authors_detects_new_contributor(
