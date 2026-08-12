@@ -205,6 +205,32 @@ def test_classify_commits_rejects_name_match_on_conflicting_github() -> None:
     assert new_authors[0]["github"] == "bob"
 
 
+def test_classify_commits_merges_pending_new_author_by_github() -> None:
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes([])
+    commits = [
+        CommitAuthor("abc", "bob@example.com", "Bob Example", "feat"),
+        CommitAuthor("def", "bob.work@example.com", "Robert Example", "fix"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, _hash: "bob",
+    )
+
+    assert alternate_updates == []
+    assert len(new_authors) == 1
+    assert new_authors[0]["email"] == "bob@example.com"
+    assert new_authors[0]["name"] == "Bob Example"
+    assert new_authors[0]["github"] == "bob"
+    assert new_authors[0]["alternate_emails"] == ["bob.work@example.com"]
+    assert new_authors[0]["aliases"] == ["Robert Example"]
+
+
 def test_classify_commits_queues_alias_for_known_email_new_name() -> None:
     metadata = [
         {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
@@ -327,6 +353,41 @@ def test_apply_updates_appends_new_author_and_github_key() -> None:
     )
     assert metadata[-1]["github"] == "carol"
     assert metadata[1]["github"] == "bob"
+
+
+def test_apply_updates_preserves_alternate_emails_and_aliases_on_new_author() -> None:
+    metadata: list[dict[str, Any]] = []
+    analysis = AuthorAnalysis(
+        alternate_email_updates=[],
+        new_authors=[
+            {
+                "name": "Bob Example",
+                "email": "bob@example.com",
+                "github": "bob",
+                "alternate_emails": ["bob.work@example.com"],
+                "aliases": ["Robert Example"],
+            }
+        ],
+        missing_github_keys=[],
+        email_to_hash={},
+        since_label="tag 1.0.0",
+    )
+
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=lambda *_: None,
+    )
+    assert metadata == [
+        {
+            "name": "Bob Example",
+            "email": "bob@example.com",
+            "github": "bob",
+            "alternate_emails": ["bob.work@example.com"],
+            "aliases": ["Robert Example"],
+        }
+    ]
 
 
 def test_normalize_release_tag() -> None:

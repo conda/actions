@@ -330,6 +330,10 @@ def apply_updates(
         }
         if commit.get("github"):
             new_entry["github"] = commit["github"]
+        if commit.get("alternate_emails"):
+            new_entry["alternate_emails"] = list(commit["alternate_emails"])
+        if commit.get("aliases"):
+            new_entry["aliases"] = list(commit["aliases"])
         metadata.append(new_entry)
         changed = True
 
@@ -474,7 +478,12 @@ def classify_commits(
             by_github,
         )
         if entry is not None:
-            alternate_email_updates.append((entry, commit))
+            if any(entry is pending for pending in new_authors):
+                update_existing_entry(entry, commit.email, commit.name)
+                if commit.name != entry["name"]:
+                    by_names[commit.name] = entry
+            else:
+                alternate_email_updates.append((entry, commit))
             known_emails.add(commit.email)
             by_emails[commit.email] = entry
         else:
@@ -487,6 +496,9 @@ def classify_commits(
             if github_login:
                 commit_data["github"] = github_login
             new_authors.append(commit_data)
+            by_names[commit.name] = commit_data
+            if github_login:
+                by_github[github_login] = commit_data
 
     return alternate_email_updates, new_authors
 
