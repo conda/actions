@@ -5,8 +5,9 @@ recent commits, updating author metadata, and opening or updating a pull request
 In `check` mode it validates only and fails when new contributors or
 alternate-email updates are needed; missing `github:` keys warn but do not fail.
 In `prepare` mode unresolved missing `github:` keys fail the step after lookup
-attempts (no commit or PR). Rever still updates `.mailmap` and `AUTHORS.md` at
-release time.
+attempts (no commit or PR). That includes newly discovered contributors whose
+commit author could not be mapped to a GitHub login. Rever still updates
+`.mailmap` and `AUTHORS.md` at release time.
 
 ## Action Inputs
 
@@ -65,7 +66,8 @@ Use `mode: check` to validate `.authors.yml` without writing files or opening a
 PR. Check mode checks out the triggering revision (not `base-branch`). New
 contributors and alternate-email updates fail the step. Missing `github:` keys
 emit warnings but do not fail (unlike prepare mode, which fails when those keys
-stay unresolved after lookup). Lookups use the job `GITHUB_TOKEN`
+stay unresolved after lookup, including for newly discovered contributors).
+Lookups use the job `GITHUB_TOKEN`
 (`contents: read` is enough).
 
 ```yaml

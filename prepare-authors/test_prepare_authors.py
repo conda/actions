@@ -22,6 +22,7 @@ from prepare_authors import (
     get_changed_paths,
     get_commits_since,
     get_github_login,
+    github_required_authors,
     load_metadata,
     normalize_release_tag,
     prepare_authors,
@@ -361,6 +362,44 @@ def test_unresolved_missing_github_keys() -> None:
     assert unresolved_missing_github_keys(metadata, []) == []
 
 
+def test_github_required_authors() -> None:
+    analysis = AuthorAnalysis(
+        alternate_email_updates=[],
+        new_authors=[
+            {
+                "name": "Carol Example",
+                "email": "carol@example.com",
+                "github": "carol",
+            },
+            {
+                "name": "Dave Example",
+                "email": "dave@example.com",
+            },
+        ],
+        missing_github_keys=[("bob@example.com", "Bob Example")],
+        email_to_hash={},
+        since_label="tag 1.0.0",
+    )
+
+    required = github_required_authors(analysis)
+    assert required == [
+        ("bob@example.com", "Bob Example"),
+        ("carol@example.com", "Carol Example"),
+        ("dave@example.com", "Dave Example"),
+    ]
+
+    metadata: list[dict[str, Any]] = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "bob@example.com"},
+        {"name": "Carol Example", "email": "carol@example.com", "github": "carol"},
+        {"name": "Dave Example", "email": "dave@example.com"},
+    ]
+    assert unresolved_missing_github_keys(metadata, required) == [
+        ("bob@example.com", "Bob Example"),
+        ("dave@example.com", "Dave Example"),
+    ]
+
+
 def test_emit_missing_github_warnings_empty() -> None:
     assert emit_missing_github_warnings([]) == []
 
@@ -442,6 +481,65 @@ def test_prepare_authors_fails_when_missing_github_unresolved(
     assert "changed=false" in github_output.read_text(encoding="utf-8")
     bob = load_metadata(authors)[0][1]
     assert "github" not in bob
+
+
+def test_prepare_authors_fails_when_new_author_github_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "read-token")
+    authors = tmp_path / ".authors.yml"
+    write_authors(
+        authors,
+        "- name: Alice Example\n  email: alice@example.com\n  github: alice\n",
+    )
+    subprocess.run(["git", "add", ".authors.yml"], check=True)
+    subprocess.run(["git", "commit", "-m", "authors"], check=True, capture_output=True)
+    subprocess.run(["git", "tag", "1.0.0"], check=True)
+    (tmp_path / "feature.txt").write_text("feature\n", encoding="utf-8")
+    subprocess.run(["git", "add", "feature.txt"], check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "feature", "--author", "Bob Example <bob@example.com>"],
+        check=True,
+        capture_output=True,
+    )
+    github_output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    class Args:
+        authors_path = ".authors.yml"
+        since = "tag"
+        git_remote = "origin"
+        base_branch = "main"
+        branch_prefix = "prepare-authors-"
+        git_author_name = "Conda Bot"
+        git_author_email = "bot@example.com"
+        repository = "conda/example"
+        token = "write-token"
+
+    with (
+        patch("prepare_authors.get_repo_full", return_value="conda/example"),
+        patch("prepare_authors.get_github_login", return_value=None),
+        pytest.raises(ActionError, match="missing github keys"),
+    ):
+        prepare_authors(Args())
+
+    captured = capsys.readouterr()
+    assert "missing a github key" in captured.err
+    assert "Bob Example" in captured.err
+    assert "changed=false" in github_output.read_text(encoding="utf-8")
+    updated, _ = load_metadata(authors)
+    assert len(updated) == 1
+    assert updated[0]["email"] == "alice@example.com"
+    listed = subprocess.run(
+        ["git", "branch", "--list", "prepare-authors-main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert listed.stdout.strip() == ""
 
 
 def test_prepare_authors_succeeds_when_missing_github_filled(

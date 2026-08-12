@@ -131,6 +131,13 @@ def unresolved_missing_github_keys(
     ]
 
 
+def github_required_authors(analysis: AuthorAnalysis) -> list[tuple[str, str]]:
+    """Existing entries plus newly discovered authors that need a github key."""
+    return analysis.missing_github_keys + [
+        (commit["email"], commit["name"]) for commit in analysis.new_authors
+    ]
+
+
 def check_authors(args: Namespace) -> None:
     read_token = require_github_token()
     authors_path = Path(args.authors_path)
@@ -207,7 +214,9 @@ def prepare_authors(args: Namespace) -> None:
         repo_full=repo_full,
         get_github_login_fn=login_fn,
     )
-    unresolved = unresolved_missing_github_keys(metadata, analysis.missing_github_keys)
+    unresolved = unresolved_missing_github_keys(
+        metadata, github_required_authors(analysis)
+    )
     warning_summary = emit_missing_github_warnings(unresolved)
     if unresolved:
         write_summary("\n".join(warning_summary))
