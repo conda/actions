@@ -62,10 +62,11 @@ jobs:
 ### Check mode
 
 Use `mode: check` to validate `.authors.yml` without writing files or opening a
-PR. New contributors and alternate-email updates fail the step; missing
-`github:` keys emit warnings but do not fail (unlike prepare mode, which fails
-when those keys stay unresolved after lookup). Lookups use the job
-`GITHUB_TOKEN` (`contents: read` is enough).
+PR. Check mode checks out the triggering revision (not `base-branch`). New
+contributors and alternate-email updates fail the step. Missing `github:` keys
+emit warnings but do not fail (unlike prepare mode, which fails when those keys
+stay unresolved after lookup). Lookups use the job `GITHUB_TOKEN`
+(`contents: read` is enough).
 
 ```yaml
 - uses: conda/actions/prepare-authors@main
