@@ -16,6 +16,7 @@ from news_common import SECTION_ORDER, is_news_fragment, parse_sectioned_news
 VERSION_BRANCH_RE = re.compile(r"^(?P<major_minor>\d+\.\d+)\.x$")
 TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.(?P<micro>\d+))$")
 CURRENT_DEVELOPMENTS = "[//]: # (current developments)"
+SECTION_HEADING_RE = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.MULTILINE)
 
 
 class ActionError(Exception):
@@ -250,10 +251,20 @@ def update_changelog(path: Path, entry: str, version: str) -> None:
         raise ActionError(f"Changelog file does not exist: {path}")
 
     text = path.read_text(encoding="utf-8")
-    if re.search(rf"^##\s+{re.escape(version)}\s+\(", text, flags=re.MULTILINE):
-        raise ActionError(f"Changelog already contains an entry for {version}.")
-
-    if CURRENT_DEVELOPMENTS in text:
+    version_match = re.search(
+        rf"^##\s+{re.escape(version)}\s+\([^\n]*\)\s*$",
+        text,
+        flags=re.MULTILINE,
+    )
+    if version_match:
+        following = re.search(r"^##\s+", text[version_match.end() :], re.MULTILINE)
+        release_end = (
+            version_match.end() + following.start() if following else len(text)
+        )
+        release = text[version_match.start() : release_end]
+        updated_release = merge_changelog_entry(release, entry)
+        updated = text[: version_match.start()] + updated_release + text[release_end:]
+    elif CURRENT_DEVELOPMENTS in text:
         marker_end = text.index(CURRENT_DEVELOPMENTS) + len(CURRENT_DEVELOPMENTS)
         prefix = text[:marker_end].rstrip() + "\n\n"
         suffix = text[marker_end:].lstrip("\n")
@@ -262,6 +273,67 @@ def update_changelog(path: Path, entry: str, version: str) -> None:
         updated = entry + text.lstrip("\n")
 
     path.write_text(updated, encoding="utf-8")
+
+
+def merge_changelog_entry(release: str, entry: str) -> str:
+    entry_headings = list(SECTION_HEADING_RE.finditer(entry))
+    incoming = {
+        match.group("title"): entry[
+            match.end() : (
+                entry_headings[index + 1].start()
+                if index + 1 < len(entry_headings)
+                else len(entry)
+            )
+        ].strip()
+        for index, match in enumerate(entry_headings)
+        if match.group("title") in SECTION_ORDER
+    }
+
+    for section in SECTION_ORDER:
+        body = incoming.get(section)
+        if not body:
+            continue
+
+        headings = list(SECTION_HEADING_RE.finditer(release))
+        existing = next(
+            (match for match in headings if match.group("title") == section),
+            None,
+        )
+        if existing:
+            index = headings.index(existing)
+            section_end = (
+                headings[index + 1].start()
+                if index + 1 < len(headings)
+                else len(release)
+            )
+            insert_at = len(release[:section_end].rstrip())
+            separator = "\n" if release[existing.end() : insert_at].strip() else "\n\n"
+            release = release[:insert_at] + separator + body + release[insert_at:]
+            continue
+
+        section_index = SECTION_ORDER.index(section)
+        insert_before = next(
+            (
+                match
+                for match in headings
+                if match.group("title") not in SECTION_ORDER
+                or SECTION_ORDER.index(match.group("title")) > section_index
+            ),
+            None,
+        )
+        block = f"### {section}\n\n{body}"
+        if insert_before:
+            release = (
+                release[: insert_before.start()]
+                + block
+                + "\n\n"
+                + release[insert_before.start() :]
+            )
+        else:
+            insert_at = len(release.rstrip())
+            release = release[:insert_at] + "\n\n" + block + release[insert_at:]
+
+    return release
 
 
 def get_changed_paths() -> list[Path]:

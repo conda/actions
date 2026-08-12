@@ -43,11 +43,6 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
     parser.add_argument("--skip-label", default="no-news")
     parser.add_argument("--require-pr-number", default="true")
     parser.add_argument(
-        "--fragment-format",
-        default="sectioned",
-        choices=["sectioned", "auto"],
-    )
-    parser.add_argument(
         "--exempt-authors",
         default="pre-commit-ci[bot],dependabot[bot],conda-bot,github-actions[bot]",
         help="Comma-separated GitHub logins that do not need a news fragment.",

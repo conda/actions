@@ -25,7 +25,6 @@ jobs:
         with:
           skip-label: no-news
           require-pr-number: true
-          fragment-format: sectioned
           news-directory: news
 ```
 
@@ -42,3 +41,13 @@ Supported headings are:
 - `Other`
 
 Pull requests without a news fragment can use the `no-news` label.
+
+By default, these authors are exempt from the news check:
+
+- `pre-commit-ci[bot]`
+- `dependabot[bot]`
+- `conda-bot`
+- `github-actions[bot]`
+
+Setting `exempt-authors` replaces that list. Include the defaults when adding
+another bot.

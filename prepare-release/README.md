@@ -15,8 +15,7 @@ on:
       - '[0-9]*.[0-9]*.x'
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   prepare:
@@ -28,6 +27,7 @@ jobs:
     steps:
       - uses: conda/actions/prepare-release@main
         with:
+          token: ${{ secrets.BOT_TOKEN }}
           news-directory: news
           changelog-path: CHANGELOG.md
 ```

@@ -146,12 +146,45 @@ def test_update_changelog_inserts_after_current_developments(tmp_path: Path) -> 
     )
 
 
-def test_update_changelog_refuses_existing_version(tmp_path: Path) -> None:
+def test_update_changelog_amends_existing_version(tmp_path: Path) -> None:
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text("## 26.7.0 (2026-06-05)\n", encoding="utf-8")
+    changelog.write_text(
+        "[//]: # (current developments)\n\n"
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Enhancements\n\n"
+        "* Existing enhancement. (#100)\n\n"
+        "### Contributors\n\n"
+        "* @alice\n\n\n"
+        "## 26.5.1 (2026-05-26)\n\n"
+        "### Bug fixes\n\n"
+        "* Older fix. (#90)\n",
+        encoding="utf-8",
+    )
 
-    with pytest.raises(ActionError, match="already contains"):
-        update_changelog(changelog, "## 26.7.0 (2026-06-05)\n", "26.7.0")
+    update_changelog(
+        changelog,
+        "## 26.7.0 (2026-08-12)\n\n"
+        "### Enhancements\n\n"
+        "* New enhancement. (#123)\n\n"
+        "### Bug fixes\n\n"
+        "* New fix. (#124)\n\n\n",
+        "26.7.0",
+    )
+
+    assert changelog.read_text(encoding="utf-8") == (
+        "[//]: # (current developments)\n\n"
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Enhancements\n\n"
+        "* Existing enhancement. (#100)\n"
+        "* New enhancement. (#123)\n\n"
+        "### Bug fixes\n\n"
+        "* New fix. (#124)\n\n"
+        "### Contributors\n\n"
+        "* @alice\n\n\n"
+        "## 26.5.1 (2026-05-26)\n\n"
+        "### Bug fixes\n\n"
+        "* Older fix. (#90)\n"
+    )
 
 
 def test_ensure_allowed_paths() -> None:

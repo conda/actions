@@ -61,7 +61,6 @@ def args(**kwargs: object) -> Namespace:
         "news_directory": "news",
         "skip_label": "no-news",
         "require_pr_number": "true",
-        "fragment_format": "sectioned",
         "exempt_authors": (
             "pre-commit-ci[bot],dependabot[bot],conda-bot,github-actions[bot]"
         ),
