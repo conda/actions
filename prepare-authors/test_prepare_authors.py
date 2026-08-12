@@ -115,7 +115,7 @@ def test_classify_commits_splits_new_and_existing_authors() -> None:
     metadata = [
         {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
     ]
-    _, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
     commits = [
         CommitAuthor("abc", "alice.work@example.com", "Alice Example", "fix"),
         CommitAuthor("def", "bob@example.com", "Bob Example", "feat"),
@@ -127,6 +127,7 @@ def test_classify_commits_splits_new_and_existing_authors() -> None:
     alternate_updates, new_authors = classify_commits(
         commits,
         known_emails,
+        by_emails,
         by_names,
         by_github,
         "conda/example",
@@ -138,6 +139,98 @@ def test_classify_commits_splits_new_and_existing_authors() -> None:
     assert len(new_authors) == 1
     assert new_authors[0]["email"] == "bob@example.com"
     assert new_authors[0]["github"] == "bob"
+
+
+def test_classify_commits_queues_alias_for_known_email_new_name() -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("abc", "alice@example.com", "Alice E", "fix"),
+        CommitAuthor("def", "alice@example.com", "Alice E", "docs"),
+    ]
+
+    def fake_login(_repo: str, _commit_hash: str) -> str | None:
+        raise AssertionError("GitHub lookup should be skipped for known emails")
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        fake_login,
+    )
+
+    assert new_authors == []
+    assert len(alternate_updates) == 1
+    entry, commit = alternate_updates[0]
+    assert entry is metadata[0]
+    assert commit.name == "Alice E"
+    assert update_existing_entry(entry, commit.email, commit.name) is True
+    assert entry["aliases"] == ["Alice E"]
+    assert "alternate_emails" not in entry
+
+
+def test_classify_commits_skips_known_email_with_existing_name_or_alias() -> None:
+    metadata = [
+        {
+            "name": "Alice Example",
+            "email": "alice@example.com",
+            "aliases": ["Alice A"],
+        },
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("abc", "alice@example.com", "Alice Example", "fix"),
+        CommitAuthor("def", "alice@example.com", "Alice A", "docs"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "",
+        lambda _repo, _hash: None,
+    )
+
+    assert alternate_updates == []
+    assert new_authors == []
+
+
+def test_classify_commits_queues_alias_for_known_alternate_email() -> None:
+    metadata = [
+        {
+            "name": "Alice Example",
+            "email": "alice@example.com",
+            "alternate_emails": ["alice.alt@example.com"],
+        },
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("abc", "alice.alt@example.com", "Alice E", "fix"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "",
+        lambda _repo, _hash: None,
+    )
+
+    assert new_authors == []
+    assert len(alternate_updates) == 1
+    entry, commit = alternate_updates[0]
+    assert update_existing_entry(entry, commit.email, commit.name) is True
+    assert entry["aliases"] == ["Alice E"]
+    assert entry["alternate_emails"] == ["alice.alt@example.com"]
 
 
 def test_apply_updates_appends_new_author_and_github_key() -> None:

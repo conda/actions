@@ -168,9 +168,17 @@ def check_authors(args: Namespace) -> None:
             "needing alternate_emails or aliases updates:"
         )
         for entry, commit in analysis.alternate_email_updates:
-            messages.append(
-                f"- {entry['name']}: add {commit.email!r} to alternate_emails"
-            )
+            parts: list[str] = []
+            if commit.email != entry["email"] and commit.email not in entry.get(
+                "alternate_emails", []
+            ):
+                parts.append(f"add {commit.email!r} to alternate_emails")
+            if commit.name != entry["name"] and commit.name not in entry.get(
+                "aliases", []
+            ):
+                parts.append(f"add {commit.name!r} to aliases")
+            detail = "; ".join(parts) if parts else "update metadata"
+            messages.append(f"- {entry['name']}: {detail}")
     if analysis.new_authors:
         messages.append(f"Found {len(analysis.new_authors)} new contributor(s):")
         for commit in analysis.new_authors:
@@ -270,8 +278,8 @@ def analyze_authors(
     repo_full: str,
     get_github_login_fn: Callable[[str, str], str | None],
 ) -> AuthorAnalysis:
-    _, by_names, by_github, last_github_index, known_emails = build_author_indexes(
-        metadata
+    by_emails, by_names, by_github, last_github_index, known_emails = (
+        build_author_indexes(metadata)
     )
 
     commits, since_label = get_commits_since(since)
@@ -279,6 +287,7 @@ def analyze_authors(
     alternate_email_updates, new_authors = classify_commits(
         commits,
         known_emails,
+        by_emails,
         by_names,
         by_github,
         repo_full,
@@ -418,17 +427,31 @@ def update_existing_entry(entry: dict[str, Any], email: str, name: str) -> bool:
 def classify_commits(
     commits: list[CommitAuthor],
     known_emails: set[str],
-    by_names: dict[str, dict[str, Any]],
-    by_github: dict[str, dict[str, Any]],
+    by_emails: AuthorIndex,
+    by_names: AuthorIndex,
+    by_github: AuthorIndex,
     repo_full: str,
     get_github_login_fn: Callable[[str, str], str | None],
 ) -> tuple[list[tuple[dict[str, Any], CommitAuthor]], list[dict[str, Any]]]:
     seen: set[str] = set()
+    seen_alias_updates: set[tuple[int, str]] = set()
     alternate_email_updates: list[tuple[dict[str, Any], CommitAuthor]] = []
     new_authors: list[dict[str, Any]] = []
 
     for commit in commits:
-        if commit.email in known_emails or commit.email in seen:
+        if commit.email in known_emails:
+            entry = by_emails[commit.email]
+            alias_key = (id(entry), commit.name)
+            if (
+                commit.name != entry["name"]
+                and commit.name not in entry.get("aliases", [])
+                and alias_key not in seen_alias_updates
+            ):
+                seen_alias_updates.add(alias_key)
+                alternate_email_updates.append((entry, commit))
+            continue
+
+        if commit.email in seen:
             continue
         seen.add(commit.email)
 
@@ -445,6 +468,7 @@ def classify_commits(
         if entry is not None:
             alternate_email_updates.append((entry, commit))
             known_emails.add(commit.email)
+            by_emails[commit.email] = entry
         else:
             commit_data: dict[str, Any] = {
                 "hash": commit.hash,
