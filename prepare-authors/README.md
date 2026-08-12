@@ -50,8 +50,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   prepare:
@@ -62,6 +61,7 @@ jobs:
         with:
           since: tag
           base-branch: main
+          token: ${{ secrets.SYNC_TOKEN }}
 ```
 
 ### Check mode
