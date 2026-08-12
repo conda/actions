@@ -66,6 +66,8 @@ class DurationStats:
 
     @property
     def average_run_time(self) -> float:
+        if self.number_of_tests == 0:
+            return 0.0
         return self.total_run_time / self.number_of_tests
 
     def __iter__(self) -> Iterable[int, float]:

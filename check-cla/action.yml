@@ -42,7 +42,7 @@ runs:
 
     # commit status → pending
     - name: Set commit status with pending
-      uses: conda/actions/set-commit-status@7f6830b1428a9bd47f0b068892c77eae95207037 # v26.1.0
+      uses: conda/actions/set-commit-status@0f4ec1506e74c12799813dc66e613a39077ea864 # v26.7.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
@@ -120,7 +120,7 @@ runs:
 
     # if unsigned, checkout cla_repo
     - name: Clone CLA signee repo
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       if: steps.metadata.outputs.has_signed == 'false'
       with:
         repository: ${{ inputs.cla_repo }}
@@ -165,7 +165,7 @@ runs:
 
     # if unsigned, create sticky comment
     - name: Create comment regarding missing CLA signature
-      uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+      uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
       if: steps.metadata.outputs.has_signed == 'false'
       with:
         number: ${{ steps.metadata.outputs.number }}
@@ -188,7 +188,7 @@ runs:
     # commit status → error
     - name: Set commit status to error
       if: steps.metadata.outputs.has_signed == 'false'
-      uses: conda/actions/set-commit-status@7f6830b1428a9bd47f0b068892c77eae95207037 # v26.1.0
+      uses: conda/actions/set-commit-status@0f4ec1506e74c12799813dc66e613a39077ea864 # v26.7.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
@@ -199,7 +199,7 @@ runs:
     # commit status → success
     - name: Set commit status to success
       if: steps.metadata.outputs.has_signed == 'true'
-      uses: conda/actions/set-commit-status@7f6830b1428a9bd47f0b068892c77eae95207037 # v26.1.0
+      uses: conda/actions/set-commit-status@0f4ec1506e74c12799813dc66e613a39077ea864 # v26.7.0
       with:
         token: ${{ inputs.token }}
         context: CLA check
