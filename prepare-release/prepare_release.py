@@ -72,6 +72,17 @@ def main(argv: list[str] | None = None) -> int:
 def prepare_release(args: Namespace) -> None:
     context = verify_context(args.release_branch_pattern)
     base_branch = context["head_branch"]
+
+    news_directory = Path(args.news_directory)
+    if not news_directory.is_dir():
+        raise ActionError(f"News directory does not exist: {news_directory}")
+
+    fragment_paths = news_fragment_paths(news_directory)
+    if not fragment_paths:
+        print(f"No news fragments found under {str(news_directory)!r}. Nothing to do.")
+        return
+    fragments = collect_fragments(fragment_paths)
+
     version = infer_next_version(base_branch)
     release_date = datetime.now(UTC).date().isoformat()
     release_branch = f"{args.branch_prefix}{version}"
@@ -82,11 +93,6 @@ def prepare_release(args: Namespace) -> None:
     if not args.token:
         raise ActionError("No GitHub token was provided.")
     git_env = os.environ | {"GH_TOKEN": args.token}
-
-    fragment_paths = news_fragment_paths(args.news_directory)
-    fragments = collect_fragments(fragment_paths)
-    if not fragments:
-        raise ActionError(f"No news fragments found under {args.news_directory!r}.")
 
     entry = render_changelog_entry(version, release_date, fragments)
     update_changelog(Path(args.changelog_path), entry, version)
@@ -107,6 +113,30 @@ def prepare_release(args: Namespace) -> None:
     run(["git", "add", args.changelog_path, *map(str, fragment_paths)])
     run(["git", "commit", "-m", f"Prepare release notes for {version}"])
     run(["gh", "auth", "setup-git"], env=git_env)
+
+    remote_ref = f"refs/heads/{base_branch}"
+    remote = run(
+        [
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "origin",
+            remote_ref,
+        ],
+        capture=True,
+        env=git_env,
+    ).split()
+    if len(remote) != 2 or remote[1] != remote_ref:
+        raise ActionError(f"Could not determine remote head for {base_branch!r}.")
+    remote_head = remote[0]
+    if remote_head != context["head_sha"]:
+        print(
+            f"Skipping stale workflow run for {base_branch}: "
+            f"{context['head_sha']} is no longer the branch tip."
+        )
+        return
+
     run(["git", "push", "--force-with-lease", "origin", release_branch], env=git_env)
 
     url = create_or_update_pr(

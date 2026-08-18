@@ -14,6 +14,11 @@ on:
     branches:
       - '[0-9]*.[0-9]*.x'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  queue: max
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -39,3 +44,15 @@ The action checks the same security conditions internally before checkout:
 - triggering workflow came from a `push`
 - triggering repository is the current repository
 - triggering branch matches the configured release branch pattern
+
+An existing news directory with no eligible fragments is a successful no-op.
+A missing news directory or a malformed fragment fails the action.
+
+Before pushing, the action verifies that the triggering SHA is still the tip of
+the release branch. A stale workflow run exits successfully without pushing or
+creating or updating a pull request. Authentication or branch lookup failures
+fail the action.
+
+The concurrency group serializes runs for each release branch. `queue: max`
+keeps every pending run, while `cancel-in-progress: false` prevents a later run
+from cancelling one that is already preparing a release.
