@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 AuthorEntry = dict[str, Any]
 AuthorIndex = dict[str, AuthorEntry]
 
-RELEASE_TAG_PATTERN = re.compile(r"^v?(\d+(?:\.\d+)*)$")
+RELEASE_TAG_PATTERN = re.compile(r"^v?(\d+\.\d+\.\d+)$")
 
 
 class ActionError(Exception):
@@ -37,7 +37,7 @@ class CommitAuthor:
 
 @dataclass
 class AuthorAnalysis:
-    alternate_email_updates: list[tuple[dict[str, Any], CommitAuthor]]
+    alternate_email_updates: list[tuple[dict[str, Any], CommitAuthor, str | None]]
     new_authors: list[dict[str, Any]]
     missing_github_keys: list[tuple[str, str]]
     email_to_hash: dict[str, str]
@@ -167,7 +167,7 @@ def check_authors(args: Namespace) -> None:
             f"Found {len(analysis.alternate_email_updates)} existing contributor(s) "
             "needing alternate_emails or aliases updates:"
         )
-        for entry, commit in analysis.alternate_email_updates:
+        for entry, commit, _github_login in analysis.alternate_email_updates:
             parts: list[str] = []
             if commit.email != entry["email"] and commit.email not in entry.get(
                 "alternate_emails", []
@@ -283,7 +283,6 @@ def analyze_authors(
     )
 
     commits, since_label = get_commits_since(since)
-    email_to_hash = {commit.email: commit.hash for commit in commits}
     alternate_email_updates, new_authors = classify_commits(
         commits,
         known_emails,
@@ -293,6 +292,11 @@ def analyze_authors(
         repo_full,
         get_github_login_fn,
     )
+    email_to_hash: dict[str, str] = {}
+    for commit in commits:
+        email_to_hash[commit.email] = commit.hash
+        if entry := by_emails.get(commit.email):
+            email_to_hash[entry["email"]] = commit.hash
 
     missing_github_keys: list[tuple[str, str]] = []
     if last_github_index is not None:
@@ -319,8 +323,11 @@ def apply_updates(
 ) -> bool:
     changed = False
 
-    for entry, commit in analysis.alternate_email_updates:
+    for entry, commit, github_login in analysis.alternate_email_updates:
         if update_existing_entry(entry, commit.email, commit.name):
+            changed = True
+        if github_login and "github" not in entry:
+            entry["github"] = github_login
             changed = True
 
     for commit in analysis.new_authors:
@@ -337,17 +344,21 @@ def apply_updates(
         metadata.append(new_entry)
         changed = True
 
+    by_github = {
+        entry["github"].casefold(): entry for entry in metadata if "github" in entry
+    }
     for email, _name in analysis.missing_github_keys:
+        entry = next((entry for entry in metadata if entry["email"] == email), None)
+        if entry is None or "github" in entry:
+            continue
         commit_hash = analysis.email_to_hash.get(email)
         github_login = None
         if commit_hash and repo_full:
             github_login = get_github_login_fn(repo_full, commit_hash)
-        if github_login:
-            for entry in metadata:
-                if entry["email"] == email:
-                    entry["github"] = github_login
-                    changed = True
-                    break
+        if github_login and github_login.casefold() not in by_github:
+            entry["github"] = github_login
+            by_github[github_login.casefold()] = entry
+            changed = True
 
     return changed
 
@@ -394,7 +405,7 @@ def build_author_indexes(
         for alias in entry.get("aliases", []):
             by_names[alias] = entry
         if "github" in entry:
-            by_github[entry["github"]] = entry
+            by_github[entry["github"].casefold()] = entry
             last_github_index = i
 
     return by_emails, by_names, by_github, last_github_index, set(by_emails.keys())
@@ -407,18 +418,21 @@ def find_existing_entry(
     by_github: dict[str, dict[str, Any]],
 ) -> dict[str, Any] | None:
     name_entry = by_names.get(name)
-    github_entry = by_github.get(github_login) if github_login else None
+    github_entry = by_github.get(github_login.casefold()) if github_login else None
+
+    if github_entry is not None:
+        return github_entry
 
     if name_entry is not None:
         entry_github = name_entry.get("github")
-        if github_login and entry_github and github_login != entry_github:
+        if (
+            github_login
+            and entry_github
+            and github_login.casefold() != entry_github.casefold()
+        ):
             name_entry = None
 
-    if name_entry is not None:
-        return name_entry
-    if github_entry is not None:
-        return github_entry
-    return None
+    return name_entry
 
 
 def update_existing_entry(entry: dict[str, Any], email: str, name: str) -> bool:
@@ -444,46 +458,134 @@ def classify_commits(
     by_github: AuthorIndex,
     repo_full: str,
     get_github_login_fn: Callable[[str, str], str | None],
-) -> tuple[list[tuple[dict[str, Any], CommitAuthor]], list[dict[str, Any]]]:
-    seen: set[str] = set()
-    seen_alias_updates: set[tuple[int, str]] = set()
-    alternate_email_updates: list[tuple[dict[str, Any], CommitAuthor]] = []
+) -> tuple[
+    list[tuple[dict[str, Any], CommitAuthor, str | None]],
+    list[dict[str, Any]],
+]:
+    seen_updates: set[tuple[int, str, str]] = set()
+    alternate_email_updates: list[tuple[dict[str, Any], CommitAuthor, str | None]] = []
     new_authors: list[dict[str, Any]] = []
+    projected_github = {id(entry): login for login, entry in by_github.items()}
+
+    def is_pending(entry: AuthorEntry) -> bool:
+        return any(entry is pending for pending in new_authors)
+
+    def queue_update(
+        entry: AuthorEntry,
+        commit: CommitAuthor,
+        github_login: str | None = None,
+    ) -> None:
+        key = (id(entry), commit.email, commit.name)
+        if key not in seen_updates:
+            seen_updates.add(key)
+            alternate_email_updates.append((entry, commit, github_login))
+
+    def merge_pending_entry(pending: AuthorEntry, entry: AuthorEntry) -> None:
+        new_authors.remove(pending)
+        commit_hash = pending["hash"]
+        subject = pending["subject"]
+        if is_pending(entry):
+            update_existing_entry(entry, pending["email"], pending["name"])
+        else:
+            queue_update(
+                entry,
+                CommitAuthor(commit_hash, pending["email"], pending["name"], subject),
+            )
+        for email in pending.get("alternate_emails", []):
+            if is_pending(entry):
+                update_existing_entry(entry, email, entry["name"])
+            else:
+                queue_update(
+                    entry,
+                    CommitAuthor(commit_hash, email, entry["name"], subject),
+                )
+        for name in pending.get("aliases", []):
+            if is_pending(entry):
+                update_existing_entry(entry, entry["email"], name)
+            else:
+                queue_update(
+                    entry,
+                    CommitAuthor(commit_hash, entry["email"], name, subject),
+                )
+        for email, indexed_entry in by_emails.items():
+            if indexed_entry is pending:
+                by_emails[email] = entry
+        for name, indexed_entry in by_names.items():
+            if indexed_entry is pending:
+                by_names[name] = entry
 
     for commit in commits:
         if commit.email in known_emails:
             entry = by_emails[commit.email]
-            alias_key = (id(entry), commit.name)
-            if (
-                commit.name != entry["name"]
-                and commit.name not in entry.get("aliases", [])
-                and alias_key not in seen_alias_updates
+            if is_pending(entry):
+                if repo_full and "github" not in entry:
+                    github_login = get_github_login_fn(repo_full, commit.hash)
+                    if github_login:
+                        github_entry = by_github.get(github_login.casefold())
+                        if github_entry is not None and github_entry is not entry:
+                            merge_pending_entry(entry, github_entry)
+                            if is_pending(github_entry):
+                                update_existing_entry(
+                                    github_entry,
+                                    commit.email,
+                                    commit.name,
+                                )
+                            else:
+                                queue_update(github_entry, commit)
+                            by_names[commit.name] = github_entry
+                            continue
+                        else:
+                            entry["github"] = github_login
+                            by_github[github_login.casefold()] = entry
+                update_existing_entry(entry, commit.email, commit.name)
+                by_names[commit.name] = entry
+                continue
+            if commit.name != entry["name"] and commit.name not in entry.get(
+                "aliases", []
             ):
-                seen_alias_updates.add(alias_key)
-                alternate_email_updates.append((entry, commit))
+                queue_update(entry, commit)
             continue
-
-        if commit.email in seen:
-            continue
-        seen.add(commit.email)
 
         github_login = None
         if repo_full:
             github_login = get_github_login_fn(repo_full, commit.hash)
 
+        name_entry = by_names.get(commit.name)
         entry = find_existing_entry(
             commit.name,
             github_login,
             by_names,
             by_github,
         )
+        if (
+            entry is not None
+            and name_entry is not None
+            and name_entry is not entry
+            and is_pending(name_entry)
+            and "github" not in name_entry
+        ):
+            merge_pending_entry(name_entry, entry)
+        if (
+            entry is not None
+            and github_login
+            and (entry_github := projected_github.get(id(entry)))
+            and github_login.casefold() != entry_github
+        ):
+            entry = None
         if entry is not None:
-            if any(entry is pending for pending in new_authors):
+            if is_pending(entry):
+                if github_login and "github" not in entry:
+                    entry["github"] = github_login
+                    by_github[github_login.casefold()] = entry
                 update_existing_entry(entry, commit.email, commit.name)
                 if commit.name != entry["name"]:
                     by_names[commit.name] = entry
             else:
-                alternate_email_updates.append((entry, commit))
+                queue_update(entry, commit, github_login)
+                by_names[commit.name] = entry
+                if github_login:
+                    projected_github[id(entry)] = github_login.casefold()
+                    by_github[github_login.casefold()] = entry
             known_emails.add(commit.email)
             by_emails[commit.email] = entry
         else:
@@ -496,9 +598,11 @@ def classify_commits(
             if github_login:
                 commit_data["github"] = github_login
             new_authors.append(commit_data)
+            known_emails.add(commit.email)
+            by_emails[commit.email] = commit_data
             by_names[commit.name] = commit_data
             if github_login:
-                by_github[github_login] = commit_data
+                by_github[github_login.casefold()] = commit_data
 
     return alternate_email_updates, new_authors
 

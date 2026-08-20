@@ -140,6 +140,16 @@ def test_find_existing_entry_matches_name_or_github() -> None:
     )
 
 
+def test_find_existing_entry_prefers_github_over_name_without_github() -> None:
+    metadata = [
+        {"name": "Alex Smith", "email": "alex@example.com"},
+        {"name": "Bob Example", "email": "bob@example.com", "github": "Bob"},
+    ]
+    _, by_names, by_github, _, _ = build_author_indexes(metadata)
+
+    assert find_existing_entry("Alex Smith", "bob", by_names, by_github) is metadata[1]
+
+
 def test_update_existing_entry_adds_alternate_email_and_alias() -> None:
     entry: dict[str, Any] = {"name": "Alice Example", "email": "alice@example.com"}
 
@@ -231,6 +241,198 @@ def test_classify_commits_merges_pending_new_author_by_github() -> None:
     assert new_authors[0]["aliases"] == ["Robert Example"]
 
 
+def test_classify_commits_preserves_aliases_for_new_email() -> None:
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes([])
+    commits = [
+        CommitAuthor("abc", "bob@example.com", "Bob Example", "feat"),
+        CommitAuthor("def", "bob@example.com", "Robert Example", "fix"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, commit_hash: None if commit_hash == "abc" else "bob",
+    )
+
+    assert alternate_updates == []
+    assert len(new_authors) == 1
+    assert new_authors[0]["github"] == "bob"
+    assert new_authors[0]["aliases"] == ["Robert Example"]
+
+
+def test_classify_commits_retains_later_resolved_github_login() -> None:
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes([])
+    commits = [
+        CommitAuthor("abc", "bob@example.com", "Bob Example", "feat"),
+        CommitAuthor("def", "bob.work@example.com", "Bob Example", "fix"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, commit_hash: None if commit_hash == "abc" else "bob",
+    )
+
+    assert alternate_updates == []
+    assert len(new_authors) == 1
+    assert new_authors[0]["github"] == "bob"
+    assert new_authors[0]["alternate_emails"] == ["bob.work@example.com"]
+
+
+def test_apply_updates_retains_resolved_github_login() -> None:
+    metadata = [{"name": "Bob Example", "email": "bob@example.com"}]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("abc", "bob.work@example.com", "Bob Example", "fix"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, _hash: "bob",
+    )
+
+    assert "github" not in metadata[0]
+    analysis = AuthorAnalysis(
+        alternate_email_updates=alternate_updates,
+        new_authors=new_authors,
+        missing_github_keys=[("bob@example.com", "Bob Example")],
+        email_to_hash={"bob@example.com": "def"},
+        since_label="tag 1.0.0",
+    )
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=lambda *_: pytest.fail("GitHub login already resolved"),
+    )
+    assert metadata[0]["github"] == "bob"
+    assert metadata[0]["alternate_emails"] == ["bob.work@example.com"]
+
+
+def test_classify_commits_projects_existing_identity_updates() -> None:
+    metadata = [{"name": "Bob Example", "email": "bob@example.com"}]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("a", "bob.work@example.com", "Bob Example", "fix"),
+        CommitAuthor("b", "bob.other@example.com", "Robert Example", "docs"),
+        CommitAuthor("c", "other@example.com", "Bob Example", "feat"),
+        CommitAuthor("d", "bob.third@example.com", "Robert Example", "test"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, commit_hash: {"a": "bob", "b": "bob", "c": "other"}.get(
+            commit_hash
+        ),
+    )
+
+    assert [update[1].hash for update in alternate_updates] == ["a", "b", "d"]
+    assert all(update[0] is metadata[0] for update in alternate_updates)
+    assert len(new_authors) == 1
+    assert new_authors[0]["email"] == "other@example.com"
+    assert new_authors[0]["github"] == "other"
+
+
+@pytest.mark.parametrize(
+    "second_email",
+    ["new@example.com", "new.work@example.com"],
+)
+def test_classify_commits_merges_delayed_github_match(second_email: str) -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"}
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("a", "new@example.com", "New Name", "fix"),
+        CommitAuthor("b", second_email, "New Name", "docs"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, commit_hash: None if commit_hash == "a" else "alice",
+    )
+
+    assert new_authors == []
+    assert {update[1].email for update in alternate_updates} == {
+        "new@example.com",
+        second_email,
+    }
+    assert all(update[0] is metadata[0] for update in alternate_updates)
+    assert metadata == [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"}
+    ]
+    analysis = AuthorAnalysis(
+        alternate_email_updates=alternate_updates,
+        new_authors=new_authors,
+        missing_github_keys=[],
+        email_to_hash={},
+        since_label="tag 1.0.0",
+    )
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=lambda *_: None,
+    )
+    assert metadata[0]["alternate_emails"] == list(
+        dict.fromkeys(["new@example.com", second_email])
+    )
+    assert metadata[0]["aliases"] == ["New Name"]
+
+
+def test_classify_commits_merges_pending_authors_by_later_github() -> None:
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes([])
+    commits = [
+        CommitAuthor("a", "a@example.com", "Author A", "fix"),
+        CommitAuthor("b", "b@example.com", "Author B", "docs"),
+        CommitAuthor("c", "a.work@example.com", "Author A", "feat"),
+        CommitAuthor("d", "b.work@example.com", "Author B", "test"),
+    ]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, commit_hash: "shared" if commit_hash in {"c", "d"} else None,
+    )
+
+    assert alternate_updates == []
+    assert len(new_authors) == 1
+    assert new_authors[0]["github"] == "shared"
+    assert new_authors[0]["alternate_emails"] == [
+        "a.work@example.com",
+        "b@example.com",
+        "b.work@example.com",
+    ]
+    assert new_authors[0]["aliases"] == ["Author B"]
+
+
 def test_classify_commits_queues_alias_for_known_email_new_name() -> None:
     metadata = [
         {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
@@ -256,7 +458,7 @@ def test_classify_commits_queues_alias_for_known_email_new_name() -> None:
 
     assert new_authors == []
     assert len(alternate_updates) == 1
-    entry, commit = alternate_updates[0]
+    entry, commit, _github_login = alternate_updates[0]
     assert entry is metadata[0]
     assert commit.name == "Alice E"
     assert update_existing_entry(entry, commit.email, commit.name) is True
@@ -317,7 +519,7 @@ def test_classify_commits_queues_alias_for_known_alternate_email() -> None:
 
     assert new_authors == []
     assert len(alternate_updates) == 1
-    entry, commit = alternate_updates[0]
+    entry, commit, _github_login = alternate_updates[0]
     assert update_existing_entry(entry, commit.email, commit.name) is True
     assert entry["aliases"] == ["Alice E"]
     assert entry["alternate_emails"] == ["alice.alt@example.com"]
@@ -353,6 +555,28 @@ def test_apply_updates_appends_new_author_and_github_key() -> None:
     )
     assert metadata[-1]["github"] == "carol"
     assert metadata[1]["github"] == "bob"
+
+
+def test_apply_updates_rejects_duplicate_github_key() -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "Alice"},
+        {"name": "Bob Example", "email": "bob@example.com"},
+    ]
+    analysis = AuthorAnalysis(
+        alternate_email_updates=[],
+        new_authors=[],
+        missing_github_keys=[("bob@example.com", "Bob Example")],
+        email_to_hash={"bob@example.com": "abc"},
+        since_label="tag 1.0.0",
+    )
+
+    assert not apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=lambda _repo, _hash: "alice",
+    )
+    assert "github" not in metadata[1]
 
 
 def test_apply_updates_preserves_alternate_emails_and_aliases_on_new_author() -> None:
@@ -397,6 +621,9 @@ def test_normalize_release_tag() -> None:
     assert normalize_release_tag("26.8.0rc1") is None
     assert normalize_release_tag("4.14.0b2") is None
     assert normalize_release_tag("pre-commit-hooks-v1") is None
+    assert normalize_release_tag("2026") is None
+    assert normalize_release_tag("26.8") is None
+    assert normalize_release_tag("26.8.0.1") is None
 
 
 def test_select_latest_release_tag_prefers_numeric_over_v_prefix() -> None:
@@ -513,6 +740,45 @@ def test_analyze_authors_detects_new_contributor(
 
     assert len(analysis.new_authors) == 1
     assert analysis.new_authors[0]["email"] == "bob@example.com"
+
+
+def test_analyze_authors_maps_alternate_email_hash_to_primary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {
+            "name": "Bob Example",
+            "email": "bob@example.com",
+            "alternate_emails": ["bob.work@example.com"],
+        },
+    ]
+    commits = [
+        CommitAuthor("abc", "bob.work@example.com", "Bob Example", "fix"),
+        CommitAuthor("def", "bob.work@example.com", "Bob Example", "docs"),
+    ]
+    monkeypatch.setattr(
+        "prepare_authors.get_commits_since",
+        lambda _since: (commits, "tag 1.0.0"),
+    )
+
+    analysis = analyze_authors(
+        metadata,
+        since="tag",
+        repo_full="conda/example",
+        get_github_login_fn=lambda *_: None,
+    )
+
+    assert analysis.email_to_hash["bob@example.com"] == "def"
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=lambda _repo, commit_hash: (
+            "bob" if commit_hash == "def" else None
+        ),
+    )
+    assert metadata[1]["github"] == "bob"
 
 
 def test_check_authors_fails_when_updates_needed(
