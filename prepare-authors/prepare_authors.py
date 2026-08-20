@@ -537,6 +537,7 @@ def classify_commits(
                         else:
                             entry["github"] = github_login
                             by_github[github_login.casefold()] = entry
+                            projected_github[id(entry)] = github_login.casefold()
                 update_existing_entry(entry, commit.email, commit.name)
                 by_names[commit.name] = entry
                 continue
@@ -577,6 +578,7 @@ def classify_commits(
                 if github_login and "github" not in entry:
                     entry["github"] = github_login
                     by_github[github_login.casefold()] = entry
+                    projected_github[id(entry)] = github_login.casefold()
                 update_existing_entry(entry, commit.email, commit.name)
                 if commit.name != entry["name"]:
                     by_names[commit.name] = entry
