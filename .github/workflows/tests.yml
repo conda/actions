@@ -63,15 +63,46 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Create Test Release Tag
-        run: git tag 9999.0.0
+      - name: Create Test Author Metadata
+        env:
+          AUTHORS_PATH: ${{ runner.temp }}/prepare-authors-smoke.json
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          output = subprocess.check_output(
+              ["git", "log", "-z", "--format=%ae%x00%an", "HEAD"],
+              text=True,
+          )
+          fields = output.split("\0")
+          if fields[-1] == "":
+              fields.pop()
+          authors = {}
+          for offset in range(0, len(fields), 2):
+              email, name = fields[offset : offset + 2]
+              entry = authors.setdefault(email, {"name": name, "email": email})
+              if name != entry["name"]:
+                  aliases = entry.setdefault("aliases", [])
+                  if name not in aliases:
+                      aliases.append(name)
+          Path(os.environ["AUTHORS_PATH"]).write_text(
+              json.dumps(list(authors.values())),
+              encoding="utf-8",
+          )
+          PY
 
       - name: Run Prepare Authors
         id: prepare-authors
         uses: ./prepare-authors
         with:
+          authors-path: ${{ runner.temp }}/prepare-authors-smoke.json
+          git-remote: prepare-authors-smoke
           mode: check
 
       - name: Check Result
