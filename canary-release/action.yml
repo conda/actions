@@ -175,8 +175,8 @@ runs:
           echo "::endgroup::"
 
           echo "Use the following command(s) to try out the build:"
-          [[ -n "${ANACONDA_ORG_CHANNEL}" ]] && echo "conda install ${ANACONDA_ORG_CHANNEL}::${INPUT_PACKAGE_NAME}"
-          [[ -n "${GITHUB_RELEASE_CHANNEL}" ]] && echo "conda install ${GITHUB_RELEASE_CHANNEL}::${INPUT_PACKAGE_NAME}"
+          [[ -n "${ANACONDA_ORG_CHANNEL:-}" ]] && echo "conda install ${ANACONDA_ORG_CHANNEL}::${INPUT_PACKAGE_NAME}"
+          [[ -n "${GITHUB_RELEASE_CHANNEL:-}" ]] && echo "conda install ${GITHUB_RELEASE_CHANNEL}::${INPUT_PACKAGE_NAME}"
         else
           echo "Skipping upload because 'upload != true'."
         fi
