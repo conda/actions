@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 AuthorEntry = dict[str, Any]
-AuthorIndex = dict[str, AuthorEntry]
+AuthorIndex = dict[str, AuthorEntry | None]
 
 RELEASE_TAG_PATTERN = re.compile(r"^v?(\d+\.\d+\.\d+)$")
 
@@ -40,8 +40,9 @@ class AuthorAnalysis:
     alternate_email_updates: list[tuple[dict[str, Any], CommitAuthor, str | None]]
     new_authors: list[dict[str, Any]]
     missing_github_keys: list[tuple[str, str]]
-    email_to_hash: dict[str, str]
+    email_to_hashes: dict[str, list[str]]
     since_label: str
+    github_updates: list[tuple[AuthorEntry, str]] = field(default_factory=list)
 
 
 def parse_args(argv: list[str] | None = None) -> Namespace:
@@ -190,6 +191,10 @@ def check_authors(args: Namespace) -> None:
 
 
 def prepare_authors(args: Namespace) -> None:
+    branch = f"{args.branch_prefix}{args.base_branch}"
+    if branch == args.base_branch:
+        raise ActionError("branch-prefix must not be empty in prepare mode.")
+
     read_token = require_github_token()
     if not args.token:
         raise ActionError("No GitHub token was provided.")
@@ -210,6 +215,7 @@ def prepare_authors(args: Namespace) -> None:
         not analysis.alternate_email_updates
         and not analysis.new_authors
         and not analysis.missing_github_keys
+        and not analysis.github_updates
     ):
         write_summary("`.authors.yml` is already complete.")
         write_output("changed", "false")
@@ -242,7 +248,6 @@ def prepare_authors(args: Namespace) -> None:
     save_metadata(metadata, yaml_engine, authors_path)
     ensure_allowed_paths(get_changed_paths(), authors_path=authors_path)
 
-    branch = f"{args.branch_prefix}{args.base_branch}"
     run(["git", "checkout", "-B", branch])
     run(["git", "config", "user.name", args.git_author_name])
     run(["git", "config", "user.email", args.git_author_email])
@@ -283,6 +288,7 @@ def analyze_authors(
     )
 
     commits, since_label = get_commits_since(since)
+    github_updates: list[tuple[AuthorEntry, str]] = []
     alternate_email_updates, new_authors = classify_commits(
         commits,
         known_emails,
@@ -291,12 +297,17 @@ def analyze_authors(
         by_github,
         repo_full,
         get_github_login_fn,
+        github_updates,
     )
-    email_to_hash: dict[str, str] = {}
+    email_to_hashes: dict[str, list[str]] = {}
     for commit in commits:
-        email_to_hash[commit.email] = commit.hash
+        candidate_emails = [commit.email]
         if entry := by_emails.get(commit.email):
-            email_to_hash[entry["email"]] = commit.hash
+            candidate_emails.append(entry["email"])
+        for email in candidate_emails:
+            hashes = email_to_hashes.setdefault(email, [])
+            if commit.hash not in hashes:
+                hashes.append(commit.hash)
 
     missing_github_keys: list[tuple[str, str]] = []
     if last_github_index is not None:
@@ -309,8 +320,9 @@ def analyze_authors(
         alternate_email_updates=alternate_email_updates,
         new_authors=new_authors,
         missing_github_keys=missing_github_keys,
-        email_to_hash=email_to_hash,
+        email_to_hashes=email_to_hashes,
         since_label=since_label,
+        github_updates=github_updates,
     )
 
 
@@ -325,9 +337,6 @@ def apply_updates(
 
     for entry, commit, github_login in analysis.alternate_email_updates:
         if update_existing_entry(entry, commit.email, commit.name):
-            changed = True
-        if github_login and "github" not in entry:
-            entry["github"] = github_login
             changed = True
 
     for commit in analysis.new_authors:
@@ -344,20 +353,46 @@ def apply_updates(
         metadata.append(new_entry)
         changed = True
 
-    by_github = {
-        entry["github"].casefold(): entry for entry in metadata if "github" in entry
-    }
+    by_github: AuthorIndex = {}
+    for entry in metadata:
+        if login := entry.get("github"):
+            add_author_index_entry(by_github, str(login).casefold(), entry)
+
+    resolved_github_updates = [
+        (entry, github_login)
+        for entry, _commit, github_login in analysis.alternate_email_updates
+        if github_login
+    ] + analysis.github_updates
+    for entry, github_login in resolved_github_updates:
+        github_key = github_login.casefold()
+        if existing_login := entry.get("github"):
+            if str(existing_login).casefold() != github_key:
+                raise ActionError(
+                    f"Author entry has conflicting GitHub logins "
+                    f"{existing_login!r} and {github_login!r}."
+                )
+            continue
+        if github_key in by_github and by_github[github_key] is not entry:
+            raise ActionError(
+                f"GitHub login {github_login!r} matches another author entry."
+            )
+        entry["github"] = github_login
+        add_author_index_entry(by_github, github_key, entry)
+        changed = True
+
     for email, _name in analysis.missing_github_keys:
         entry = next((entry for entry in metadata if entry["email"] == email), None)
         if entry is None or "github" in entry:
             continue
-        commit_hash = analysis.email_to_hash.get(email)
         github_login = None
-        if commit_hash and repo_full:
-            github_login = get_github_login_fn(repo_full, commit_hash)
+        if repo_full:
+            for commit_hash in analysis.email_to_hashes.get(email, []):
+                github_login = get_github_login_fn(repo_full, commit_hash)
+                if github_login:
+                    break
         if github_login and github_login.casefold() not in by_github:
             entry["github"] = github_login
-            by_github[github_login.casefold()] = entry
+            add_author_index_entry(by_github, github_login.casefold(), entry)
             changed = True
 
     return changed
@@ -389,23 +424,35 @@ def save_metadata(
         yaml_engine.dump(metadata, handle)
 
 
+def add_author_index_entry(
+    index: AuthorIndex,
+    key: str,
+    entry: AuthorEntry,
+) -> None:
+    """Index one unique key, retaining None when multiple entries claim it."""
+    if key not in index:
+        index[key] = entry
+    elif index[key] is not entry:
+        index[key] = None
+
+
 def build_author_indexes(
     metadata: list[AuthorEntry],
 ) -> tuple[AuthorIndex, AuthorIndex, AuthorIndex, int | None, set[str]]:
-    by_emails: dict[str, dict[str, Any]] = {}
-    by_names: dict[str, dict[str, Any]] = {}
-    by_github: dict[str, dict[str, Any]] = {}
+    by_emails: AuthorIndex = {}
+    by_names: AuthorIndex = {}
+    by_github: AuthorIndex = {}
     last_github_index: int | None = None
 
     for i, entry in enumerate(metadata):
-        by_emails[entry["email"]] = entry
+        add_author_index_entry(by_emails, entry["email"], entry)
         for alt in entry.get("alternate_emails", []):
-            by_emails[alt] = entry
-        by_names[entry["name"]] = entry
+            add_author_index_entry(by_emails, alt, entry)
+        add_author_index_entry(by_names, entry["name"], entry)
         for alias in entry.get("aliases", []):
-            by_names[alias] = entry
+            add_author_index_entry(by_names, alias, entry)
         if "github" in entry:
-            by_github[entry["github"].casefold()] = entry
+            add_author_index_entry(by_github, entry["github"].casefold(), entry)
             last_github_index = i
 
     return by_emails, by_names, by_github, last_github_index, set(by_emails.keys())
@@ -414,14 +461,27 @@ def build_author_indexes(
 def find_existing_entry(
     name: str,
     github_login: str | None,
-    by_names: dict[str, dict[str, Any]],
-    by_github: dict[str, dict[str, Any]],
+    by_names: AuthorIndex,
+    by_github: AuthorIndex,
 ) -> dict[str, Any] | None:
     name_entry = by_names.get(name)
-    github_entry = by_github.get(github_login.casefold()) if github_login else None
+    github_key = github_login.casefold() if github_login else None
+    github_entry = by_github.get(github_key) if github_key else None
 
     if github_entry is not None:
         return github_entry
+
+    if github_key and github_key in by_github:
+        if name_entry is not None:
+            entry_github = name_entry.get("github")
+            if entry_github and entry_github.casefold() == github_key:
+                return name_entry
+        raise ActionError(
+            f"GitHub login {github_login!r} matches multiple author entries."
+        )
+
+    if name in by_names and name_entry is None:
+        raise ActionError(f"Author name {name!r} matches multiple author entries.")
 
     if name_entry is not None:
         entry_github = name_entry.get("github")
@@ -458,6 +518,7 @@ def classify_commits(
     by_github: AuthorIndex,
     repo_full: str,
     get_github_login_fn: Callable[[str, str], str | None],
+    github_updates: list[tuple[AuthorEntry, str]] | None = None,
 ) -> tuple[
     list[tuple[dict[str, Any], CommitAuthor, str | None]],
     list[dict[str, Any]],
@@ -465,7 +526,39 @@ def classify_commits(
     seen_updates: set[tuple[int, str, str]] = set()
     alternate_email_updates: list[tuple[dict[str, Any], CommitAuthor, str | None]] = []
     new_authors: list[dict[str, Any]] = []
-    projected_github = {id(entry): login for login, entry in by_github.items()}
+    projected_github = {
+        id(entry): login for login, entry in by_github.items() if entry is not None
+    }
+    hashes_by_email: dict[str, list[str]] = {}
+    for commit in commits:
+        hashes = hashes_by_email.setdefault(commit.email, [])
+        if commit.hash not in hashes:
+            hashes.append(commit.hash)
+    github_by_email: dict[str, str | None] = {}
+    github_updates = github_updates if github_updates is not None else []
+    github_update_entries = {id(entry) for entry, _login in github_updates}
+
+    def projected_login(entry: AuthorEntry) -> str | None:
+        if login := projected_github.get(id(entry)):
+            return login
+        if login := entry.get("github"):
+            return str(login).casefold()
+        return None
+
+    def resolve_github_login(commit: CommitAuthor) -> str | None:
+        if commit.email not in github_by_email:
+            github_by_email[commit.email] = None
+            if repo_full:
+                for commit_hash in hashes_by_email[commit.email]:
+                    if login := get_github_login_fn(repo_full, commit_hash):
+                        github_by_email[commit.email] = login
+                        break
+        return github_by_email[commit.email]
+
+    def queue_github_update(entry: AuthorEntry, github_login: str) -> None:
+        if "github" not in entry and id(entry) not in github_update_entries:
+            github_updates.append((entry, github_login))
+            github_update_entries.add(id(entry))
 
     def is_pending(entry: AuthorEntry) -> bool:
         return any(entry is pending for pending in new_authors)
@@ -484,12 +577,14 @@ def classify_commits(
         new_authors.remove(pending)
         commit_hash = pending["hash"]
         subject = pending["subject"]
+        pending_github = pending.get("github")
         if is_pending(entry):
             update_existing_entry(entry, pending["email"], pending["name"])
         else:
             queue_update(
                 entry,
                 CommitAuthor(commit_hash, pending["email"], pending["name"], subject),
+                str(pending_github) if pending_github else None,
             )
         for email in pending.get("alternate_emails", []):
             if is_pending(entry):
@@ -513,15 +608,31 @@ def classify_commits(
         for name, indexed_entry in by_names.items():
             if indexed_entry is pending:
                 by_names[name] = entry
+        for login, indexed_entry in by_github.items():
+            if indexed_entry is pending:
+                by_github[login] = entry
+        if pending_login := projected_login(pending):
+            projected_github[id(entry)] = pending_login
+        projected_github.pop(id(pending), None)
 
     for commit in commits:
         if commit.email in known_emails:
-            entry = by_emails[commit.email]
+            entry = by_emails.get(commit.email)
+            if entry is None:
+                raise ActionError(
+                    f"Author email {commit.email!r} matches multiple author entries."
+                )
             if is_pending(entry):
-                if repo_full and "github" not in entry:
-                    github_login = get_github_login_fn(repo_full, commit.hash)
+                if repo_full and not projected_login(entry):
+                    github_login = resolve_github_login(commit)
                     if github_login:
-                        github_entry = by_github.get(github_login.casefold())
+                        github_key = github_login.casefold()
+                        github_entry = by_github.get(github_key)
+                        if github_key in by_github and github_entry is None:
+                            raise ActionError(
+                                f"GitHub login {github_login!r} matches multiple "
+                                "author entries."
+                            )
                         if github_entry is not None and github_entry is not entry:
                             merge_pending_entry(entry, github_entry)
                             if is_pending(github_entry):
@@ -532,24 +643,48 @@ def classify_commits(
                                 )
                             else:
                                 queue_update(github_entry, commit)
-                            by_names[commit.name] = github_entry
+                            add_author_index_entry(
+                                by_names,
+                                commit.name,
+                                github_entry,
+                            )
                             continue
                         else:
                             entry["github"] = github_login
-                            by_github[github_login.casefold()] = entry
-                            projected_github[id(entry)] = github_login.casefold()
+                            add_author_index_entry(by_github, github_key, entry)
+                            projected_github[id(entry)] = github_key
                 update_existing_entry(entry, commit.email, commit.name)
-                by_names[commit.name] = entry
+                add_author_index_entry(by_names, commit.name, entry)
                 continue
+
+            github_login = None
+            if repo_full and not projected_login(entry):
+                github_login = resolve_github_login(commit)
+                if github_login:
+                    github_key = github_login.casefold()
+                    github_entry = by_github.get(github_key)
+                    if github_key in by_github and github_entry is None:
+                        raise ActionError(
+                            f"GitHub login {github_login!r} matches multiple "
+                            "author entries."
+                        )
+                    if github_entry is not None and github_entry is not entry:
+                        if not is_pending(github_entry):
+                            raise ActionError(
+                                f"GitHub login {github_login!r} belongs to a "
+                                "different author entry."
+                            )
+                        merge_pending_entry(github_entry, entry)
+                    queue_github_update(entry, github_login)
+                    add_author_index_entry(by_github, github_key, entry)
+                    projected_github[id(entry)] = github_key
             if commit.name != entry["name"] and commit.name not in entry.get(
                 "aliases", []
             ):
-                queue_update(entry, commit)
+                queue_update(entry, commit, github_login)
             continue
 
-        github_login = None
-        if repo_full:
-            github_login = get_github_login_fn(repo_full, commit.hash)
+        github_login = resolve_github_login(commit)
 
         name_entry = by_names.get(commit.name)
         entry = find_existing_entry(
@@ -566,10 +701,28 @@ def classify_commits(
             and "github" not in name_entry
         ):
             merge_pending_entry(name_entry, entry)
+        elif (
+            entry is not None
+            and name_entry is not None
+            and name_entry is not entry
+            and is_pending(entry)
+            and not is_pending(name_entry)
+            and (
+                not projected_login(name_entry)
+                or (
+                    github_login
+                    and projected_login(name_entry) == github_login.casefold()
+                )
+            )
+        ):
+            merge_pending_entry(entry, name_entry)
+            if github_login:
+                queue_github_update(name_entry, github_login)
+            entry = name_entry
         if (
             entry is not None
             and github_login
-            and (entry_github := projected_github.get(id(entry)))
+            and (entry_github := projected_login(entry))
             and github_login.casefold() != entry_github
         ):
             entry = None
@@ -577,19 +730,27 @@ def classify_commits(
             if is_pending(entry):
                 if github_login and "github" not in entry:
                     entry["github"] = github_login
-                    by_github[github_login.casefold()] = entry
+                    add_author_index_entry(
+                        by_github,
+                        github_login.casefold(),
+                        entry,
+                    )
                     projected_github[id(entry)] = github_login.casefold()
                 update_existing_entry(entry, commit.email, commit.name)
                 if commit.name != entry["name"]:
-                    by_names[commit.name] = entry
+                    add_author_index_entry(by_names, commit.name, entry)
             else:
                 queue_update(entry, commit, github_login)
-                by_names[commit.name] = entry
+                add_author_index_entry(by_names, commit.name, entry)
                 if github_login:
                     projected_github[id(entry)] = github_login.casefold()
-                    by_github[github_login.casefold()] = entry
+                    add_author_index_entry(
+                        by_github,
+                        github_login.casefold(),
+                        entry,
+                    )
             known_emails.add(commit.email)
-            by_emails[commit.email] = entry
+            add_author_index_entry(by_emails, commit.email, entry)
         else:
             commit_data: dict[str, Any] = {
                 "hash": commit.hash,
@@ -601,10 +762,14 @@ def classify_commits(
                 commit_data["github"] = github_login
             new_authors.append(commit_data)
             known_emails.add(commit.email)
-            by_emails[commit.email] = commit_data
-            by_names[commit.name] = commit_data
+            add_author_index_entry(by_emails, commit.email, commit_data)
+            add_author_index_entry(by_names, commit.name, commit_data)
             if github_login:
-                by_github[github_login.casefold()] = commit_data
+                add_author_index_entry(
+                    by_github,
+                    github_login.casefold(),
+                    commit_data,
+                )
 
     return alternate_email_updates, new_authors
 
@@ -654,24 +819,33 @@ def get_commits_since(since: str) -> tuple[list[CommitAuthor], str]:
         since_label = since
 
     output = run(
-        ["git", "log", "--format=%H%n%ae%n%an%n%s%n---", commits_range],
+        [
+            "git",
+            "log",
+            "-z",
+            "--format=%H%x00%ae%x00%an%x00%s",
+            commits_range,
+        ],
         capture=True,
     )
     commits: list[CommitAuthor] = []
     if not output:
         return commits, since_label
 
-    for chunk in output.split("---\n"):
-        lines = chunk.strip().split("\n")
-        if len(lines) >= 4:
-            commits.append(
-                CommitAuthor(
-                    hash=lines[0],
-                    email=lines[1],
-                    name=lines[2],
-                    subject=lines[3],
-                )
+    fields = output.split("\0")
+    if fields[-1] == "":
+        fields.pop()
+    if len(fields) % 4:
+        raise ActionError("Failed to parse NUL-delimited git log output.")
+    for offset in range(0, len(fields), 4):
+        commits.append(
+            CommitAuthor(
+                hash=fields[offset],
+                email=fields[offset + 1],
+                name=fields[offset + 2],
+                subject=fields[offset + 3],
             )
+        )
     return commits, since_label
 
 
@@ -740,10 +914,26 @@ def get_repo_full(remote_alias: str) -> str:
 
 def get_changed_paths() -> list[Path]:
     status = run(
-        ["git", "status", "--porcelain", "--untracked-files=all"],
+        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
         capture=True,
     )
-    return [Path(line[3:]) for line in status.splitlines() if line]
+    paths: list[Path] = []
+    records = status.split("\0")
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if not record:
+            continue
+        if len(record) < 4:
+            raise ActionError("Failed to parse NUL-delimited git status output.")
+        paths.append(Path(record[3:]))
+        if "R" in record[:2] or "C" in record[:2]:
+            if index >= len(records) or not records[index]:
+                raise ActionError("Failed to parse renamed path from git status.")
+            paths.append(Path(records[index]))
+            index += 1
+    return paths
 
 
 def ensure_allowed_paths(paths: list[Path], *, authors_path: Path) -> None:
@@ -767,6 +957,9 @@ def create_or_update_pr(
         raise ActionError("No GitHub repository was provided.")
     if not token:
         raise ActionError("No GitHub token was provided.")
+    repository_owner, separator, repository_name = repository.partition("/")
+    if not separator or not repository_owner or not repository_name:
+        raise ActionError("GitHub repository must use the owner/name format.")
 
     env = os.environ | {"GH_TOKEN": token}
     title = "Update .authors.yml"
@@ -777,18 +970,16 @@ def create_or_update_pr(
     existing = run(
         [
             "gh",
-            "pr",
-            "list",
-            "--repo",
-            repository,
-            "--head",
-            branch,
-            "--base",
-            base_branch,
-            "--state",
-            "open",
-            "--json",
-            "number,url",
+            "api",
+            "--method",
+            "GET",
+            f"repos/{repository}/pulls",
+            "-f",
+            "state=open",
+            "-f",
+            f"head={repository_owner}:{branch}",
+            "-f",
+            f"base={base_branch}",
         ],
         capture=True,
         env=env,
@@ -814,7 +1005,7 @@ def create_or_update_pr(
             ],
             env=env,
         )
-        return str(prs[0]["url"])
+        return str(prs[0]["html_url"])
 
     return run(
         [

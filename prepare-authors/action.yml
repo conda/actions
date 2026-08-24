@@ -18,7 +18,7 @@ inputs:
     description: Base branch for the generated authors PR.
     default: main
   branch-prefix:
-    description: Prefix for the generated authors branch.
+    description: Non-empty prefix for the generated authors branch.
     default: prepare-authors-
   git-remote:
     description: Git remote alias used to resolve owner/repo for gh api.

@@ -6,6 +6,8 @@ Existing emails with a new commit author name get an `aliases` update; new email
 for an existing contributor are added to `alternate_emails`. A name match is not
 used when the commit’s resolved GitHub login conflicts with the entry’s `github`
 key (the commit is treated as a different person, or matched by that login).
+Duplicate emails fail. Duplicate names or GitHub logins require the other
+identifier to select one author entry.
 In `check` mode it validates only and fails when new contributors or
 alternate-email/alias updates are needed; missing `github:` keys warn but do not fail.
 In `prepare` mode unresolved missing `github:` keys fail the step after lookup
@@ -20,7 +22,7 @@ commit author could not be mapped to a GitHub login. Rever still updates
 | `authors-path` | Path to the rever authors metadata file. | `.authors.yml` |
 | `since` | Commit range to scan. Use `tag` for commits since the highest final release tag (`X.Y.Z` or `vX.Y.Z`; pre-releases ignored), or `all`. Fails if no such tag exists. | `tag` |
 | `base-branch` | Base branch for the generated authors PR. | `main` |
-| `branch-prefix` | Prefix for the generated authors branch. | `prepare-authors-` |
+| `branch-prefix` | Non-empty prefix for the generated authors branch. | `prepare-authors-` |
 | `git-remote` | Git remote alias used to resolve owner/repo for gh api. | `origin` |
 | `mode` | `prepare` updates `.authors.yml` and opens a PR; `check` validates only. | `prepare` |
 | `git-author-name` | Git author name for the generated commit. | `Conda Bot` |

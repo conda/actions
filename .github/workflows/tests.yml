@@ -54,6 +54,31 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}  # zizmor: ignore[secrets-outside-env] Repository-level CI upload token.
 
+  prepare-authors:
+    name: Prepare authors
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create Test Release Tag
+        run: git tag 9999.0.0
+
+      - name: Run Prepare Authors
+        id: prepare-authors
+        uses: ./prepare-authors
+        with:
+          mode: check
+
+      - name: Check Result
+        env:
+          CHANGED: ${{ steps.prepare-authors.outputs.changed }}
+        run: test "$CHANGED" = false
+
   read-file:
     name: Read file
     runs-on: ubuntu-latest
@@ -159,7 +184,7 @@ jobs:
   # required check
   analyze:
     name: Analyze
-    needs: [pytest, read-file, template-files]
+    needs: [pytest, prepare-authors, read-file, template-files]
     if: '!cancelled()'
     runs-on: ubuntu-latest
     permissions:

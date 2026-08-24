@@ -16,6 +16,7 @@ from prepare_authors import (
     build_author_indexes,
     check_authors,
     classify_commits,
+    create_or_update_pr,
     emit_missing_github_warnings,
     ensure_allowed_paths,
     find_existing_entry,
@@ -74,6 +75,31 @@ def test_build_author_indexes_tracks_alternate_emails_and_github() -> None:
         "alice.alt@example.com",
         "bob@example.com",
     }
+
+
+def test_build_author_indexes_retains_ambiguous_keys() -> None:
+    metadata = [
+        {
+            "name": "Nicola Soranzo",
+            "email": "nicola@example.com",
+            "github": "nsoranzo",
+        },
+        {
+            "name": "Philip R. Kensche",
+            "email": "philip@example.com",
+            "github": "NSoranzo",
+        },
+        {"name": "Shaun Walbridge", "email": "shaun@example.com"},
+        {"name": "Shaun Walbridge", "email": "shaun.alt@example.com"},
+        {"name": "Shared One", "email": "shared@example.com"},
+        {"name": "Shared Two", "email": "shared@example.com"},
+    ]
+
+    by_emails, by_names, by_github, _, _ = build_author_indexes(metadata)
+
+    assert by_github["nsoranzo"] is None
+    assert by_names["Shaun Walbridge"] is None
+    assert by_emails["shared@example.com"] is None
 
 
 def test_find_existing_entry_matches_name_or_github() -> None:
@@ -150,6 +176,52 @@ def test_find_existing_entry_prefers_github_over_name_without_github() -> None:
     assert find_existing_entry("Alex Smith", "bob", by_names, by_github) is metadata[1]
 
 
+def test_find_existing_entry_disambiguates_duplicate_github_by_name() -> None:
+    metadata = [
+        {
+            "name": "Nicola Soranzo",
+            "email": "nicola@example.com",
+            "github": "nsoranzo",
+        },
+        {
+            "name": "Philip R. Kensche",
+            "email": "philip@example.com",
+            "github": "nsoranzo",
+        },
+    ]
+    _, by_names, by_github, _, _ = build_author_indexes(metadata)
+
+    assert (
+        find_existing_entry("Nicola Soranzo", "NSoranzo", by_names, by_github)
+        is metadata[0]
+    )
+    with pytest.raises(ActionError, match="matches multiple author entries"):
+        find_existing_entry("Unknown Name", "nsoranzo", by_names, by_github)
+
+
+def test_find_existing_entry_requires_github_for_duplicate_name() -> None:
+    metadata = [
+        {
+            "name": "Shaun Walbridge",
+            "email": "shaun@example.com",
+            "github": "scw",
+        },
+        {
+            "name": "Shaun Walbridge",
+            "email": "shaun.alt@example.com",
+            "github": "scdub",
+        },
+    ]
+    _, by_names, by_github, _, _ = build_author_indexes(metadata)
+
+    assert (
+        find_existing_entry("Shaun Walbridge", "scw", by_names, by_github)
+        is metadata[0]
+    )
+    with pytest.raises(ActionError, match="Author name .* matches multiple"):
+        find_existing_entry("Shaun Walbridge", None, by_names, by_github)
+
+
 def test_update_existing_entry_adds_alternate_email_and_alias() -> None:
     entry: dict[str, Any] = {"name": "Alice Example", "email": "alice@example.com"}
 
@@ -213,6 +285,190 @@ def test_classify_commits_rejects_name_match_on_conflicting_github() -> None:
     assert new_authors[0]["email"] == "bob@example.com"
     assert new_authors[0]["name"] == "Alice Example"
     assert new_authors[0]["github"] == "bob"
+
+
+def test_classify_commits_disambiguates_duplicate_github_by_name() -> None:
+    metadata = [
+        {
+            "name": "Nicola Soranzo",
+            "email": "nicola@example.com",
+            "github": "nsoranzo",
+        },
+        {
+            "name": "Philip R. Kensche",
+            "email": "philip@example.com",
+            "github": "nsoranzo",
+        },
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [CommitAuthor("abc", "nicola.work@example.com", "Nicola Soranzo", "fix")]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, _hash: "nsoranzo",
+    )
+
+    assert new_authors == []
+    assert len(alternate_updates) == 1
+    assert alternate_updates[0][0] is metadata[0]
+
+
+def test_classify_commits_rejects_duplicate_email() -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "shared@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "shared@example.com", "github": "bob"},
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+
+    with pytest.raises(ActionError, match="Author email .* matches multiple"):
+        classify_commits(
+            [CommitAuthor("abc", "shared@example.com", "Alice Example", "fix")],
+            known_emails,
+            by_emails,
+            by_names,
+            by_github,
+            "conda/example",
+            lambda _repo, _hash: pytest.fail("ambiguous email must fail first"),
+        )
+
+
+def test_classify_commits_uses_later_github_evidence_for_same_email() -> None:
+    metadata = [
+        {"name": "Alex Example", "email": "alex@example.com"},
+        {"name": "Bob Example", "email": "bob@example.com", "github": "bob"},
+    ]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    commits = [
+        CommitAuthor("miss", "new@example.com", "Alex Example", "fix"),
+        CommitAuthor("hit", "new@example.com", "Alex Example", "docs"),
+    ]
+    calls: list[str] = []
+
+    def fake_login(_repo: str, commit_hash: str) -> str | None:
+        calls.append(commit_hash)
+        return "bob" if commit_hash == "hit" else None
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        fake_login,
+    )
+
+    assert calls == ["miss", "hit"]
+    assert new_authors == []
+    assert len(alternate_updates) == 1
+    assert alternate_updates[0][0] is metadata[1]
+
+
+@pytest.mark.parametrize("primary_first", [True, False])
+def test_classify_commits_merges_known_identity_in_either_order(
+    primary_first: bool,
+) -> None:
+    metadata = [{"name": "Bob Example", "email": "bob@example.com"}]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    primary = CommitAuthor("primary", "bob@example.com", "Bob Example", "fix")
+    alternate = CommitAuthor(
+        "alternate",
+        "bob.work@example.com",
+        "Robert Example",
+        "docs",
+    )
+    commits = [primary, alternate] if primary_first else [alternate, primary]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, _hash: "bob",
+    )
+
+    assert new_authors == []
+    analysis = AuthorAnalysis(
+        alternate_email_updates=alternate_updates,
+        new_authors=new_authors,
+        missing_github_keys=[],
+        email_to_hashes={},
+        since_label="tag 1.0.0",
+    )
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=lambda *_: pytest.fail("login already resolved"),
+    )
+    assert metadata == [
+        {
+            "name": "Bob Example",
+            "email": "bob@example.com",
+            "github": "bob",
+            "alternate_emails": ["bob.work@example.com"],
+            "aliases": ["Robert Example"],
+        }
+    ]
+
+
+@pytest.mark.parametrize("alias_first", [True, False])
+def test_classify_commits_merges_pending_alias_into_existing_name(
+    alias_first: bool,
+) -> None:
+    metadata = [{"name": "Alice Example", "email": "alice@example.com"}]
+    by_emails, by_names, by_github, _, known_emails = build_author_indexes(metadata)
+    alias = CommitAuthor(
+        "alias",
+        "alias@example.com",
+        "A. Alias",
+        "docs",
+    )
+    exact_name = CommitAuthor(
+        "exact",
+        "work@example.com",
+        "Alice Example",
+        "fix",
+    )
+    commits = [alias, exact_name] if alias_first else [exact_name, alias]
+
+    alternate_updates, new_authors = classify_commits(
+        commits,
+        known_emails,
+        by_emails,
+        by_names,
+        by_github,
+        "conda/example",
+        lambda _repo, _hash: "alice",
+    )
+
+    assert new_authors == []
+    analysis = AuthorAnalysis(
+        alternate_email_updates=alternate_updates,
+        new_authors=new_authors,
+        missing_github_keys=[],
+        email_to_hashes={},
+        since_label="tag 1.0.0",
+    )
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=lambda *_: pytest.fail("login already resolved"),
+    )
+    assert metadata[0]["github"] == "alice"
+    assert set(metadata[0]["alternate_emails"]) == {
+        "alias@example.com",
+        "work@example.com",
+    }
+    assert metadata[0]["aliases"] == ["A. Alias"]
 
 
 def test_classify_commits_merges_pending_new_author_by_github() -> None:
@@ -309,7 +565,7 @@ def test_apply_updates_retains_resolved_github_login() -> None:
         alternate_email_updates=alternate_updates,
         new_authors=new_authors,
         missing_github_keys=[("bob@example.com", "Bob Example")],
-        email_to_hash={"bob@example.com": "def"},
+        email_to_hashes={"bob@example.com": ["def"]},
         since_label="tag 1.0.0",
     )
     assert apply_updates(
@@ -388,7 +644,7 @@ def test_classify_commits_merges_delayed_github_match(second_email: str) -> None
         alternate_email_updates=alternate_updates,
         new_authors=new_authors,
         missing_github_keys=[],
-        email_to_hash={},
+        email_to_hashes={},
         since_label="tag 1.0.0",
     )
     assert apply_updates(
@@ -540,7 +796,7 @@ def test_apply_updates_appends_new_author_and_github_key() -> None:
             }
         ],
         missing_github_keys=[("bob@example.com", "Bob Example")],
-        email_to_hash={"bob@example.com": "def"},
+        email_to_hashes={"bob@example.com": ["def"]},
         since_label="tag 1.0.0",
     )
 
@@ -557,6 +813,34 @@ def test_apply_updates_appends_new_author_and_github_key() -> None:
     assert metadata[1]["github"] == "bob"
 
 
+def test_apply_updates_tries_hashes_until_github_resolves() -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "bob@example.com"},
+    ]
+    analysis = AuthorAnalysis(
+        alternate_email_updates=[],
+        new_authors=[],
+        missing_github_keys=[("bob@example.com", "Bob Example")],
+        email_to_hashes={"bob@example.com": ["miss", "hit", "unused"]},
+        since_label="tag 1.0.0",
+    )
+    calls: list[str] = []
+
+    def fake_login(_repo: str, commit_hash: str) -> str | None:
+        calls.append(commit_hash)
+        return "bob" if commit_hash == "hit" else None
+
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=fake_login,
+    )
+    assert calls == ["miss", "hit"]
+    assert metadata[1]["github"] == "bob"
+
+
 def test_apply_updates_rejects_duplicate_github_key() -> None:
     metadata = [
         {"name": "Alice Example", "email": "alice@example.com", "github": "Alice"},
@@ -566,7 +850,7 @@ def test_apply_updates_rejects_duplicate_github_key() -> None:
         alternate_email_updates=[],
         new_authors=[],
         missing_github_keys=[("bob@example.com", "Bob Example")],
-        email_to_hash={"bob@example.com": "abc"},
+        email_to_hashes={"bob@example.com": ["abc"]},
         since_label="tag 1.0.0",
     )
 
@@ -576,6 +860,30 @@ def test_apply_updates_rejects_duplicate_github_key() -> None:
         repo_full="conda/example",
         get_github_login_fn=lambda _repo, _hash: "alice",
     )
+    assert "github" not in metadata[1]
+
+
+def test_apply_updates_rejects_conflicting_github_update() -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "bob@example.com"},
+    ]
+    analysis = AuthorAnalysis(
+        alternate_email_updates=[],
+        new_authors=[],
+        missing_github_keys=[],
+        email_to_hashes={},
+        since_label="tag 1.0.0",
+        github_updates=[(metadata[1], "ALICE")],
+    )
+
+    with pytest.raises(ActionError, match="matches another author entry"):
+        apply_updates(
+            metadata,
+            analysis,
+            repo_full="conda/example",
+            get_github_login_fn=lambda *_: None,
+        )
     assert "github" not in metadata[1]
 
 
@@ -593,7 +901,7 @@ def test_apply_updates_preserves_alternate_emails_and_aliases_on_new_author() ->
             }
         ],
         missing_github_keys=[],
-        email_to_hash={},
+        email_to_hashes={},
         since_label="tag 1.0.0",
     )
 
@@ -656,6 +964,37 @@ def test_get_commits_since_tag(
     assert since_label == "tag 1.0.0"
     assert len(commits) == 1
     assert commits[0].email == "new@example.com"
+
+
+@pytest.mark.parametrize("subject", ["", "---"])
+def test_get_commits_since_preserves_delimiter_like_subjects(
+    subject: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_repo(tmp_path, monkeypatch)
+    subprocess.run(["git", "tag", "1.0.0"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "--allow-empty",
+            "--allow-empty-message",
+            "-m",
+            subject,
+            "--author",
+            "New Author <new@example.com>",
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    commits, since_label = get_commits_since("tag")
+
+    assert since_label == "tag 1.0.0"
+    assert len(commits) == 1
+    assert commits[0].email == "new@example.com"
+    assert commits[0].subject == subject
 
 
 def test_get_commits_since_prefers_calver_over_legacy_v_tag(
@@ -769,7 +1108,7 @@ def test_analyze_authors_maps_alternate_email_hash_to_primary(
         get_github_login_fn=lambda *_: None,
     )
 
-    assert analysis.email_to_hash["bob@example.com"] == "def"
+    assert analysis.email_to_hashes["bob@example.com"] == ["abc", "def"]
     assert apply_updates(
         metadata,
         analysis,
@@ -778,6 +1117,44 @@ def test_analyze_authors_maps_alternate_email_hash_to_primary(
             "bob" if commit_hash == "def" else None
         ),
     )
+    assert metadata[1]["github"] == "bob"
+
+
+def test_analyze_authors_retains_resolved_github_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "bob@example.com"},
+    ]
+    commits = [CommitAuthor("abc", "bob@example.com", "Bob Example", "fix")]
+    monkeypatch.setattr(
+        "prepare_authors.get_commits_since",
+        lambda _since: (commits, "tag 1.0.0"),
+    )
+    calls: list[str] = []
+
+    def stateful_login(_repo: str, commit_hash: str) -> str | None:
+        calls.append(commit_hash)
+        return "bob" if len(calls) == 1 else None
+
+    analysis = analyze_authors(
+        metadata,
+        since="tag",
+        repo_full="conda/example",
+        get_github_login_fn=stateful_login,
+    )
+
+    assert calls == ["abc"]
+    assert "github" not in metadata[1]
+    assert analysis.github_updates == [(metadata[1], "bob")]
+    assert apply_updates(
+        metadata,
+        analysis,
+        repo_full="conda/example",
+        get_github_login_fn=stateful_login,
+    )
+    assert calls == ["abc"]
     assert metadata[1]["github"] == "bob"
 
 
@@ -861,7 +1238,7 @@ def test_github_required_authors() -> None:
             },
         ],
         missing_github_keys=[("bob@example.com", "Bob Example")],
-        email_to_hash={},
+        email_to_hashes={},
         since_label="tag 1.0.0",
     )
 
@@ -919,6 +1296,61 @@ def test_check_authors_warns_but_passes_on_missing_github_only(
     captured = capsys.readouterr()
     assert "missing a github key" in captured.err
     assert "Bob Example" in captured.err
+
+
+def test_check_authors_does_not_apply_resolved_github_update(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "read-token")
+    github_output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+    metadata = [
+        {"name": "Alice Example", "email": "alice@example.com", "github": "alice"},
+        {"name": "Bob Example", "email": "bob@example.com"},
+    ]
+    commits = [CommitAuthor("abc", "bob@example.com", "Bob Example", "fix")]
+
+    class Args:
+        authors_path = ".authors.yml"
+        since = "tag"
+        git_remote = "origin"
+
+    with (
+        patch("prepare_authors.load_metadata", return_value=(metadata, None)),
+        patch("prepare_authors.get_repo_full", return_value="conda/example"),
+        patch(
+            "prepare_authors.get_commits_since",
+            return_value=(commits, "tag 1.0.0"),
+        ),
+        patch(
+            "prepare_authors.make_github_login_fn",
+            return_value=lambda _repo, _hash: "bob",
+        ),
+    ):
+        check_authors(Args())
+
+    captured = capsys.readouterr()
+    assert "missing a github key" in captured.err
+    assert "changed=false" in github_output.read_text(encoding="utf-8")
+    assert "github" not in metadata[1]
+
+
+def test_prepare_authors_rejects_empty_branch_prefix_before_mutation() -> None:
+    class Args:
+        base_branch = "main"
+        branch_prefix = ""
+
+    with (
+        patch("prepare_authors.load_metadata") as load_metadata_mock,
+        patch("prepare_authors.run") as run_mock,
+        pytest.raises(ActionError, match="branch-prefix must not be empty"),
+    ):
+        prepare_authors(Args())
+
+    load_metadata_mock.assert_not_called()
+    run_mock.assert_not_called()
 
 
 def test_prepare_authors_fails_when_missing_github_unresolved(
@@ -1146,6 +1578,78 @@ def test_get_github_login_passes_read_token_as_gh_token(
     assert captured["env"]["GITHUB_TOKEN"] == "job-token"
 
 
+def test_create_or_update_pr_scopes_lookup_to_repository_owner() -> None:
+    calls: list[tuple[list[str], bool, dict[str, str] | None]] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture: bool = False,
+        env: dict[str, str] | None = None,
+    ) -> str:
+        calls.append((command, capture, env))
+        if command[:2] == ["gh", "api"]:
+            return '[{"number": 7, "html_url": "https://example/pr/7"}]'
+        return ""
+
+    with patch("prepare_authors.run", side_effect=fake_run):
+        url = create_or_update_pr(
+            repository="conda/example",
+            branch="prepare-authors-main",
+            base_branch="main",
+            since_label="tag 1.0.0",
+            token="write-token",
+        )
+
+    assert url == "https://example/pr/7"
+    assert calls[0][0] == [
+        "gh",
+        "api",
+        "--method",
+        "GET",
+        "repos/conda/example/pulls",
+        "-f",
+        "state=open",
+        "-f",
+        "head=conda:prepare-authors-main",
+        "-f",
+        "base=main",
+    ]
+    assert calls[0][1] is True
+    assert calls[0][2] is not None
+    assert calls[0][2]["GH_TOKEN"] == "write-token"
+    assert calls[1][0][:5] == ["gh", "pr", "edit", "7", "--repo"]
+
+
+def test_create_or_update_pr_creates_repository_owned_branch() -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture: bool = False,
+        env: dict[str, str] | None = None,
+    ) -> str:
+        del capture, env
+        calls.append(command)
+        if command[:2] == ["gh", "api"]:
+            return "[]"
+        return "https://example/pr/8\n"
+
+    with patch("prepare_authors.run", side_effect=fake_run):
+        url = create_or_update_pr(
+            repository="conda/example",
+            branch="prepare-authors-main",
+            base_branch="main",
+            since_label="tag 1.0.0",
+            token="write-token",
+        )
+
+    assert url == "https://example/pr/8"
+    assert calls[1][0:2] == ["gh", "pr"]
+    assert calls[1][calls[1].index("--head") + 1] == "prepare-authors-main"
+
+
 def test_load_and_save_metadata_roundtrip(tmp_path: Path) -> None:
     authors = tmp_path / ".authors.yml"
     write_authors(
@@ -1191,20 +1695,21 @@ def test_ensure_allowed_paths() -> None:
         ensure_allowed_paths([Path("README.md")], authors_path=Path(".authors.yml"))
 
 
-def test_get_changed_paths_preserves_dotfile_prefix(
+@pytest.mark.parametrize("authors_name", [".authors.yml", "authors file.yml"])
+def test_get_changed_paths_preserves_authors_path(
+    authors_name: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Porcelain ' M .authors.yml' must not become 'authors.yml' via strip()."""
     init_repo(tmp_path, monkeypatch)
-    authors = tmp_path / ".authors.yml"
+    authors = tmp_path / authors_name
     write_authors(authors, "- name: Alice Example\n  email: alice@example.com\n")
-    subprocess.run(["git", "add", ".authors.yml"], check=True)
+    subprocess.run(["git", "add", authors_name], check=True)
     subprocess.run(["git", "commit", "-m", "authors"], check=True, capture_output=True)
     write_authors(
         authors,
         "- name: Alice Example\n  email: alice@example.com\n  github: alice\n",
     )
 
-    assert get_changed_paths() == [Path(".authors.yml")]
-    ensure_allowed_paths(get_changed_paths(), authors_path=Path(".authors.yml"))
+    assert get_changed_paths() == [Path(authors_name)]
+    ensure_allowed_paths(get_changed_paths(), authors_path=Path(authors_name))
