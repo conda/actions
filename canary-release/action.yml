@@ -135,7 +135,7 @@ runs:
               --user="${INPUT_ANACONDA_CHANNEL}" \
               --label="${INPUT_ANACONDA_LABEL}" \
               "${PACKAGES[@]}"
-            FINALIZED_CHANNEL="${INPUT_ANACONDA_CHANNEL}/label/${INPUT_ANACONDA_LABEL}"
+            ANACONDA_ORG_CHANNEL="${INPUT_ANACONDA_CHANNEL}/label/${INPUT_ANACONDA_LABEL}"
             uploaded=yes
           fi
           if [[ -n "${INPUT_GITHUB_RELEASES_REPOSITORY}" && -n "${INPUT_GITHUB_RELEASES_CHANNEL_NAME}" ]]; then
@@ -160,7 +160,7 @@ runs:
             # Reupload existing and new artifacts plus updated repodata
             gh release upload "$TAG" "$STAGING_DIR/"* --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --clobber
 
-            FINALIZED_CHANNEL="https://github.com/${INPUT_GITHUB_RELEASES_REPOSITORY}/releases/download/${INPUT_GITHUB_RELEASES_CHANNEL_NAME}"
+            GITHUB_RELEASE_CHANNEL="https://github.com/${INPUT_GITHUB_RELEASES_REPOSITORY}/releases/download/${INPUT_GITHUB_RELEASES_CHANNEL_NAME}"
             uploaded=yes
           fi
 
@@ -172,8 +172,9 @@ runs:
           basename -a "${PACKAGES[@]}"
           echo "::endgroup::"
 
-          echo "Use this command to try out the build:"
-          echo "conda install ${FINALIZED_CHANNEL}::${INPUT_PACKAGE_NAME}"
+          echo "Use the following command(s) to try out the build:"
+          [[ -n "${ANACONDA_ORG_CHANNEL}" ]] && echo "conda install ${ANACONDA_ORG_CHANNEL}::${INPUT_PACKAGE_NAME}"
+          [[ -n "${GITHUB_RELEASE_CHANNEL}" ]] && echo "conda install ${GITHUB_RELEASE_CHANNEL}::${INPUT_PACKAGE_NAME}"
         else
           echo "Skipping upload because 'upload != true'."
         fi
