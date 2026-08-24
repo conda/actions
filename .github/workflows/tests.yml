@@ -217,8 +217,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write  # Post the sticky template audit comment on PRs.
-      pull-requests: write  # Update pull request comments with template audit output.
     strategy:
       fail-fast: false
       matrix:
