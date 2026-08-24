@@ -156,10 +156,48 @@ jobs:
             ${{ steps.templates-error.outputs.summary }}
           GITHUB_TOKEN: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}  # zizmor: ignore[secrets-outside-env] Repository-level token for sticky PR test comments.
 
+  canary-release:
+    name: Canary release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write  # Post the sticky template audit comment on PRs.
+      pull-requests: write  # Update pull request comments with template audit output.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - anaconda-org-channel: conda-canary
+            anaconda-org-label: tests
+          - github-releases-repository: conda/actions
+            github-releases-channel-name: tests
+          - anaconda-org-channel: conda-canary
+            anaconda-org-label: tests
+            github-releases-repository: conda/actions
+            github-releases-channel-name: tests
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Canary release
+        id: canary-release
+        uses: ./canary-release
+        with:
+          package-name: conda-build-test
+          subdir: noarch
+          conda-build-path: ./canary-release/test-recipe/
+          upload: dry-run
+          anaconda-org-channel: ${{ matrix.anaconda-org-channel }}
+          anaconda-org-label: ${{ matrix.anaconda-org-label }}
+          github-releases-repository: ${{ matrix.github-releases-repository }}
+          github-releases-channel-name: ${{ matrix.github-releases-channel-name }}
+
   # required check
   analyze:
     name: Analyze
-    needs: [pytest, read-file, template-files]
+    needs: [pytest, read-file, template-files, canary-release]
     if: '!cancelled()'
     runs-on: ubuntu-latest
     permissions:
