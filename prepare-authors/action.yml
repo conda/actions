@@ -1,0 +1,125 @@
+name: Prepare Authors
+description: Update .authors.yml from recent commits and open or update an authors PR.
+branding:
+  icon: users
+  color: green
+
+inputs:
+  authors-path:
+    description: Path to the rever authors metadata file.
+    default: .authors.yml
+  since:
+    description: >-
+      Commit range to scan. Use tag for commits since the highest final release
+      tag (X.Y.Z or vX.Y.Z; pre-releases ignored), or all. Fails if no such tag
+      exists.
+    default: tag
+  base-branch:
+    description: Base branch for the generated authors PR.
+    default: main
+  branch-prefix:
+    description: Non-empty prefix for the generated authors branch.
+    default: prepare-authors-
+  git-remote:
+    description: Git remote alias used to resolve owner/repo for gh api.
+    default: origin
+  mode:
+    description: prepare updates .authors.yml and opens a PR; check validates only.
+    default: prepare
+  git-author-name:
+    description: Git author name for the generated commit.
+    default: Conda Bot
+  git-author-email:
+    description: Git author email for the generated commit.
+    default: 18747875+conda-bot@users.noreply.github.com
+  token:
+    description: >-
+      Token for checkout and, in prepare mode, push/PR writes
+      (contents:write and pull-requests:write). Commit author lookups always
+      use GITHUB_TOKEN / github.token instead.
+    default: ${{ github.token }}
+
+outputs:
+  changed:
+    description: Whether .authors.yml needed updates.
+    value: ${{ steps.run.outputs.changed }}
+  branch:
+    description: Generated authors branch.
+    value: ${{ steps.run.outputs.branch }}
+  pull-request-url:
+    description: Generated or updated authors PR URL.
+    value: ${{ steps.run.outputs.pull-request-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute Hash
+      id: hash
+      shell: bash
+      run: echo hash="$(sha256sum "$GITHUB_ACTION_PATH/requirements.txt" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+    - name: Pip Cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/pip
+        key: ${{ github.workflow }}-prepare-authors-${{ steps.hash.outputs.hash }}
+
+    - name: Setup Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '>=3.10'
+
+    - name: Pip Install
+      shell: bash
+      run: pip install --quiet -r "$GITHUB_ACTION_PATH/requirements.txt"
+
+    - name: Checkout Repository
+      if: inputs.mode == 'prepare'
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ inputs.base-branch }}
+        fetch-depth: 0
+        persist-credentials: false
+        token: ${{ inputs.token }}
+
+    - name: Checkout Repository
+      if: inputs.mode == 'check'
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+        token: ${{ inputs.token }}
+
+    - name: Prepare Authors
+      id: run
+      shell: bash
+      run: |
+        args=(
+          "$INPUT_MODE"
+          --authors-path "$INPUT_AUTHORS_PATH"
+          --since "$INPUT_SINCE"
+          --git-remote "$INPUT_GIT_REMOTE"
+        )
+        if [ "$INPUT_MODE" = prepare ]; then
+          args+=(
+            --base-branch "$INPUT_BASE_BRANCH"
+            --branch-prefix "$INPUT_BRANCH_PREFIX"
+            --git-author-name "$INPUT_GIT_AUTHOR_NAME"
+            --git-author-email "$INPUT_GIT_AUTHOR_EMAIL"
+            --repository "$GITHUB_REPOSITORY"
+            --token "$INPUT_TOKEN"
+          )
+        fi
+        python "$GITHUB_ACTION_PATH/prepare_authors.py" "${args[@]}"
+      env:
+        # Keep reads on the job token; do not set GH_TOKEN to inputs.token here.
+        GITHUB_TOKEN: ${{ github.token }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_AUTHORS_PATH: ${{ inputs.authors-path }}
+        INPUT_SINCE: ${{ inputs.since }}
+        INPUT_GIT_REMOTE: ${{ inputs.git-remote }}
+        INPUT_BASE_BRANCH: ${{ inputs.base-branch }}
+        INPUT_BRANCH_PREFIX: ${{ inputs.branch-prefix }}
+        INPUT_GIT_AUTHOR_NAME: ${{ inputs.git-author-name }}
+        INPUT_GIT_AUTHOR_EMAIL: ${{ inputs.git-author-email }}
+        INPUT_TOKEN: ${{ inputs.token }}
