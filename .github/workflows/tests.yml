@@ -213,7 +213,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}  # zizmor: ignore[secrets-outside-env] Repository-level token for sticky PR test comments.
 
   canary-release:
-    name: Canary release
+    name: Canary release (${{ matrix.name }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -223,11 +223,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - anaconda-org-channel: conda-canary
+          - name: anaconda.org
+            anaconda-org-channel: conda-canary
             anaconda-org-label: tests
-          - github-releases-repository: conda/actions
+          - name: GH Releases
+            github-releases-repository: conda/actions
             github-releases-channel-name: tests
-          - anaconda-org-channel: conda-canary
+          - name: Both
+            anaconda-org-channel: conda-canary
             anaconda-org-label: tests
             github-releases-repository: conda/actions
             github-releases-channel-name: tests
