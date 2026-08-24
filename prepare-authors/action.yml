@@ -59,13 +59,13 @@ runs:
       run: echo hash="$(sha256sum "$GITHUB_ACTION_PATH/requirements.txt" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
     - name: Pip Cache
-      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/pip
         key: ${{ github.workflow }}-prepare-authors-${{ steps.hash.outputs.hash }}
 
     - name: Setup Python
-      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: '>=3.10'
 
@@ -75,7 +75,7 @@ runs:
 
     - name: Checkout Repository
       if: inputs.mode == 'prepare'
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         ref: ${{ inputs.base-branch }}
         fetch-depth: 0
@@ -84,7 +84,7 @@ runs:
 
     - name: Checkout Repository
       if: inputs.mode == 'check'
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
         persist-credentials: false
