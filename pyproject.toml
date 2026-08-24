@@ -1,5 +1,6 @@
 [tool.codespell]
 # see https://github.com/codespell-project/codespell#using-a-config-file
+ignore-words-list = "rever,"
 skip = '.git'
 
 [tool.coverage.report]
@@ -21,6 +22,7 @@ addopts = [
   "--cov=combine-durations",
   "--cov=news_common",
   "--cov=prepare-release",
+  "--cov=prepare-authors",
   "--cov=read-file",
   "--cov=template-files",
   "--cov-append",
@@ -60,6 +62,7 @@ known-first-party = [
   "combine_durations",
   "news_common",
   "prepare_release",
+  "prepare_authors",
   "read_file",
   "template_files",
 ]
