@@ -41,6 +41,7 @@ inputs:
     default: recipe
   upload:
     description: "Whether to upload to the target channel or not. Must be a boolean string: 'true' or 'false'."
+    # Value can also be 'dry-run', which behaves like 'true' but doesn't really upload anything. Used internally in testing.
     required: false
     default: 'true'
 runs:
@@ -123,19 +124,20 @@ runs:
           )
         )
         echo "::endgroup::"
-        if [[ "${INPUT_UPLOAD}" == "true" ]]; then
+        if [[ "${INPUT_UPLOAD}" == "true" || "${INPUT_UPLOAD}" == "dry-run" ]]; then
           echo "::group::Uploading package"
           uploaded=no
+          [[ "${INPUT_UPLOAD}" == "dry-run" ]] && dry_run=echo || dry_run=""
           if [[ -n "${INPUT_ANACONDA_CHANNEL}" && -n "${INPUT_ANACONDA_LABEL}" ]]; then
-            anaconda \
+            $dry_run anaconda \
               upload \
               --force \
               --register \
               --no-progress \
-              --user="${INPUT_CHANNEL}" \
-              --label="${INPUT_LABEL}" \
+              --user="${INPUT_ANACONDA_CHANNEL}" \
+              --label="${INPUT_ANACONDA_LABEL}" \
               "${PACKAGES[@]}"
-            ANACONDA_ORG_CHANNEL="${INPUT_CHANNEL}/label/${INPUT_LABEL}"
+            ANACONDA_ORG_CHANNEL="${INPUT_ANACONDA_CHANNEL}/label/${INPUT_ANACONDA_LABEL}"
             uploaded=yes
           fi
           if [[ -n "${INPUT_GITHUB_RELEASES_REPOSITORY}" && -n "${INPUT_GITHUB_RELEASES_CHANNEL_NAME}" ]]; then
@@ -147,18 +149,18 @@ runs:
 
             # Ensure the release exists
             if ! gh release view "$TAG" --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" >/dev/null 2>&1; then
-              gh release create "$TAG" --prerelease --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --title "$TAG" --notes "Conda channel for $TAG"
+              $dry_run gh release create "$TAG" --prerelease --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --title "$TAG" --notes "Conda channel for $TAG"
             fi
             # Download existing artifacts, if any
-            gh release download "$TAG" --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --dir "$STAGING_DIR" || true
+            $dry_run gh release download "$TAG" --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --dir "$STAGING_DIR" || true
             # ... and copy our new packages on top
-            cp "${PACKAGES[@]}" "$STAGING_DIR/"
+            $dry_run cp "${PACKAGES[@]}" "$STAGING_DIR/"
 
             # Regenerate repodata.json (plus zst compression)
-            conda index --zst --write-monolithic --subdir "${INPUT_SUBDIR}" "./channel_staging"
+            $dry_run conda index --zst --write-monolithic --subdir "${INPUT_SUBDIR}" "./channel_staging"
 
             # Reupload existing and new artifacts plus updated repodata
-            gh release upload "$TAG" "$STAGING_DIR/"* --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --clobber
+            $dry_run gh release upload "$TAG" "$STAGING_DIR/"* --repo "${INPUT_GITHUB_RELEASES_REPOSITORY}" --clobber
 
             GITHUB_RELEASE_CHANNEL="https://github.com/${INPUT_GITHUB_RELEASES_REPOSITORY}/releases/download/${INPUT_GITHUB_RELEASES_CHANNEL_NAME}"
             uploaded=yes
@@ -172,9 +174,9 @@ runs:
           basename -a "${PACKAGES[@]}"
           echo "::endgroup::"
 
-          echo "Use this command to try out the build:"
-          [[ -n "${ANACONDA_ORG_CHANNEL}" ]] && echo "conda install ${ANACONDA_ORG_CHANNEL}::${INPUT_PACKAGE_NAME}"
-          [[ -n "${GITHUB_RELEASE_CHANNEL}" ]] && echo "conda install ${GITHUB_RELEASE_CHANNEL}::${INPUT_PACKAGE_NAME}"
+          echo "Use the following command(s) to try out the build:"
+          [[ -n "${ANACONDA_ORG_CHANNEL:-}" ]] && echo "conda install ${ANACONDA_ORG_CHANNEL}::${INPUT_PACKAGE_NAME}" || true
+          [[ -n "${GITHUB_RELEASE_CHANNEL:-}" ]] && echo "conda install ${GITHUB_RELEASE_CHANNEL}::${INPUT_PACKAGE_NAME}" || true
         else
           echo "Skipping upload because 'upload != true'."
         fi
