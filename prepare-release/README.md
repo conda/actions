@@ -48,11 +48,31 @@ The action checks the same security conditions internally before checkout:
 An existing news directory with no eligible fragments is a successful no-op.
 A missing news directory or a malformed fragment fails the action.
 
+## Action Inputs
+
+| Name | Description | Default |
+|------|-------------|---------|
+| `news-directory` | Directory containing news fragments. | `news` |
+| `changelog-path` | Changelog file to update. | `CHANGELOG.md` |
+| `release-branch-pattern` | Comma- or newline-separated release branch glob patterns. | `[0-9]*.[0-9]*.x` |
+| `branch-prefix` | Prefix for the generated release-notes branch. | `release-notes-` |
+| `git-author-name` | Git author name for the generated commit. | `Conda Bot` |
+| `git-author-email` | Git author email for the generated commit. | `18747875+conda-bot@users.noreply.github.com` |
+| `token` | GitHub token with `contents: write` and `pull-requests: write`. | `${{ github.token }}` |
+
+## Action Outputs
+
+| Name | Description |
+|------|-------------|
+| `version` | Release version inferred from the release branch. |
+| `branch` | Generated release-notes branch. |
+| `pull-request-url` | Generated or updated release PR URL. |
+
 Each generated entry ends with a `Contributors` section listing the GitHub
-logins of all commit authors since the previous final release tag (`X.Y.Z` or
-`vX.Y.Z`) in the branch's `X.Y` series merged into the release branch, sorted
+logins of commit authors since the previous release tag, sorted
 alphabetically. First-time contributors are annotated with a link to their
-earliest merged PR:
+earliest merged PR. The section is omitted when no author resolves to a
+GitHub login:
 
 ```
 ### Contributors
@@ -62,24 +82,7 @@ earliest merged PR:
 * @dependabot[bot]
 ```
 
-When no previous release tag exists, all of history is scanned and every
-contributor is treated as a first-timer. Commits that cannot be resolved to a
-GitHub account are skipped with a warning, and lookup failures degrade to
-warnings rather than failing the release. Re-running the action regenerates
-and replaces the section instead of merging into it. The section is omitted
-when no commit author resolves to a GitHub login, and uses the existing
-`token` input for the GitHub API lookups.
-
-First-timer detection checks for earlier commits by the author on the release
-branch, filtered by committer date. A rebased or cherry-picked older commit
-can therefore suppress the first-timer annotation even when the author is new
-to the release branch.
-
-Before pushing, the action verifies that the triggering SHA is still the tip of
-the release branch. A stale workflow run exits successfully without pushing or
-creating or updating a pull request. Authentication or branch lookup failures
-fail the action.
-
-The concurrency group serializes runs for each release branch. `queue: max`
-keeps every pending run, while `cancel-in-progress: false` prevents a later run
-from cancelling one that is already preparing a release.
+Before pushing, the action verifies that the triggering SHA is still the tip
+of the release branch. A stale workflow run exits successfully without pushing
+or creating or updating a pull request. Authentication or branch lookup
+failures fail the action.
