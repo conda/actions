@@ -263,9 +263,7 @@ def test_prepare_release_publishes_when_remote_head_matches(
         ],
     ]
     lookup = next(
-        (command, env)
-        for command, env in calls
-        if command[:2] == ["git", "ls-remote"]
+        (command, env) for command, env in calls if command[:2] == ["git", "ls-remote"]
     )
     assert lookup[0] == [
         "git",
