@@ -47,19 +47,6 @@ class AuthorAnalysis:
 
 def parse_args(argv: list[str] | None = None) -> Namespace:
     parser = ArgumentParser(description="Prepare .authors.yml updates for rever.")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    sub_check = subparsers.add_parser("check")
-    add_shared_args(sub_check)
-
-    sub_prepare = subparsers.add_parser("prepare")
-    add_shared_args(sub_prepare)
-    add_prepare_args(sub_prepare)
-
-    return parser.parse_args(argv)
-
-
-def add_shared_args(parser: ArgumentParser) -> None:
     parser.add_argument("--authors-path", default=".authors.yml")
     parser.add_argument(
         "--since",
@@ -72,9 +59,6 @@ def add_shared_args(parser: ArgumentParser) -> None:
         default="origin",
         help="Git remote alias used to resolve owner/repo for gh api.",
     )
-
-
-def add_prepare_args(parser: ArgumentParser) -> None:
     parser.add_argument("--base-branch", default="main")
     parser.add_argument("--branch-prefix", default="prepare-authors-")
     parser.add_argument("--git-author-name", default="Conda Bot")
@@ -87,15 +71,13 @@ def add_prepare_args(parser: ArgumentParser) -> None:
         default=os.environ.get("GITHUB_REPOSITORY", ""),
     )
     parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""))
+    return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
-        if args.command == "check":
-            check_authors(args)
-        else:
-            prepare_authors(args)
+        prepare_authors(args)
     except ActionError as err:
         print(f"::error::{err}", file=sys.stderr)
         return 1
@@ -139,61 +121,10 @@ def github_required_authors(analysis: AuthorAnalysis) -> list[tuple[str, str]]:
     ]
 
 
-def check_authors(args: Namespace) -> None:
-    read_token = require_github_token()
-    authors_path = Path(args.authors_path)
-    metadata, _ = load_metadata(authors_path)
-    repo_full = get_repo_full(args.git_remote)
-    warn_if_missing_repo_full(repo_full, args.git_remote)
-    analysis = analyze_authors(
-        metadata,
-        since=args.since,
-        repo_full=repo_full,
-        get_github_login_fn=make_github_login_fn(read_token),
-    )
-
-    summary_lines = emit_missing_github_warnings(analysis.missing_github_keys)
-
-    if not analysis.alternate_email_updates and not analysis.new_authors:
-        if summary_lines:
-            write_summary("\n".join(summary_lines))
-        else:
-            write_summary("All authors are present in `.authors.yml`.")
-        write_output("changed", "false")
-        return
-
-    messages: list[str] = []
-    if analysis.alternate_email_updates:
-        messages.append(
-            f"Found {len(analysis.alternate_email_updates)} existing contributor(s) "
-            "needing alternate_emails or aliases updates:"
-        )
-        for entry, commit, _github_login in analysis.alternate_email_updates:
-            parts: list[str] = []
-            if commit.email != entry["email"] and commit.email not in entry.get(
-                "alternate_emails", []
-            ):
-                parts.append(f"add {commit.email!r} to alternate_emails")
-            if commit.name != entry["name"] and commit.name not in entry.get(
-                "aliases", []
-            ):
-                parts.append(f"add {commit.name!r} to aliases")
-            detail = "; ".join(parts) if parts else "update metadata"
-            messages.append(f"- {entry['name']}: {detail}")
-    if analysis.new_authors:
-        messages.append(f"Found {len(analysis.new_authors)} new contributor(s):")
-        for commit in analysis.new_authors:
-            messages.append(f"- {commit['name']} <{commit['email']}>")
-
-    write_summary("\n".join(summary_lines + messages))
-    write_output("changed", "true")
-    raise ActionError("\n".join(messages))
-
-
 def prepare_authors(args: Namespace) -> None:
     branch = f"{args.branch_prefix}{args.base_branch}"
     if branch == args.base_branch:
-        raise ActionError("branch-prefix must not be empty in prepare mode.")
+        raise ActionError("branch-prefix must not be empty.")
 
     read_token = require_github_token()
     if not args.token:
