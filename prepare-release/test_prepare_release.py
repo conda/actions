@@ -8,16 +8,32 @@ from pathlib import Path
 import pytest
 
 import prepare_release as prepare_release_module
+import release_common as release_common_module
 from prepare_release import (
+    MAX_FAILED_LOGIN_LOOKUPS,
+    MAX_LOGIN_LOOKUPS_PER_EMAIL,
     ActionError,
+    ContributorCommit,
+    collect_contributors,
     collect_fragments,
     ensure_allowed_paths,
+    first_merged_pr_url,
+    get_contributor_commits,
     infer_next_version,
+    is_first_timer,
+    merge_changelog_entry,
     prepare_release,
     render_changelog_entry,
+    render_contributors,
+    resolve_logins,
     update_changelog,
     verify_context,
 )
+
+
+def patch_run(monkeypatch: pytest.MonkeyPatch, fake_run: object) -> None:
+    monkeypatch.setattr(prepare_release_module, "run", fake_run)
+    monkeypatch.setattr(release_common_module, "run", fake_run)
 
 
 def write_workflow_run_event(
@@ -107,6 +123,7 @@ def mock_prepare_commands(
         return "https://github.com/conda/conda/pull/123"
 
     monkeypatch.setattr(prepare_release_module, "run", fake_run)
+    monkeypatch.setattr(release_common_module, "run", fake_run)
     monkeypatch.setattr(
         prepare_release_module,
         "create_or_update_pr",
@@ -212,16 +229,13 @@ def test_prepare_release_skips_stale_workflow_run(
     prepare_release(prepare_args())
 
     commands = [command for command, _ in calls]
-    assert commands[-2:] == [
-        ["gh", "auth", "setup-git"],
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--heads",
-            "origin",
-            "refs/heads/26.7.x",
-        ],
+    assert commands[-1] == [
+        "git",
+        "ls-remote",
+        "--exit-code",
+        "--heads",
+        "origin",
+        "refs/heads/26.7.x",
     ]
     assert not any(command[:2] == ["git", "push"] for command in commands)
     assert not pull_requests
@@ -240,16 +254,8 @@ def test_prepare_release_publishes_when_remote_head_matches(
     prepare_release(prepare_args())
 
     commands = [command for command, _ in calls]
-    assert commands[-3:] == [
+    assert commands[-2:] == [
         ["gh", "auth", "setup-git"],
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--heads",
-            "origin",
-            "refs/heads/26.7.x",
-        ],
         [
             "git",
             "push",
@@ -258,9 +264,19 @@ def test_prepare_release_publishes_when_remote_head_matches(
             "release-notes-26.7.0",
         ],
     ]
-    lookup_env = calls[-2][1]
-    assert lookup_env is not None
-    assert lookup_env["GH_TOKEN"] == "test-token"
+    lookup = next(
+        (command, env) for command, env in calls if command[:2] == ["git", "ls-remote"]
+    )
+    assert lookup[0] == [
+        "git",
+        "ls-remote",
+        "--exit-code",
+        "--heads",
+        "origin",
+        "refs/heads/26.7.x",
+    ]
+    assert lookup[1] is not None
+    assert lookup[1]["GH_TOKEN"] == "test-token"
     assert pull_requests == [
         {
             "repository": "conda/conda",
@@ -299,7 +315,8 @@ def test_prepare_release_fails_closed_when_publish_check_fails(
         prepare_release(prepare_args())
 
     commands = [command for command, _ in calls]
-    assert ["gh", "auth", "setup-git"] in commands
+    if not lookup_error:
+        assert ["gh", "auth", "setup-git"] in commands
     assert not any(command[:2] == ["git", "push"] for command in commands)
     assert not pull_requests
 
@@ -432,3 +449,573 @@ def test_ensure_allowed_paths() -> None:
             changelog_path=Path("CHANGELOG.md"),
             news_paths=[Path("news/123-fix")],
         )
+
+
+def test_get_contributor_commits(monkeypatch: pytest.MonkeyPatch) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        return "sha1\0alice@example.com\0sha2\0bob@example.com\0"
+
+    monkeypatch.setattr(prepare_release_module, "run", fake_run)
+
+    assert get_contributor_commits("26.6.1") == [
+        ContributorCommit(hash="sha1", email="alice@example.com"),
+        ContributorCommit(hash="sha2", email="bob@example.com"),
+    ]
+    assert commands[0][-1] == "26.6.1..HEAD"
+
+    commands.clear()
+    get_contributor_commits("")
+    assert commands[0][-1] == "HEAD"
+
+
+def test_resolve_logins_caches_and_skips_unresolvable(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        calls.append(command)
+        sha = command[-1].rsplit("/", 1)[-1]
+        if sha == "sha2":
+            raise ActionError("lookup failed")
+        return json.dumps({"author": {"login": f"user-{sha}"}})
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash="sha1", email="a@example.com"),
+        ContributorCommit(hash="sha2", email="b@example.com"),
+        ContributorCommit(hash="sha3", email="a@example.com"),
+    ]
+
+    assert resolve_logins(commits, "conda/conda", {}) == {
+        "user-sha1": "user-sha1",
+    }
+    assert len(calls) == 2
+    assert "::warning::Failed to resolve GitHub login" in capsys.readouterr().err
+
+
+def test_resolve_logins_tries_all_hashes_per_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        sha = command[-1].rsplit("/", 1)[-1]
+        calls.append(sha)
+        if sha == "sha1":
+            return json.dumps({"author": None})
+        return json.dumps({"author": {"login": "alice"}})
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash="sha1", email="a@example.com"),
+        ContributorCommit(hash="sha2", email="a@example.com"),
+    ]
+
+    assert resolve_logins(commits, "conda/conda", {}) == {"alice": "alice"}
+    assert calls == ["sha1", "sha2"]
+
+
+def test_resolve_logins_caps_lookup_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls = 0
+
+    def fake_run(*args: object, **kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        raise ActionError("lookup failed")
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
+        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+    ]
+
+    assert resolve_logins(commits, "conda/conda", {}) == {}
+    assert calls == MAX_FAILED_LOGIN_LOOKUPS
+    assert (
+        "::warning::Skipping remaining GitHub login lookups" in capsys.readouterr().err
+    )
+
+
+def test_resolve_logins_caps_hashes_per_email(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls = 0
+
+    def fake_run(*args: object, **kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        raise ActionError("lookup failed")
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash=f"sha{index}", email="a@example.com")
+        for index in range(MAX_LOGIN_LOOKUPS_PER_EMAIL + 3)
+    ]
+
+    assert resolve_logins(commits, "conda/conda", {}) == {}
+    assert calls == MAX_LOGIN_LOOKUPS_PER_EMAIL
+    assert (
+        "::warning::Skipping remaining GitHub login lookups"
+        not in capsys.readouterr().err
+    )
+
+
+def test_resolve_logins_successes_do_not_count_toward_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls = 0
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        sha = command[-1].rsplit("/", 1)[-1]
+        return json.dumps({"author": {"login": f"user-{sha}"}})
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
+        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+    ]
+
+    result = resolve_logins(commits, "conda/conda", {})
+    assert result == {
+        f"user-sha{index}": f"user-sha{index}"
+        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+    }
+    assert calls == MAX_FAILED_LOGIN_LOOKUPS + 5
+    assert (
+        "::warning::Skipping remaining GitHub login lookups"
+        not in capsys.readouterr().err
+    )
+
+
+def test_is_first_timer_without_previous_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_run(
+        monkeypatch,
+        lambda *args, **kwargs: pytest.fail("No commands should run."),
+    )
+
+    assert is_first_timer("alice", "", "conda/conda", {}, "26.7.x")
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [("[]", True), ('[{"sha": "old"}]', False)],
+)
+def test_is_first_timer_queries_prior_commits_on_release_branch(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: str,
+    expected: bool,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        return payload
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+
+    assert (
+        is_first_timer(
+            "alice",
+            "2026-05-01T00:00:00+00:00",
+            "conda/conda",
+            {},
+            "26.7.x",
+        )
+        is expected
+    )
+    assert len(commands) == 1
+    assert commands[0] == [
+        "gh",
+        "api",
+        "repos/conda/conda/commits",
+        "-f",
+        "author=alice",
+        "-f",
+        "until=2026-05-01T00:00:00+00:00",
+        "-F",
+        "per_page=1",
+        "-f",
+        "sha=26.7.x",
+    ]
+
+
+def test_is_first_timer_encodes_until_offset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        return "[]"
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+
+    assert is_first_timer(
+        "alice",
+        "2026-05-01T00:00:00+00:00",
+        "conda/conda",
+        {},
+        "26.7.x",
+    )
+    # The +00:00 offset must survive as a discrete -f value so gh URL-encodes
+    # it; an unencoded + in a query string decodes to a space.
+    assert "until=2026-05-01T00:00:00+00:00" in commands[0]
+    assert not any("?" in argument for argument in commands[0])
+
+
+def test_is_first_timer_degrades_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(*args: object, **kwargs: object) -> str:
+        raise ActionError("lookup failed")
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+
+    assert not is_first_timer(
+        "alice",
+        "2026-05-01T00:00:00+00:00",
+        "conda/conda",
+        {},
+        "26.7.x",
+    )
+    assert "::warning::" in capsys.readouterr().err
+
+
+def test_first_merged_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        release_common_module,
+        "run",
+        lambda *args, **kwargs: json.dumps(
+            [{"url": "https://github.com/conda/conda/pull/42"}]
+        ),
+    )
+
+    assert (
+        first_merged_pr_url("alice", "conda/conda", {})
+        == "https://github.com/conda/conda/pull/42"
+    )
+
+
+def test_first_merged_pr_url_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(release_common_module, "run", lambda *args, **kwargs: "[]")
+    assert first_merged_pr_url("alice", "conda/conda", {}) is None
+
+    def fake_run(*args: object, **kwargs: object) -> str:
+        raise ActionError("lookup failed")
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    assert first_merged_pr_url("alice", "conda/conda", {}) is None
+
+
+def test_render_contributors() -> None:
+    body = render_contributors(
+        [
+            ("Bob", None),
+            ("alice", "https://github.com/conda/conda/pull/42"),
+            ("dependabot[bot]", None),
+        ]
+    )
+
+    assert body == (
+        "* @alice made their first commit in "
+        "https://github.com/conda/conda/pull/42\n"
+        "* @Bob\n"
+        "* @dependabot[bot]"
+    )
+
+
+def test_render_changelog_entry_with_contributors() -> None:
+    entry = render_changelog_entry(
+        "26.7.0",
+        "2026-06-05",
+        {"Bug fixes": ["* Fix bug. (#123)"]},
+        "* @alice\n* @Bob",
+    )
+
+    assert entry == (
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Bug fixes\n\n"
+        "* Fix bug. (#123)\n\n"
+        "### Contributors\n\n"
+        "* @alice\n"
+        "* @Bob\n\n\n"
+    )
+
+
+def test_merge_changelog_entry_replaces_contributors() -> None:
+    release = (
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Enhancements\n\n"
+        "* Existing enhancement. (#100)\n\n"
+        "### Contributors\n\n"
+        "* @alice\n\n\n"
+    )
+    entry = "## 26.7.0 (2026-08-12)\n\n### Contributors\n\n* @alice\n* @Bob\n\n\n"
+
+    assert merge_changelog_entry(release, entry) == (
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Enhancements\n\n"
+        "* Existing enhancement. (#100)\n\n"
+        "### Contributors\n\n"
+        "* @alice\n"
+        "* @Bob\n\n\n"
+    )
+
+
+def test_merge_changelog_entry_appends_contributors() -> None:
+    release = (
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Enhancements\n\n"
+        "* Existing enhancement. (#100)\n\n\n"
+    )
+    entry = "## 26.7.0 (2026-08-12)\n\n### Contributors\n\n* @alice\n\n\n"
+
+    assert merge_changelog_entry(release, entry) == (
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Enhancements\n\n"
+        "* Existing enhancement. (#100)\n\n"
+        "### Contributors\n\n"
+        "* @alice\n\n\n"
+    )
+
+
+def test_collect_contributors_without_previous_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        if command[:3] == ["git", "tag", "--merged"]:
+            return ""
+        if command[:2] == ["git", "log"]:
+            return "sha1\0alice@example.com\0sha2\0bob@example.com\0"
+        if command[:2] == ["gh", "api"]:
+            sha = command[-1].rsplit("/", 1)[-1]
+            login = {"sha1": "alice", "sha2": "Bob"}[sha]
+            return json.dumps({"author": {"login": login}})
+        if command[:3] == ["gh", "search", "prs"]:
+            login = command[command.index("--author") + 1]
+            return json.dumps([{"url": f"https://github.com/conda/conda/pull/{login}"}])
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+
+    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == (
+        "* @alice made their first commit in "
+        "https://github.com/conda/conda/pull/alice\n"
+        "* @Bob made their first commit in "
+        "https://github.com/conda/conda/pull/Bob"
+    )
+    assert not any(
+        any(argument.startswith("author=") for argument in command)
+        for command in commands
+    )
+
+
+def test_collect_contributors_scopes_previous_tag_to_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "26.7.0\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return "sha1\0alice@example.com\0"
+        if command[:2] == ["git", "log"]:
+            return "2026-05-01T00:00:00+00:00\n"
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
+            return '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"]:
+            return json.dumps({"author": {"login": "alice"}})
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+
+    assert (
+        collect_contributors(
+            "conda/conda",
+            {},
+            base_branch="26.7.x",
+            tag_prefix="26.7.",
+        )
+        == "* @alice"
+    )
+    assert commands[0] == [
+        "git",
+        "tag",
+        "--merged",
+        "HEAD",
+        "--list",
+        "26.7.*",
+        "--list",
+        "v26.7.*",
+    ]
+
+
+def test_collect_contributors_falls_back_to_previous_series_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "" if "--list" in command else "26.6.1\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return "sha1\0alice@example.com\0"
+        if command[:2] == ["git", "log"]:
+            return "2026-05-01T00:00:00+00:00\n"
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
+            return '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"]:
+            return json.dumps({"author": {"login": "alice"}})
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+
+    assert (
+        collect_contributors(
+            "conda/conda",
+            {},
+            base_branch="26.7.x",
+            tag_prefix="26.7.",
+        )
+        == "* @alice"
+    )
+    log_command = next(
+        command
+        for command in commands
+        if command[:2] == ["git", "log"] and "-z" in command
+    )
+    assert log_command[-1] == "26.6.1..HEAD"
+    assert any(
+        any(argument.startswith("author=") for argument in command)
+        for command in commands
+    )
+
+
+def test_collect_contributors_dedupes_logins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "26.6.1\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return "sha1\0alice@example.com\0sha2\0alice@work.example.com\0"
+        if command[:2] == ["git", "log"]:
+            return "2026-05-01T00:00:00+00:00\n"
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
+            return '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"]:
+            return json.dumps({"author": {"login": "alice"}})
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+
+    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == "* @alice"
+
+
+def test_collect_contributors_skips_unresolvable_authors(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "26.6.1\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return "sha1\0alice@example.com\0sha2\0ghost@example.com\0"
+        if command[:2] == ["git", "log"]:
+            return "2026-05-01T00:00:00+00:00\n"
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
+            return '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"]:
+            if command[-1].endswith("/sha2"):
+                return json.dumps({"author": None})
+            return json.dumps({"author": {"login": "alice"}})
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+
+    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == "* @alice"
+    assert (
+        "::warning::No GitHub login associated with commit" in capsys.readouterr().err
+    )
+
+
+def test_prepare_release_adds_contributors_section(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    gh_envs: list[dict[str, str] | None] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture: bool = False,
+        env: dict[str, str] | None = None,
+    ) -> str:
+        if command[:2] == ["gh", "api"] or command[:3] == ["gh", "search", "prs"]:
+            gh_envs.append(env)
+        if command[:3] == ["git", "tag", "--list"]:
+            return ""
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "26.6.1\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return "sha1\0alice@example.com\0sha2\0bob@example.com\0"
+        if command[:2] == ["git", "log"]:
+            return "2026-05-01T00:00:00+00:00\n"
+        if command[:3] == ["git", "status", "--porcelain"]:
+            return " M CHANGELOG.md\n D news/123-fix\n"
+        if command[:2] == ["git", "ls-remote"]:
+            return f"{'a' * 40}\trefs/heads/26.7.x\n"
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
+            return "[]" if "author=alice" in command else '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"]:
+            sha = command[-1].rsplit("/", 1)[-1]
+            login = {"sha1": "alice", "sha2": "Bob"}[sha]
+            return json.dumps({"author": {"login": login}})
+        if command[:3] == ["gh", "search", "prs"]:
+            return json.dumps([{"url": "https://github.com/conda/conda/pull/42"}])
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+    monkeypatch.setattr(
+        prepare_release_module,
+        "create_or_update_pr",
+        lambda **kwargs: "https://github.com/conda/conda/pull/123",
+    )
+
+    prepare_release(prepare_args())
+
+    changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert (
+        "### Bug fixes\n\n"
+        "* Fix the thing. (#123)\n\n"
+        "### Contributors\n\n"
+        "* @alice made their first commit in "
+        "https://github.com/conda/conda/pull/42\n"
+        "* @Bob\n"
+    ) in changelog
+    assert gh_envs
+    assert all(env is not None and env["GH_TOKEN"] == "test-token" for env in gh_envs)

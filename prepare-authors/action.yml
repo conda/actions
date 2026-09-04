@@ -11,7 +11,8 @@ inputs:
   since:
     description: >-
       Commit range to scan. Use tag for commits since the highest final release
-      tag (X.Y.Z or vX.Y.Z; pre-releases ignored), or all. Fails if no such tag
+      tag (X.Y.Z or vX.Y.Z; pre-releases ignored) merged into HEAD
+      (git tag --merged HEAD; not all repo tags), or all. Fails if no such tag
       exists.
     default: tag
   base-branch:
@@ -114,6 +115,7 @@ runs:
       env:
         # Keep reads on the job token; do not set GH_TOKEN to inputs.token here.
         GITHUB_TOKEN: ${{ github.token }}
+        PYTHONPATH: ${{ github.action_path }}/..
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_AUTHORS_PATH: ${{ inputs.authors-path }}
         INPUT_SINCE: ${{ inputs.since }}

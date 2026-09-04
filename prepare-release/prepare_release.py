@@ -4,23 +4,36 @@ import fnmatch
 import json
 import os
 import re
-import subprocess
 import sys
 from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from news_common import SECTION_ORDER, is_news_fragment, parse_sectioned_news
+from release_common import (
+    ActionError,
+    get_github_login,
+    get_latest_tag,
+    parse_nul_records,
+    run,
+    run_json,
+)
 
 VERSION_BRANCH_RE = re.compile(r"^(?P<major_minor>\d+\.\d+)\.x$")
 TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.(?P<micro>\d+))$")
 CURRENT_DEVELOPMENTS = "[//]: # (current developments)"
 SECTION_HEADING_RE = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.MULTILINE)
+CONTRIBUTORS_SECTION = "Contributors"
+MAX_LOGIN_LOOKUPS_PER_EMAIL = 5
+MAX_FAILED_LOGIN_LOOKUPS = 20
 
 
-class ActionError(Exception):
-    pass
+@dataclass(frozen=True)
+class ContributorCommit:
+    hash: str
+    email: str
 
 
 def parse_args(argv: list[str] | None = None) -> Namespace:
@@ -92,27 +105,9 @@ def prepare_release(args: Namespace) -> None:
     run(["git", "config", "user.email", args.git_author_email])
     if not args.token:
         raise ActionError("No GitHub token was provided.")
+    if not args.repository:
+        raise ActionError("No GitHub repository was provided.")
     git_env = os.environ | {"GH_TOKEN": args.token}
-
-    entry = render_changelog_entry(version, release_date, fragments)
-    update_changelog(Path(args.changelog_path), entry, version)
-
-    for path in fragment_paths:
-        path.unlink()
-
-    changed_paths = get_changed_paths()
-    ensure_allowed_paths(
-        changed_paths,
-        changelog_path=Path(args.changelog_path),
-        news_paths=fragment_paths,
-    )
-    if not changed_paths:
-        print("No release note changes to commit.")
-        return
-
-    run(["git", "add", args.changelog_path, *map(str, fragment_paths)])
-    run(["git", "commit", "-m", f"Prepare release notes for {version}"])
-    run(["gh", "auth", "setup-git"], env=git_env)
 
     remote_ref = f"refs/heads/{base_branch}"
     remote = run(
@@ -136,6 +131,32 @@ def prepare_release(args: Namespace) -> None:
             f"{context['head_sha']} is no longer the branch tip."
         )
         return
+
+    contributors = collect_contributors(
+        args.repository,
+        env=git_env,
+        base_branch=base_branch,
+        tag_prefix=f"{version.rpartition('.')[0]}.",
+    )
+    entry = render_changelog_entry(version, release_date, fragments, contributors)
+    update_changelog(Path(args.changelog_path), entry, version)
+
+    for path in fragment_paths:
+        path.unlink()
+
+    changed_paths = get_changed_paths()
+    ensure_allowed_paths(
+        changed_paths,
+        changelog_path=Path(args.changelog_path),
+        news_paths=fragment_paths,
+    )
+    if not changed_paths:
+        print("No release note changes to commit.")
+        return
+
+    run(["git", "add", args.changelog_path, *map(str, fragment_paths)])
+    run(["git", "commit", "-m", f"Prepare release notes for {version}"])
+    run(["gh", "auth", "setup-git"], env=git_env)
 
     run(["git", "push", "--force-with-lease", "origin", release_branch], env=git_env)
 
@@ -229,6 +250,166 @@ def infer_next_version(branch: str) -> str:
     return f"{major_minor}.{next_micro}"
 
 
+def get_contributor_commits(prev_tag: str) -> list[ContributorCommit]:
+    commits_range = f"{prev_tag}..HEAD" if prev_tag else "HEAD"
+    output = run(
+        ["git", "log", "-z", "--format=%H%x00%ae", commits_range],
+        capture=True,
+    )
+    return [
+        ContributorCommit(hash=fields[0], email=fields[1])
+        for fields in parse_nul_records(output, 2)
+    ]
+
+
+def resolve_logins(
+    commits: list[ContributorCommit],
+    repository: str,
+    env: dict[str, str],
+) -> dict[str, str]:
+    hashes_by_email: dict[str, list[str]] = {}
+    for commit in commits:
+        hashes = hashes_by_email.setdefault(commit.email, [])
+        if commit.hash not in hashes:
+            hashes.append(commit.hash)
+    unique: dict[str, str] = {}
+    failures = 0
+    for hashes in hashes_by_email.values():
+        for commit_hash in hashes[:MAX_LOGIN_LOOKUPS_PER_EMAIL]:
+            if failures >= MAX_FAILED_LOGIN_LOOKUPS:
+                print(
+                    f"::warning::Skipping remaining GitHub login lookups "
+                    f"after {MAX_FAILED_LOGIN_LOOKUPS} unresolved lookups.",
+                    file=sys.stderr,
+                )
+                return unique
+            if login := get_github_login(repository, commit_hash, env=env):
+                unique.setdefault(login.casefold(), login)
+                break
+            failures += 1
+    return unique
+
+
+def get_tag_commit_date(tag: str) -> str:
+    return run(["git", "log", "-1", "--format=%cI", tag], capture=True).strip()
+
+
+def is_first_timer(
+    login: str,
+    prev_tag_date: str,
+    repository: str,
+    env: dict[str, str],
+    base_branch: str,
+) -> bool:
+    if not prev_tag_date:
+        return True
+    # Known limitation: the history check filters by committer date, so a
+    # rebased or cherry-picked older commit suppresses the first-timer
+    # annotation even when the author is new to the release branch.
+    try:
+        commits = run_json(
+            [
+                "gh",
+                "api",
+                f"repos/{repository}/commits",
+                "-f",
+                f"author={login}",
+                "-f",
+                f"until={prev_tag_date}",
+                "-F",
+                "per_page=1",
+                "-f",
+                f"sha={base_branch}",
+            ],
+            env=env,
+        )
+    except ActionError as err:
+        print(
+            f"::warning::Failed to check commit history for {login}: {err}",
+            file=sys.stderr,
+        )
+        return False
+    return not commits
+
+
+def first_merged_pr_url(
+    login: str,
+    repository: str,
+    env: dict[str, str],
+) -> str | None:
+    try:
+        prs = run_json(
+            [
+                "gh",
+                "search",
+                "prs",
+                "--repo",
+                repository,
+                "--author",
+                login,
+                "--merged",
+                "--sort",
+                "created",
+                "--order",
+                "asc",
+                "--limit",
+                "1",
+                "--json",
+                "url",
+            ],
+            env=env,
+        )
+    except ActionError as err:
+        print(
+            f"::warning::Failed to look up first merged PR for {login}: {err}",
+            file=sys.stderr,
+        )
+        return None
+    if not prs:
+        return None
+    url = prs[0].get("url")
+    return str(url) if url else None
+
+
+def collect_contributors(
+    repository: str,
+    env: dict[str, str],
+    *,
+    base_branch: str,
+    tag_prefix: str = "",
+) -> str:
+    prev_tag = get_latest_tag(prefix=tag_prefix)
+    if not prev_tag and tag_prefix:
+        # First release of a series: fall back to the previous series' final tag.
+        prev_tag = get_latest_tag()
+    commits = get_contributor_commits(prev_tag)
+    if not commits:
+        return ""
+
+    unique = resolve_logins(commits, repository, env)
+    if not unique:
+        return ""
+
+    prev_tag_date = get_tag_commit_date(prev_tag) if prev_tag else ""
+    entries: list[tuple[str, str | None]] = []
+    for login in unique.values():
+        pr_url = None
+        if is_first_timer(login, prev_tag_date, repository, env, base_branch):
+            pr_url = first_merged_pr_url(login, repository, env)
+        entries.append((login, pr_url))
+    return render_contributors(entries)
+
+
+def render_contributors(entries: list[tuple[str, str | None]]) -> str:
+    lines = []
+    for login, pr_url in sorted(entries, key=lambda entry: entry[0].casefold()):
+        if pr_url:
+            lines.append(f"* @{login} made their first commit in {pr_url}")
+        else:
+            lines.append(f"* @{login}")
+    return "\n".join(lines)
+
+
 def collect_fragments(paths: list[Path]) -> dict[str, list[str]]:
     fragments: dict[str, list[str]] = {section: [] for section in SECTION_ORDER}
     errors: list[str] = []
@@ -260,6 +441,7 @@ def render_changelog_entry(
     version: str,
     release_date: str,
     fragments: dict[str, list[str]],
+    contributors: str = "",
 ) -> str:
     lines = [f"## {version} ({release_date})", ""]
 
@@ -271,6 +453,11 @@ def render_changelog_entry(
         lines.extend([f"### {section}", ""])
         for item in items:
             lines.extend(item.splitlines())
+        lines.append("")
+
+    if contributors:
+        lines.extend([f"### {CONTRIBUTORS_SECTION}", ""])
+        lines.extend(contributors.splitlines())
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n\n\n"
@@ -316,7 +503,7 @@ def merge_changelog_entry(release: str, entry: str) -> str:
             )
         ].strip()
         for index, match in enumerate(entry_headings)
-        if match.group("title") in SECTION_ORDER
+        if match.group("title") in (*SECTION_ORDER, CONTRIBUTORS_SECTION)
     }
 
     for section in SECTION_ORDER:
@@ -363,7 +550,31 @@ def merge_changelog_entry(release: str, entry: str) -> str:
             insert_at = len(release.rstrip())
             release = release[:insert_at] + "\n\n" + block + release[insert_at:]
 
+    contributors = incoming.get(CONTRIBUTORS_SECTION)
+    if contributors:
+        release = merge_contributors_section(release, contributors)
+
     return release
+
+
+def merge_contributors_section(release: str, body: str) -> str:
+    headings = list(SECTION_HEADING_RE.finditer(release))
+    existing = next(
+        (match for match in headings if match.group("title") == CONTRIBUTORS_SECTION),
+        None,
+    )
+    if existing:
+        index = headings.index(existing)
+        section_end = (
+            headings[index + 1].start() if index + 1 < len(headings) else len(release)
+        )
+        heading_end = len(release[: existing.end()].rstrip())
+        trailing = release[len(release[:section_end].rstrip()) : section_end]
+        return release[:heading_end] + "\n\n" + body + trailing + release[section_end:]
+
+    insert_at = len(release.rstrip())
+    block = f"### {CONTRIBUTORS_SECTION}\n\n{body}"
+    return release[:insert_at] + "\n\n" + block + release[insert_at:]
 
 
 def get_changed_paths() -> list[Path]:
@@ -475,27 +686,6 @@ def create_or_update_pr(
         capture=True,
         env=env,
     ).strip()
-
-
-def run(
-    command: list[str],
-    *,
-    capture: bool = False,
-    env: dict[str, str] | None = None,
-) -> str:
-    try:
-        result = subprocess.run(
-            command,
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE if capture else None,
-            stderr=subprocess.PIPE if capture else None,
-            env=env,
-        )
-    except subprocess.CalledProcessError as err:
-        detail = err.stderr.strip() if err.stderr else str(err)
-        raise ActionError(f"Command failed: {' '.join(command)}\n{detail}") from err
-    return result.stdout if capture else ""
 
 
 def write_output(name: str, value: str) -> None:
