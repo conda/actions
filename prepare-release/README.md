@@ -48,6 +48,33 @@ The action checks the same security conditions internally before checkout:
 An existing news directory with no eligible fragments is a successful no-op.
 A missing news directory or a malformed fragment fails the action.
 
+Each generated entry ends with a `Contributors` section listing the GitHub
+logins of all commit authors since the previous final release tag (`X.Y.Z` or
+`vX.Y.Z`) in the branch's `X.Y` series merged into the release branch, sorted
+alphabetically. First-time contributors are annotated with a link to their
+earliest merged PR:
+
+```
+### Contributors
+
+* @alice made their first commit in https://github.com/conda/conda/pull/123
+* @bob
+* @dependabot[bot]
+```
+
+When no previous release tag exists, all of history is scanned and every
+contributor is treated as a first-timer. Commits that cannot be resolved to a
+GitHub account are skipped with a warning, and lookup failures degrade to
+warnings rather than failing the release. Re-running the action regenerates
+and replaces the section instead of merging into it. The section is omitted
+when no commit author resolves to a GitHub login, and uses the existing
+`token` input for the GitHub API lookups.
+
+First-timer detection checks for earlier commits by the author on the release
+branch, filtered by committer date. A rebased or cherry-picked older commit
+can therefore suppress the first-timer annotation even when the author is new
+to the release branch.
+
 Before pushing, the action verifies that the triggering SHA is still the tip of
 the release branch. A stale workflow run exits successfully without pushing or
 creating or updating a pull request. Authentication or branch lookup failures

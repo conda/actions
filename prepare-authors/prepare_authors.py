@@ -14,17 +14,19 @@ from typing import TYPE_CHECKING, Any
 
 from ruamel.yaml import YAML
 
+from release_common import (
+    ActionError,
+    get_github_login,
+    get_latest_tag,
+    parse_nul_records,
+    run,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 AuthorEntry = dict[str, Any]
 AuthorIndex = dict[str, AuthorEntry | None]
-
-RELEASE_TAG_PATTERN = re.compile(r"^v?(\d+\.\d+\.\d+)$")
-
-
-class ActionError(Exception):
-    pass
 
 
 @dataclass(frozen=True)
@@ -774,32 +776,6 @@ def classify_commits(
     return alternate_email_updates, new_authors
 
 
-def normalize_release_tag(tag: str) -> tuple[int, ...] | None:
-    """Return numeric version parts for a final release tag, else None."""
-    match = RELEASE_TAG_PATTERN.fullmatch(tag)
-    if not match:
-        return None
-    return tuple(int(part) for part in match.group(1).split("."))
-
-
-def select_latest_release_tag(tags: list[str]) -> str:
-    """Pick the highest final release tag by normalized numeric version."""
-    scored = [
-        (version, tag)
-        for tag in tags
-        if (version := normalize_release_tag(tag)) is not None
-    ]
-    if not scored:
-        return ""
-    return max(scored)[1]
-
-
-def get_latest_tag() -> str:
-    output = run(["git", "tag"], capture=True)
-    tags = output.splitlines() if output else []
-    return select_latest_release_tag(tags)
-
-
 def get_commits_since(since: str) -> tuple[list[CommitAuthor], str]:
     if since == "all":
         commits_range = "HEAD"
@@ -828,24 +804,15 @@ def get_commits_since(since: str) -> tuple[list[CommitAuthor], str]:
         ],
         capture=True,
     )
-    commits: list[CommitAuthor] = []
-    if not output:
-        return commits, since_label
-
-    fields = output.split("\0")
-    if fields[-1] == "":
-        fields.pop()
-    if len(fields) % 4:
-        raise ActionError("Failed to parse NUL-delimited git log output.")
-    for offset in range(0, len(fields), 4):
-        commits.append(
-            CommitAuthor(
-                hash=fields[offset],
-                email=fields[offset + 1],
-                name=fields[offset + 2],
-                subject=fields[offset + 3],
-            )
+    commits = [
+        CommitAuthor(
+            hash=fields[0],
+            email=fields[1],
+            name=fields[2],
+            subject=fields[3],
         )
+        for fields in parse_nul_records(output, 4)
+    ]
     return commits, since_label
 
 
@@ -858,33 +825,13 @@ def require_github_token() -> str:
 
 def make_github_login_fn(token: str) -> Callable[[str, str], str | None]:
     def _login(repo: str, commit_hash: str) -> str | None:
-        return get_github_login(repo, commit_hash, token=token)
-
-    return _login
-
-
-def get_github_login(repo: str, commit_hash: str, *, token: str) -> str | None:
-    try:
-        data = run_json(
-            ["gh", "api", f"repos/{repo}/commits/{commit_hash}"],
+        return get_github_login(
+            repo,
+            commit_hash,
             env=os.environ | {"GH_TOKEN": token},
         )
-    except ActionError as err:
-        print(
-            f"::warning::Failed to resolve GitHub login for "
-            f"{repo}@{commit_hash}: {err}",
-            file=sys.stderr,
-        )
-        return None
-    author = data.get("author") or {}
-    login = author.get("login")
-    if not login:
-        print(
-            f"::warning::No GitHub login associated with commit {repo}@{commit_hash}.",
-            file=sys.stderr,
-        )
-        return None
-    return str(login)
+
+    return _login
 
 
 def warn_if_missing_repo_full(repo_full: str, remote_alias: str) -> None:
@@ -1026,40 +973,6 @@ def create_or_update_pr(
         capture=True,
         env=env,
     ).strip()
-
-
-def run(
-    command: list[str],
-    *,
-    capture: bool = False,
-    env: dict[str, str] | None = None,
-) -> str:
-    try:
-        result = subprocess.run(
-            command,
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE if capture else None,
-            stderr=subprocess.PIPE if capture else None,
-            env=env,
-        )
-    except subprocess.CalledProcessError as err:
-        detail = err.stderr.strip() if err.stderr else str(err)
-        raise ActionError(f"Command failed: {' '.join(command)}\n{detail}") from err
-    # Preserve leading spaces (e.g. git porcelain " M path"); only trim newlines.
-    return result.stdout.rstrip("\n") if capture else ""
-
-
-def run_json(
-    command: list[str],
-    *,
-    env: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    output = run(command, capture=True, env=env)
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError as err:
-        raise ActionError(f"Failed to parse JSON from: {' '.join(command)}") from err
 
 
 def write_output(name: str, value: str) -> None:

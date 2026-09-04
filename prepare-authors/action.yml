@@ -114,6 +114,7 @@ runs:
       env:
         # Keep reads on the job token; do not set GH_TOKEN to inputs.token here.
         GITHUB_TOKEN: ${{ github.token }}
+        PYTHONPATH: ${{ github.action_path }}/..
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_AUTHORS_PATH: ${{ inputs.authors-path }}
         INPUT_SINCE: ${{ inputs.since }}

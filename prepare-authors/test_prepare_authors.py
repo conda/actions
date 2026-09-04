@@ -22,14 +22,12 @@ from prepare_authors import (
     find_existing_entry,
     get_changed_paths,
     get_commits_since,
-    get_github_login,
     github_required_authors,
     load_metadata,
-    normalize_release_tag,
+    make_github_login_fn,
     prepare_authors,
     require_github_token,
     save_metadata,
-    select_latest_release_tag,
     unresolved_missing_github_keys,
     update_existing_entry,
 )
@@ -922,29 +920,6 @@ def test_apply_updates_preserves_alternate_emails_and_aliases_on_new_author() ->
     ]
 
 
-def test_normalize_release_tag() -> None:
-    assert normalize_release_tag("26.7.0") == (26, 7, 0)
-    assert normalize_release_tag("v3.20.4") == (3, 20, 4)
-    assert normalize_release_tag("1.10.0") == (1, 10, 0)
-    assert normalize_release_tag("26.8.0rc1") is None
-    assert normalize_release_tag("4.14.0b2") is None
-    assert normalize_release_tag("pre-commit-hooks-v1") is None
-    assert normalize_release_tag("2026") is None
-    assert normalize_release_tag("26.8") is None
-    assert normalize_release_tag("26.8.0.1") is None
-
-
-def test_select_latest_release_tag_prefers_numeric_over_v_prefix() -> None:
-    assert (
-        select_latest_release_tag(["v3.20.4", "26.7.0", "25.1.0", "26.7.0rc1"])
-        == "26.7.0"
-    )
-    assert select_latest_release_tag(["1.9.0", "1.10.0"]) == "1.10.0"
-    assert select_latest_release_tag(["v1.2.3", "1.2.3"]) in {"v1.2.3", "1.2.3"}
-    assert select_latest_release_tag([]) == ""
-    assert select_latest_release_tag(["26.8.0rc1", "hooks-v1"]) == ""
-
-
 def test_get_commits_since_tag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1553,27 +1528,30 @@ def test_check_authors_requires_github_token(
         check_authors(Args())
 
 
-def test_get_github_login_passes_read_token_as_gh_token(
+def test_make_github_login_fn_passes_read_token_as_gh_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
 
-    def fake_run_json(command: list[str], *, env: dict[str, str] | None = None):
-        captured["command"] = command
+    def fake_get_github_login(
+        repo: str,
+        commit_hash: str,
+        *,
+        env: dict[str, str],
+    ) -> str | None:
+        captured["repo"] = repo
+        captured["commit_hash"] = commit_hash
         captured["env"] = env
-        return {"author": {"login": "alice"}}
+        return "alice"
 
     monkeypatch.setenv("GITHUB_TOKEN", "job-token")
-    with patch("prepare_authors.run_json", side_effect=fake_run_json):
-        login = get_github_login(
-            "conda/example",
-            "abc123",
-            token="read-token",
-        )
+    monkeypatch.setattr("prepare_authors.get_github_login", fake_get_github_login)
 
-    assert login == "alice"
-    assert captured["command"] == ["gh", "api", "repos/conda/example/commits/abc123"]
-    assert captured["env"] is not None
+    login_fn = make_github_login_fn("read-token")
+
+    assert login_fn("conda/example", "abc123") == "alice"
+    assert captured["repo"] == "conda/example"
+    assert captured["commit_hash"] == "abc123"
     assert captured["env"]["GH_TOKEN"] == "read-token"
     assert captured["env"]["GITHUB_TOKEN"] == "job-token"
 

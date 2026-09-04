@@ -24,6 +24,7 @@ addopts = [
   "--cov=prepare-release",
   "--cov=prepare-authors",
   "--cov=read-file",
+  "--cov=release_common",
   "--cov=template-files",
   "--cov-append",
   "--cov-branch",
@@ -64,5 +65,6 @@ known-first-party = [
   "prepare_release",
   "prepare_authors",
   "read_file",
+  "release_common",
   "template_files",
 ]
