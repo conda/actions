@@ -107,6 +107,29 @@ def prepare_release(args: Namespace) -> None:
         raise ActionError("No GitHub repository was provided.")
     git_env = os.environ | {"GH_TOKEN": args.token}
 
+    remote_ref = f"refs/heads/{base_branch}"
+    remote = run(
+        [
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "origin",
+            remote_ref,
+        ],
+        capture=True,
+        env=git_env,
+    ).split()
+    if len(remote) != 2 or remote[1] != remote_ref:
+        raise ActionError(f"Could not determine remote head for {base_branch!r}.")
+    remote_head = remote[0]
+    if remote_head != context["head_sha"]:
+        print(
+            f"Skipping stale workflow run for {base_branch}: "
+            f"{context['head_sha']} is no longer the branch tip."
+        )
+        return
+
     contributors = collect_contributors(
         args.repository,
         env=git_env,
@@ -132,29 +155,6 @@ def prepare_release(args: Namespace) -> None:
     run(["git", "add", args.changelog_path, *map(str, fragment_paths)])
     run(["git", "commit", "-m", f"Prepare release notes for {version}"])
     run(["gh", "auth", "setup-git"], env=git_env)
-
-    remote_ref = f"refs/heads/{base_branch}"
-    remote = run(
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--heads",
-            "origin",
-            remote_ref,
-        ],
-        capture=True,
-        env=git_env,
-    ).split()
-    if len(remote) != 2 or remote[1] != remote_ref:
-        raise ActionError(f"Could not determine remote head for {base_branch!r}.")
-    remote_head = remote[0]
-    if remote_head != context["head_sha"]:
-        print(
-            f"Skipping stale workflow run for {base_branch}: "
-            f"{context['head_sha']} is no longer the branch tip."
-        )
-        return
 
     run(["git", "push", "--force-with-lease", "origin", release_branch], env=git_env)
 
@@ -363,6 +363,9 @@ def collect_contributors(
     tag_prefix: str = "",
 ) -> str:
     prev_tag = get_latest_tag(prefix=tag_prefix)
+    if not prev_tag and tag_prefix:
+        # First release of a series: fall back to the previous series' final tag.
+        prev_tag = get_latest_tag()
     commits = get_contributor_commits(prev_tag)
     if not commits:
         return ""

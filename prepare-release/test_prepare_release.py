@@ -227,16 +227,13 @@ def test_prepare_release_skips_stale_workflow_run(
     prepare_release(prepare_args())
 
     commands = [command for command, _ in calls]
-    assert commands[-2:] == [
-        ["gh", "auth", "setup-git"],
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--heads",
-            "origin",
-            "refs/heads/26.7.x",
-        ],
+    assert commands[-1] == [
+        "git",
+        "ls-remote",
+        "--exit-code",
+        "--heads",
+        "origin",
+        "refs/heads/26.7.x",
     ]
     assert not any(command[:2] == ["git", "push"] for command in commands)
     assert not pull_requests
@@ -255,16 +252,8 @@ def test_prepare_release_publishes_when_remote_head_matches(
     prepare_release(prepare_args())
 
     commands = [command for command, _ in calls]
-    assert commands[-3:] == [
+    assert commands[-2:] == [
         ["gh", "auth", "setup-git"],
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--heads",
-            "origin",
-            "refs/heads/26.7.x",
-        ],
         [
             "git",
             "push",
@@ -273,9 +262,21 @@ def test_prepare_release_publishes_when_remote_head_matches(
             "release-notes-26.7.0",
         ],
     ]
-    lookup_env = calls[-2][1]
-    assert lookup_env is not None
-    assert lookup_env["GH_TOKEN"] == "test-token"
+    lookup = next(
+        (command, env)
+        for command, env in calls
+        if command[:2] == ["git", "ls-remote"]
+    )
+    assert lookup[0] == [
+        "git",
+        "ls-remote",
+        "--exit-code",
+        "--heads",
+        "origin",
+        "refs/heads/26.7.x",
+    ]
+    assert lookup[1] is not None
+    assert lookup[1]["GH_TOKEN"] == "test-token"
     assert pull_requests == [
         {
             "repository": "conda/conda",
@@ -314,7 +315,8 @@ def test_prepare_release_fails_closed_when_publish_check_fails(
         prepare_release(prepare_args())
 
     commands = [command for command, _ in calls]
-    assert ["gh", "auth", "setup-git"] in commands
+    if not lookup_error:
+        assert ["gh", "auth", "setup-git"] in commands
     assert not any(command[:2] == ["git", "push"] for command in commands)
     assert not pull_requests
 
@@ -751,6 +753,48 @@ def test_collect_contributors_scopes_previous_tag_to_branch(
         "--list",
         "v26.7.*",
     ]
+
+
+def test_collect_contributors_falls_back_to_previous_series_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "" if "--list" in command else "26.6.1\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return "sha1\0alice@example.com\0"
+        if command[:2] == ["git", "log"]:
+            return "2026-05-01T00:00:00+00:00\n"
+        if command[:2] == ["gh", "api"] and "commits?author=" in command[-1]:
+            return '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"]:
+            return json.dumps({"author": {"login": "alice"}})
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+
+    assert (
+        collect_contributors(
+            "conda/conda",
+            {},
+            base_branch="26.7.x",
+            tag_prefix="26.7.",
+        )
+        == "* @alice"
+    )
+    log_command = next(
+        command
+        for command in commands
+        if command[:2] == ["git", "log"] and "-z" in command
+    )
+    assert log_command[-1] == "26.6.1..HEAD"
+    assert any(
+        any("commits?author=" in argument for argument in command)
+        for command in commands
+    )
 
 
 def test_collect_contributors_dedupes_logins(
