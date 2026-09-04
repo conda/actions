@@ -26,6 +26,8 @@ TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.(?P<micro>\d+))$")
 CURRENT_DEVELOPMENTS = "[//]: # (current developments)"
 SECTION_HEADING_RE = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.MULTILINE)
 CONTRIBUTORS_SECTION = "Contributors"
+MAX_LOGIN_LOOKUPS_PER_EMAIL = 5
+MAX_FAILED_LOGIN_LOOKUPS = 20
 
 
 @dataclass(frozen=True)
@@ -271,11 +273,20 @@ def resolve_logins(
         if commit.hash not in hashes:
             hashes.append(commit.hash)
     unique: dict[str, str] = {}
+    failures = 0
     for hashes in hashes_by_email.values():
-        for commit_hash in hashes:
+        for commit_hash in hashes[:MAX_LOGIN_LOOKUPS_PER_EMAIL]:
+            if failures >= MAX_FAILED_LOGIN_LOOKUPS:
+                print(
+                    f"::warning::Skipping remaining GitHub login lookups "
+                    f"after {MAX_FAILED_LOGIN_LOOKUPS} unresolved lookups.",
+                    file=sys.stderr,
+                )
+                return unique
             if login := get_github_login(repository, commit_hash, env=env):
                 unique.setdefault(login.casefold(), login)
                 break
+            failures += 1
     return unique
 
 
@@ -300,10 +311,15 @@ def is_first_timer(
             [
                 "gh",
                 "api",
-                (
-                    f"repos/{repository}/commits?author={login}"
-                    f"&until={prev_tag_date}&per_page=1&sha={base_branch}"
-                ),
+                f"repos/{repository}/commits",
+                "-f",
+                f"author={login}",
+                "-f",
+                f"until={prev_tag_date}",
+                "-F",
+                "per_page=1",
+                "-f",
+                f"sha={base_branch}",
             ],
             env=env,
         )

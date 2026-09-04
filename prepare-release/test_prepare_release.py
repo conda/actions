@@ -10,6 +10,8 @@ import pytest
 import prepare_release as prepare_release_module
 import release_common as release_common_module
 from prepare_release import (
+    MAX_FAILED_LOGIN_LOOKUPS,
+    MAX_LOGIN_LOOKUPS_PER_EMAIL,
     ActionError,
     ContributorCommit,
     collect_contributors,
@@ -263,9 +265,7 @@ def test_prepare_release_publishes_when_remote_head_matches(
         ],
     ]
     lookup = next(
-        (command, env)
-        for command, env in calls
-        if command[:2] == ["git", "ls-remote"]
+        (command, env) for command, env in calls if command[:2] == ["git", "ls-remote"]
     )
     assert lookup[0] == [
         "git",
@@ -520,6 +520,85 @@ def test_resolve_logins_tries_all_hashes_per_email(
     assert calls == ["sha1", "sha2"]
 
 
+def test_resolve_logins_caps_lookup_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls = 0
+
+    def fake_run(*args: object, **kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        raise ActionError("lookup failed")
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
+        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+    ]
+
+    assert resolve_logins(commits, "conda/conda", {}) == {}
+    assert calls == MAX_FAILED_LOGIN_LOOKUPS
+    assert (
+        "::warning::Skipping remaining GitHub login lookups" in capsys.readouterr().err
+    )
+
+
+def test_resolve_logins_caps_hashes_per_email(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls = 0
+
+    def fake_run(*args: object, **kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        raise ActionError("lookup failed")
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash=f"sha{index}", email="a@example.com")
+        for index in range(MAX_LOGIN_LOOKUPS_PER_EMAIL + 3)
+    ]
+
+    assert resolve_logins(commits, "conda/conda", {}) == {}
+    assert calls == MAX_LOGIN_LOOKUPS_PER_EMAIL
+    assert (
+        "::warning::Skipping remaining GitHub login lookups"
+        not in capsys.readouterr().err
+    )
+
+
+def test_resolve_logins_successes_do_not_count_toward_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls = 0
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        sha = command[-1].rsplit("/", 1)[-1]
+        return json.dumps({"author": {"login": f"user-{sha}"}})
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
+        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+    ]
+
+    result = resolve_logins(commits, "conda/conda", {})
+    assert result == {
+        f"user-sha{index}": f"user-sha{index}"
+        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+    }
+    assert calls == MAX_FAILED_LOGIN_LOOKUPS + 5
+    assert (
+        "::warning::Skipping remaining GitHub login lookups"
+        not in capsys.readouterr().err
+    )
+
+
 def test_is_first_timer_without_previous_tag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -559,7 +638,43 @@ def test_is_first_timer_queries_prior_commits_on_release_branch(
         is expected
     )
     assert len(commands) == 1
-    assert "sha=26.7.x" in commands[0][-1]
+    assert commands[0] == [
+        "gh",
+        "api",
+        "repos/conda/conda/commits",
+        "-f",
+        "author=alice",
+        "-f",
+        "until=2026-05-01T00:00:00+00:00",
+        "-F",
+        "per_page=1",
+        "-f",
+        "sha=26.7.x",
+    ]
+
+
+def test_is_first_timer_encodes_until_offset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        return "[]"
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+
+    assert is_first_timer(
+        "alice",
+        "2026-05-01T00:00:00+00:00",
+        "conda/conda",
+        {},
+        "26.7.x",
+    )
+    # The +00:00 offset must survive as a discrete -f value so gh URL-encodes
+    # it; an unencoded + in a query string decodes to a space.
+    assert "until=2026-05-01T00:00:00+00:00" in commands[0]
+    assert not any("?" in argument for argument in commands[0])
 
 
 def test_is_first_timer_degrades_on_failure(
@@ -708,7 +823,7 @@ def test_collect_contributors_without_previous_tag(
         "https://github.com/conda/conda/pull/Bob"
     )
     assert not any(
-        any("commits?author=" in argument for argument in command)
+        any(argument.startswith("author=") for argument in command)
         for command in commands
     )
 
@@ -726,7 +841,7 @@ def test_collect_contributors_scopes_previous_tag_to_branch(
             return "sha1\0alice@example.com\0"
         if command[:2] == ["git", "log"]:
             return "2026-05-01T00:00:00+00:00\n"
-        if command[:2] == ["gh", "api"] and "commits?author=" in command[-1]:
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
             return json.dumps({"author": {"login": "alice"}})
@@ -768,7 +883,7 @@ def test_collect_contributors_falls_back_to_previous_series_tag(
             return "sha1\0alice@example.com\0"
         if command[:2] == ["git", "log"]:
             return "2026-05-01T00:00:00+00:00\n"
-        if command[:2] == ["gh", "api"] and "commits?author=" in command[-1]:
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
             return json.dumps({"author": {"login": "alice"}})
@@ -792,7 +907,7 @@ def test_collect_contributors_falls_back_to_previous_series_tag(
     )
     assert log_command[-1] == "26.6.1..HEAD"
     assert any(
-        any("commits?author=" in argument for argument in command)
+        any(argument.startswith("author=") for argument in command)
         for command in commands
     )
 
@@ -807,7 +922,7 @@ def test_collect_contributors_dedupes_logins(
             return "sha1\0alice@example.com\0sha2\0alice@work.example.com\0"
         if command[:2] == ["git", "log"]:
             return "2026-05-01T00:00:00+00:00\n"
-        if command[:2] == ["gh", "api"] and "commits?author=" in command[-1]:
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
             return json.dumps({"author": {"login": "alice"}})
@@ -829,7 +944,7 @@ def test_collect_contributors_skips_unresolvable_authors(
             return "sha1\0alice@example.com\0sha2\0ghost@example.com\0"
         if command[:2] == ["git", "log"]:
             return "2026-05-01T00:00:00+00:00\n"
-        if command[:2] == ["gh", "api"] and "commits?author=" in command[-1]:
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
             if command[-1].endswith("/sha2"):
@@ -874,8 +989,8 @@ def test_prepare_release_adds_contributors_section(
             return " M CHANGELOG.md\n D news/123-fix\n"
         if command[:2] == ["git", "ls-remote"]:
             return f"{'a' * 40}\trefs/heads/26.7.x\n"
-        if command[:2] == ["gh", "api"] and "commits?author=" in command[-1]:
-            return "[]" if "author=alice" in command[-1] else '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
+            return "[]" if "author=alice" in command else '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
             sha = command[-1].rsplit("/", 1)[-1]
             login = {"sha1": "alice", "sha2": "Bob"}[sha]
