@@ -261,7 +261,7 @@ def test_prepare_release_publishes_when_remote_head_matches(
 
     commands = [command for command, _ in calls]
     assert commands[-2:] == [
-        ["gh", "auth", "setup-git"],
+        ["git", "ls-remote", "--exit-code", "--heads", "origin", "refs/heads/26.7.x"],
         [
             "git",
             "push",
@@ -270,6 +270,7 @@ def test_prepare_release_publishes_when_remote_head_matches(
             "release-notes-26.7.0",
         ],
     ]
+    assert sum(command[:2] == ["git", "ls-remote"] for command in commands) == 2
     lookup = next(
         (command, env) for command, env in calls if command[:2] == ["git", "ls-remote"]
     )
@@ -292,6 +293,48 @@ def test_prepare_release_publishes_when_remote_head_matches(
             "token": "test-token",
         }
     ]
+
+
+@pytest.mark.parametrize("lookup_error", [False, True])
+def test_prepare_release_checks_head_again_after_contributor_collection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lookup_error: bool,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    calls, pull_requests = mock_prepare_commands(monkeypatch)
+    run = prepare_release_module.run
+    collected = False
+
+    def collect(*args: object, **kwargs: object) -> str:
+        nonlocal collected
+        collected = True
+        return "* @alice"
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        if command[:2] == ["git", "ls-remote"] and collected:
+            if lookup_error:
+                raise ActionError("Remote branch lookup failed.")
+            return f"{'b' * 40}\trefs/heads/26.7.x\n"
+        return run(command, **kwargs)
+
+    monkeypatch.setattr(prepare_release_module, "collect_contributors", collect)
+    monkeypatch.setattr(prepare_release_module, "run", fake_run)
+    output = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    if lookup_error:
+        with pytest.raises(ActionError, match="Remote branch lookup failed"):
+            prepare_release(prepare_args())
+    else:
+        prepare_release(prepare_args())
+
+    assert collected
+    assert not any(command[:2] == ["git", "push"] for command, _ in calls)
+    assert not pull_requests
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(

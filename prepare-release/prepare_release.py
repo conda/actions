@@ -109,27 +109,7 @@ def prepare_release(args: Namespace) -> None:
         raise ActionError("No GitHub repository was provided.")
     git_env = os.environ | {"GH_TOKEN": args.token}
 
-    remote_ref = f"refs/heads/{base_branch}"
-    remote = run(
-        [
-            "git",
-            "ls-remote",
-            "--exit-code",
-            "--heads",
-            "origin",
-            remote_ref,
-        ],
-        capture=True,
-        env=git_env,
-    ).split()
-    if len(remote) != 2 or remote[1] != remote_ref:
-        raise ActionError(f"Could not determine remote head for {base_branch!r}.")
-    remote_head = remote[0]
-    if remote_head != context["head_sha"]:
-        print(
-            f"Skipping stale workflow run for {base_branch}: "
-            f"{context['head_sha']} is no longer the branch tip."
-        )
+    if not is_current_release_head(base_branch, context["head_sha"], git_env):
         return
 
     contributors = collect_contributors(
@@ -158,6 +138,9 @@ def prepare_release(args: Namespace) -> None:
     run(["git", "commit", "-m", f"Prepare release notes for {version}"])
     run(["gh", "auth", "setup-git"], env=git_env)
 
+    if not is_current_release_head(base_branch, context["head_sha"], git_env):
+        return
+
     run(["git", "push", "--force-with-lease", "origin", release_branch], env=git_env)
 
     url = create_or_update_pr(
@@ -172,6 +155,26 @@ def prepare_release(args: Namespace) -> None:
     write_output("branch", release_branch)
     write_output("pull-request-url", url)
     print(f"Prepared release notes for {version}: {url}")
+
+
+def is_current_release_head(
+    base_branch: str, head_sha: str, env: dict[str, str]
+) -> bool:
+    remote_ref = f"refs/heads/{base_branch}"
+    remote = run(
+        ["git", "ls-remote", "--exit-code", "--heads", "origin", remote_ref],
+        capture=True,
+        env=env,
+    ).split()
+    if len(remote) != 2 or remote[1] != remote_ref:
+        raise ActionError(f"Could not determine remote head for {base_branch!r}.")
+    if remote[0] != head_sha:
+        print(
+            f"Skipping stale workflow run for {base_branch}: "
+            f"{head_sha} is no longer the branch tip."
+        )
+        return False
+    return True
 
 
 def verify_context(release_branch_pattern: str) -> dict[str, str]:
