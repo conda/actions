@@ -60,6 +60,9 @@ A missing news directory or a malformed fragment fails the action.
 | `git-author-email` | Git author email for the generated commit. | `18747875+conda-bot@users.noreply.github.com` |
 | `token` | GitHub token with `contents: write` and `pull-requests: write`. | `${{ github.token }}` |
 
+The token also needs `issues: read` when used with a private repository, because
+first-contribution lookups use the repository issues API.
+
 ## Action Outputs
 
 | Name | Description |

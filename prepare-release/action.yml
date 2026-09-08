@@ -24,7 +24,9 @@ inputs:
     description: Git author email for the generated commit.
     default: 18747875+conda-bot@users.noreply.github.com
   token:
-    description: 'GitHub token with contents: write and pull-requests: write.'
+    description: >-
+      GitHub token with contents: write and pull-requests: write.
+      Private repositories also require issues: read.
     default: ${{ github.token }}
 outputs:
   version:

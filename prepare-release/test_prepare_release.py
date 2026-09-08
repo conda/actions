@@ -812,29 +812,74 @@ def test_is_first_timer_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_first_merged_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        commands_module,
-        "run",
-        lambda *args, **kwargs: json.dumps(
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        return json.dumps(
             [
-                {
-                    "url": "https://github.com/conda/conda/pull/42",
-                    "mergedAt": "2025-09-14T19:13:48Z",
-                }
+                [
+                    {
+                        "html_url": "https://github.com/conda/conda/pull/42",
+                        "pull_request": {"merged_at": "2025-09-14T19:13:48Z"},
+                    }
+                ]
             ]
-        ),
-    )
+        )
+
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert (
         first_merged_pr_url("alice", "conda/conda", {})
         == "https://github.com/conda/conda/pull/42"
     )
+    assert commands == [
+        [
+            "gh",
+            "api",
+            "repos/conda/conda/issues",
+            "--method",
+            "GET",
+            "--paginate",
+            "--slurp",
+            "-f",
+            "creator=alice",
+            "-f",
+            "state=closed",
+            "-F",
+            "per_page=100",
+        ]
+    ]
 
 
-def test_first_merged_pr_url_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(commands_module, "run", lambda *args, **kwargs: "[]")
+@pytest.mark.parametrize(
+    "pages",
+    [
+        [[]],
+        [
+            [
+                {"html_url": "https://github.com/conda/conda/issues/1"},
+                {
+                    "html_url": "https://github.com/conda/conda/pull/2",
+                    "pull_request": {"merged_at": None},
+                },
+            ]
+        ],
+    ],
+)
+def test_first_merged_pr_url_without_merged_prs(
+    monkeypatch: pytest.MonkeyPatch,
+    pages: list[list[dict]],
+) -> None:
+    monkeypatch.setattr(
+        commands_module, "run", lambda *args, **kwargs: json.dumps(pages)
+    )
     assert first_merged_pr_url("alice", "conda/conda", {}) is None
 
+
+def test_first_merged_pr_url_propagates_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_run(*args: object, **kwargs: object) -> str:
         raise ActionError("lookup failed")
 
@@ -850,49 +895,85 @@ def test_first_merged_pr_url_uses_merge_order(
 ) -> None:
     prs = [
         {
-            "url": f"https://github.com/conda/conda/pull/{index}",
-            "mergedAt": "2025-09-15T09:47:28Z",
+            "html_url": f"https://github.com/conda/conda/pull/{index}",
+            "pull_request": {"merged_at": "2025-09-15T09:47:28Z"},
         }
         for index in range(count)
     ]
     # The last PR by creation order was the first to merge.
-    prs[-1]["mergedAt"] = "2025-09-14T19:13:48Z"
+    prs[-1]["pull_request"]["merged_at"] = "2025-09-14T19:13:48Z"
 
     def fake_run(command: list[str], **kwargs: object) -> str:
-        candidates = prs
-        if "--search" in command:
-            search = command[command.index("--search") + 1]
-            if "merged:<" in search:
-                cutoff = search.split("merged:<")[1]
-                candidates = [pr for pr in prs if pr["mergedAt"] < cutoff]
-        limit = int(command[command.index("--limit") + 1])
-        return json.dumps(candidates[:limit])
+        return json.dumps([prs[start : start + 100] for start in range(0, count, 100)])
 
     monkeypatch.setattr(commands_module, "run", fake_run)
 
-    assert first_merged_pr_url("alice", "conda/conda", {}) == prs[-1]["url"]
+    assert first_merged_pr_url("alice", "conda/conda", {}) == prs[-1]["html_url"]
 
 
-def test_first_merged_pr_url_propagates_followup_failure(
+@pytest.mark.skipif(shutil.which("gh") is None, reason="GitHub CLI is required")
+@pytest.mark.parametrize("second_page_status", [200, 502])
+def test_first_merged_pr_url_paginates(
     monkeypatch: pytest.MonkeyPatch,
+    httpserver: HTTPServer,
+    second_page_status: int,
 ) -> None:
-    def fake_run(command: list[str], **kwargs: object) -> str:
-        if any("merged:<" in argument for argument in command):
-            raise ActionError("HTTP 502")
-        return json.dumps(
-            [
-                {
-                    "url": "https://github.com/conda/conda/pull/42",
-                    "mergedAt": "2025-09-15T09:47:28Z",
-                }
-            ]
-            * 100
+    endpoint = "/repos/conda/conda/issues"
+    query = {"creator": "alice", "state": "closed", "per_page": "100"}
+    next_page = httpserver.url_for(endpoint) + (
+        "?creator=alice&state=closed&per_page=100&page=2"
+    )
+    httpserver.expect_oneshot_request(
+        endpoint, method="GET", query_string=query
+    ).respond_with_json(
+        [
+            {"html_url": "https://github.com/conda/conda/issues/1"},
+            {
+                "html_url": "https://github.com/conda/conda/pull/2",
+                "pull_request": {"merged_at": None},
+            },
+            {
+                "html_url": "https://github.com/conda/conda/pull/3",
+                "pull_request": {"merged_at": "2025-09-15T09:47:28Z"},
+            },
+        ],
+        headers={"Link": f'<{next_page}>; rel="next"'},
+    )
+    httpserver.expect_oneshot_request(
+        endpoint, method="GET", query_string=query | {"page": "2"}
+    ).respond_with_json(
+        [
+            {
+                "html_url": "https://github.com/conda/conda/pull/43",
+                "pull_request": {"merged_at": "2025-09-14T19:13:48Z"},
+            },
+            {
+                "html_url": "https://github.com/conda/conda/pull/42",
+                "pull_request": {"merged_at": "2025-09-14T19:13:48Z"},
+            },
+        ]
+        if second_page_status == 200
+        else {"message": "GitHub unavailable"},
+        status=second_page_status,
+    )
+    run = commands_module.run
+
+    def local_run(command: list[str], **kwargs: object) -> str:
+        command = command.copy()
+        command[2] = httpserver.url_for(f"/{command[2]}")
+        return run(command, **kwargs)
+
+    monkeypatch.setattr(commands_module, "run", local_run)
+    env = os.environ | {"GH_TOKEN": "test-token"}
+    if second_page_status == 200:
+        assert (
+            first_merged_pr_url("alice", "conda/conda", env)
+            == "https://github.com/conda/conda/pull/42"
         )
-
-    monkeypatch.setattr(commands_module, "run", fake_run)
-
-    with pytest.raises(ActionError, match="HTTP 502"):
-        first_merged_pr_url("alice", "conda/conda", {})
+    else:
+        with pytest.raises(ActionError, match="HTTP 502"):
+            first_merged_pr_url("alice", "conda/conda", env)
+    httpserver.check()
 
 
 def test_render_contributors() -> None:
@@ -1067,20 +1148,26 @@ def test_collect_contributors_without_previous_tag(
             return ""
         if command[:2] == ["git", "log"]:
             return "sha1\0alice@example.com\0sha2\0bob@example.com\0"
+        if command[:2] == ["gh", "api"] and command[2].endswith("/issues"):
+            login = next(
+                arg.removeprefix("creator=")
+                for arg in command
+                if arg.startswith("creator=")
+            )
+            return json.dumps(
+                [
+                    [
+                        {
+                            "html_url": f"https://github.com/conda/conda/pull/{login}",
+                            "pull_request": {"merged_at": "2025-09-14T19:13:48Z"},
+                        }
+                    ]
+                ]
+            )
         if command[:2] == ["gh", "api"]:
             sha = command[-1].rsplit("/", 1)[-1]
             login = {"sha1": "alice", "sha2": "Bob"}[sha]
             return json.dumps({"author": {"login": login}})
-        if command[:3] == ["gh", "pr", "list"]:
-            login = command[command.index("--author") + 1]
-            return json.dumps(
-                [
-                    {
-                        "url": f"https://github.com/conda/conda/pull/{login}",
-                        "mergedAt": "2025-09-14T19:13:48Z",
-                    }
-                ]
-            )
         return ""
 
     patch_run(monkeypatch, fake_run)
@@ -1260,19 +1347,21 @@ def test_prepare_release_adds_contributors_section(
             return f"{'a' * 40}\trefs/heads/26.7.x\n"
         if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return "[]" if "author=alice" in command else '[{"sha": "old"}]'
+        if command[:2] == ["gh", "api"] and command[2].endswith("/issues"):
+            return json.dumps(
+                [
+                    [
+                        {
+                            "html_url": "https://github.com/conda/conda/pull/42",
+                            "pull_request": {"merged_at": "2025-09-14T19:13:48Z"},
+                        }
+                    ]
+                ]
+            )
         if command[:2] == ["gh", "api"]:
             sha = command[-1].rsplit("/", 1)[-1]
             login = {"sha1": "alice", "sha2": "Bob"}[sha]
             return json.dumps({"author": {"login": login}})
-        if command[:3] == ["gh", "pr", "list"]:
-            return json.dumps(
-                [
-                    {
-                        "url": "https://github.com/conda/conda/pull/42",
-                        "mergedAt": "2025-09-14T19:13:48Z",
-                    }
-                ]
-            )
         return ""
 
     patch_run(monkeypatch, fake_run)

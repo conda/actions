@@ -333,38 +333,35 @@ def first_merged_pr_url(
     repository: str,
     env: dict[str, str],
 ) -> str | None:
-    first_url = None
-    search = "sort:created-asc"
-    while True:
-        prs = run_json(
-            [
-                "gh",
-                "pr",
-                "list",
-                "--repo",
-                repository,
-                "--author",
-                login,
-                "--state",
-                "merged",
-                "--search",
-                search,
-                "--limit",
-                "100",
-                "--json",
-                "mergedAt,url",
-            ],
-            env=env,
-        )
-        if not prs:
-            return first_url
-        first = min(prs, key=lambda pr: (pr["mergedAt"], pr["url"]))
-        first_url = str(first["url"])
-        if len(prs) < 100:
-            return first_url
-        # Narrow by merge date so the earliest merge can be found even
-        # beyond GitHub's 1,000-result search limit.
-        search = f"sort:created-asc merged:<{first['mergedAt']}"
+    pages = run_json(
+        [
+            "gh",
+            "api",
+            f"repos/{repository}/issues",
+            "--method",
+            "GET",
+            "--paginate",
+            "--slurp",
+            "-f",
+            f"creator={login}",
+            "-f",
+            "state=closed",
+            "-F",
+            "per_page=100",
+        ],
+        env=env,
+    )
+    first = min(
+        (
+            issue
+            for page in pages
+            for issue in page
+            if issue.get("pull_request", {}).get("merged_at")
+        ),
+        key=lambda pr: (pr["pull_request"]["merged_at"], pr["html_url"]),
+        default=None,
+    )
+    return str(first["html_url"]) if first else None
 
 
 def collect_contributors(
