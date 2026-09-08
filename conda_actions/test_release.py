@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import json
-import sys
 
 import pytest
 
-import release_common as release_common_module
-from release_common import (
-    ActionError,
+from conda_actions import commands as commands_module
+from conda_actions import release as release_module
+from conda_actions.commands import ActionError
+from conda_actions.release import (
     get_github_login,
     get_latest_tag,
     normalize_release_tag,
     parse_nul_records,
-    run,
-    run_json,
     select_latest_release_tag,
 )
 
@@ -48,7 +46,7 @@ def test_get_latest_tag_merged_into_head(monkeypatch: pytest.MonkeyPatch) -> Non
         commands.append(command)
         return "v26.6.0\n26.6.1\n26.7.0a1\nrandom\n"
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(release_module, "run", fake_run)
 
     assert get_latest_tag() == "26.6.1"
     assert commands == [["git", "tag", "--merged", "HEAD"]]
@@ -61,7 +59,7 @@ def test_get_latest_tag_with_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
         commands.append(command)
         return "26.7.0\nv26.7.1\n26.7.2rc1\n"
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(release_module, "run", fake_run)
 
     assert get_latest_tag(prefix="26.7.") == "v26.7.1"
     assert commands == [
@@ -82,7 +80,7 @@ def test_get_latest_tag_without_release_tags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        release_common_module,
+        release_module,
         "run",
         lambda *args, **kwargs: "26.7.0a1\n",
     )
@@ -117,7 +115,7 @@ def test_get_github_login(monkeypatch: pytest.MonkeyPatch) -> None:
         captured["env"] = env
         return json.dumps({"author": {"login": "alice"}})
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert get_github_login("conda/example", "abc123", env={"GH_TOKEN": "t"}) == "alice"
     assert captured["command"] == ["gh", "api", "repos/conda/example/commits/abc123"]
@@ -131,7 +129,7 @@ def test_get_github_login_warns_on_failure(
     def fake_run(*args: object, **kwargs: object) -> str:
         raise ActionError("lookup failed")
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert get_github_login("conda/example", "abc123", env={}) is None
     assert "::warning::Failed to resolve GitHub login" in capsys.readouterr().err
@@ -147,7 +145,7 @@ def test_get_github_login_warns_without_login(
     payload: dict[str, object],
 ) -> None:
     monkeypatch.setattr(
-        release_common_module,
+        commands_module,
         "run",
         lambda *args, **kwargs: json.dumps(payload),
     )
@@ -156,23 +154,3 @@ def test_get_github_login_warns_without_login(
     assert (
         "::warning::No GitHub login associated with commit" in capsys.readouterr().err
     )
-
-
-def test_run_captures_and_trims_trailing_newlines() -> None:
-    assert run([sys.executable, "-c", "print('hi')"], capture=True) == "hi"
-
-
-def test_run_raises_action_error_on_failure() -> None:
-    with pytest.raises(ActionError, match="Command failed"):
-        run([sys.executable, "-c", "import sys; sys.exit(1)"])
-
-
-def test_run_json_rejects_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        release_common_module,
-        "run",
-        lambda *args, **kwargs: "not json",
-    )
-
-    with pytest.raises(ActionError, match="Failed to parse JSON"):
-        run_json(["gh", "api", "repos/conda/example"])

@@ -11,14 +11,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from news_common import SECTION_ORDER, is_news_fragment, parse_sectioned_news
-from release_common import (
-    ActionError,
+from conda_actions.commands import ActionError, run, run_json
+from conda_actions.news import SECTION_ORDER, is_news_fragment, parse_sectioned_news
+from conda_actions.release import (
     get_github_login,
     get_latest_tag,
     parse_nul_records,
-    run,
-    run_json,
 )
 
 VERSION_BRANCH_RE = re.compile(r"^(?P<major_minor>\d+\.\d+)\.x$")

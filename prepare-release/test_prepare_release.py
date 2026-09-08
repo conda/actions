@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 import prepare_release as prepare_release_module
-import release_common as release_common_module
+from conda_actions import commands as commands_module
+from conda_actions import release as release_module
 from prepare_release import (
     MAX_FAILED_LOGIN_LOOKUPS,
     MAX_LOGIN_LOOKUPS_PER_EMAIL,
@@ -39,7 +40,8 @@ if TYPE_CHECKING:
 
 def patch_run(monkeypatch: pytest.MonkeyPatch, fake_run: object) -> None:
     monkeypatch.setattr(prepare_release_module, "run", fake_run)
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(release_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
 
 def write_workflow_run_event(
@@ -136,7 +138,8 @@ def mock_prepare_commands(
         return "https://github.com/conda/conda/pull/123"
 
     monkeypatch.setattr(prepare_release_module, "run", fake_run)
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(release_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     monkeypatch.setattr(
         prepare_release_module,
         "create_or_update_pr",
@@ -561,7 +564,7 @@ def test_resolve_logins_caches_and_skips_unresolvable(
             raise ActionError("lookup failed")
         return json.dumps({"author": {"login": f"user-{sha}"}})
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash="sha1", email="a@example.com"),
         ContributorCommit(hash="sha2", email="b@example.com"),
@@ -587,7 +590,7 @@ def test_resolve_logins_tries_all_hashes_per_email(
             return json.dumps({"author": None})
         return json.dumps({"author": {"login": "alice"}})
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash="sha1", email="a@example.com"),
         ContributorCommit(hash="sha2", email="a@example.com"),
@@ -608,7 +611,7 @@ def test_resolve_logins_caps_lookup_attempts(
         calls += 1
         raise ActionError("lookup failed")
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
         for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
@@ -632,7 +635,7 @@ def test_resolve_logins_caps_hashes_per_email(
         calls += 1
         raise ActionError("lookup failed")
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash=f"sha{index}", email="a@example.com")
         for index in range(MAX_LOGIN_LOOKUPS_PER_EMAIL + 3)
@@ -658,7 +661,7 @@ def test_resolve_logins_successes_do_not_count_toward_cap(
         sha = command[-1].rsplit("/", 1)[-1]
         return json.dumps({"author": {"login": f"user-{sha}"}})
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
         for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
@@ -702,14 +705,14 @@ def test_is_first_timer_sends_get_query(
             "sha": "26.7.x",
         },
     ).respond_with_json([])
-    run = release_common_module.run
+    run = commands_module.run
 
     def local_run(command: list[str], **kwargs: object) -> str:
         command = command.copy()
         command[2] = httpserver.url_for(f"/{command[2]}")
         return run(command, **kwargs)
 
-    monkeypatch.setattr(release_common_module, "run", local_run)
+    monkeypatch.setattr(commands_module, "run", local_run)
     result = is_first_timer(
         "alice",
         "2026-05-01T00:00:00+00:00",
@@ -736,7 +739,7 @@ def test_is_first_timer_queries_prior_commits_on_release_branch(
         commands.append(command)
         return payload
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert (
         is_first_timer(
@@ -775,7 +778,7 @@ def test_is_first_timer_encodes_until_offset(
         commands.append(command)
         return "[]"
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert is_first_timer(
         "alice",
@@ -797,7 +800,7 @@ def test_is_first_timer_degrades_on_failure(
     def fake_run(*args: object, **kwargs: object) -> str:
         raise ActionError("lookup failed")
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert not is_first_timer(
         "alice",
@@ -811,7 +814,7 @@ def test_is_first_timer_degrades_on_failure(
 
 def test_first_merged_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        release_common_module,
+        commands_module,
         "run",
         lambda *args, **kwargs: json.dumps(
             [
@@ -830,13 +833,13 @@ def test_first_merged_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_first_merged_pr_url_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(release_common_module, "run", lambda *args, **kwargs: "[]")
+    monkeypatch.setattr(commands_module, "run", lambda *args, **kwargs: "[]")
     assert first_merged_pr_url("alice", "conda/conda", {}) is None
 
     def fake_run(*args: object, **kwargs: object) -> str:
         raise ActionError("lookup failed")
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     assert first_merged_pr_url("alice", "conda/conda", {}) is None
 
 
@@ -865,7 +868,7 @@ def test_first_merged_pr_url_uses_merge_order(
         limit = int(command[command.index("--limit") + 1])
         return json.dumps(candidates[:limit])
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert first_merged_pr_url("alice", "conda/conda", {}) == prs[-1]["url"]
 
@@ -886,7 +889,7 @@ def test_first_merged_pr_url_omits_unverified_candidate(
             * 100
         )
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
 
     assert first_merged_pr_url("alice", "conda/conda", {}) is None
 
@@ -1038,7 +1041,7 @@ def test_merge_preserves_contributors_after_partial_lookup_failure(
             raise ActionError("HTTP 502")
         return json.dumps({"author": {"login": "alice"}})
 
-    monkeypatch.setattr(release_common_module, "run", fake_run)
+    monkeypatch.setattr(commands_module, "run", fake_run)
     contributors = collect_contributors("conda/conda", {}, base_branch="26.7.x")
     entry = render_changelog_entry(
         "26.7.0", "2026-06-05", {"Bug fixes": ["* New fix."]}, contributors

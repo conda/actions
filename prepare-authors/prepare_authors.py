@@ -14,12 +14,11 @@ from typing import TYPE_CHECKING, Any
 
 from ruamel.yaml import YAML
 
-from release_common import (
-    ActionError,
+from conda_actions.commands import ActionError, run
+from conda_actions.release import (
     get_github_login,
     get_latest_tag,
     parse_nul_records,
-    run,
 )
 
 if TYPE_CHECKING:

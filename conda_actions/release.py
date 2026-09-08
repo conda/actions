@@ -1,62 +1,20 @@
 from __future__ import annotations
 
-import json
 import re
-import subprocess
 import sys
-from typing import Any
+
+from .commands import ActionError, run, run_json
 
 __all__ = [
     "RELEASE_TAG_PATTERN",
-    "ActionError",
     "get_github_login",
     "get_latest_tag",
     "normalize_release_tag",
     "parse_nul_records",
-    "run",
-    "run_json",
     "select_latest_release_tag",
 ]
 
 RELEASE_TAG_PATTERN = re.compile(r"^v?(\d+\.\d+\.\d+)$")
-
-
-class ActionError(Exception):
-    pass
-
-
-def run(
-    command: list[str],
-    *,
-    capture: bool = False,
-    env: dict[str, str] | None = None,
-) -> str:
-    try:
-        result = subprocess.run(
-            command,
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE if capture else None,
-            stderr=subprocess.PIPE if capture else None,
-            env=env,
-        )
-    except subprocess.CalledProcessError as err:
-        detail = err.stderr.strip() if err.stderr else str(err)
-        raise ActionError(f"Command failed: {' '.join(command)}\n{detail}") from err
-    # Preserve leading spaces (e.g. git porcelain " M path"); only trim newlines.
-    return result.stdout.rstrip("\n") if capture else ""
-
-
-def run_json(
-    command: list[str],
-    *,
-    env: dict[str, str] | None = None,
-) -> Any:
-    output = run(command, capture=True, env=env)
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError as err:
-        raise ActionError(f"Failed to parse JSON from: {' '.join(command)}") from err
 
 
 def normalize_release_tag(tag: str) -> tuple[int, ...] | None:
