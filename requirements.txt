@@ -1,4 +1,5 @@
 pytest
 pytest-cov
+pytest-httpserver
 pytest-mock
 ruamel.yaml

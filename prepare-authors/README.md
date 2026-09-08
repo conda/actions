@@ -1,26 +1,18 @@
 # Prepare Authors
 
 A composite GitHub Action to keep `.authors.yml` current for rever by scanning
-recent commits, updating author metadata, and opening or updating a pull request.
-Existing emails with a new commit author name get an `aliases` update; new emails
-for an existing contributor are added to `alternate_emails`. A name match is not
-used when the commit’s resolved GitHub login conflicts with the entry’s `github`
-key (the commit is treated as a different person, or matched by that login).
-Duplicate emails fail. Duplicate names or GitHub logins require the other
-identifier to select one author entry.
-In `check` mode it validates only and fails when new contributors or
-alternate-email/alias updates are needed; missing `github:` keys warn but do not fail.
-In `prepare` mode unresolved missing `github:` keys fail the step after lookup
-attempts (no commit or PR). That includes newly discovered contributors whose
-commit author could not be mapped to a GitHub login. Rever still updates
-`.mailmap` and `AUTHORS.md` at release time.
+recent commits, updating author metadata, and opening or updating a pull
+request. In `check` mode it validates only and fails when updates are needed
+(missing `github:` keys warn but do not fail). In `prepare` mode it fails when
+`github:` keys stay unresolved after lookup. Rever still updates `.mailmap`
+and `AUTHORS.md` at release time.
 
 ## Action Inputs
 
 | Name | Description | Default |
 |------|-------------|---------|
 | `authors-path` | Path to the rever authors metadata file. | `.authors.yml` |
-| `since` | Commit range to scan. Use `tag` for commits since the highest final release tag (`X.Y.Z` or `vX.Y.Z`; pre-releases ignored), or `all`. Fails if no such tag exists. | `tag` |
+| `since` | Commit range to scan. Use `tag` for commits since the highest final release tag (`X.Y.Z` or `vX.Y.Z`; pre-releases ignored) merged into `HEAD` (`git tag --merged HEAD`; not all repo tags), or `all`. Fails if no such tag exists. | `tag` |
 | `base-branch` | Base branch for the generated authors PR. | `main` |
 | `branch-prefix` | Non-empty prefix for the generated authors branch. | `prepare-authors-` |
 | `git-remote` | Git remote alias used to resolve owner/repo for gh api. | `origin` |

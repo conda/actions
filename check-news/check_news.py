@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from news_common import is_news_fragment, parse_sectioned_news
+from conda_actions.news import is_news_fragment, parse_sectioned_news
 
 PR_RE = re.compile(r"(?<!\d)#?(?P<number>\d+)(?!\d)")
 

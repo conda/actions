@@ -20,7 +20,7 @@ addopts = [
   "--color=yes",
   "--cov=check-news",
   "--cov=combine-durations",
-  "--cov=news_common",
+  "--cov=conda_actions",
   "--cov=prepare-release",
   "--cov=prepare-authors",
   "--cov=read-file",
@@ -60,7 +60,7 @@ select = [
 known-first-party = [
   "check_news",
   "combine_durations",
-  "news_common",
+  "conda_actions",
   "prepare_release",
   "prepare_authors",
   "read_file",
