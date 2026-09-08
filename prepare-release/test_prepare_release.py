@@ -814,7 +814,12 @@ def test_first_merged_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
         release_common_module,
         "run",
         lambda *args, **kwargs: json.dumps(
-            [{"url": "https://github.com/conda/conda/pull/42"}]
+            [
+                {
+                    "url": "https://github.com/conda/conda/pull/42",
+                    "mergedAt": "2025-09-14T19:13:48Z",
+                }
+            ]
         ),
     )
 
@@ -832,6 +837,57 @@ def test_first_merged_pr_url_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
         raise ActionError("lookup failed")
 
     monkeypatch.setattr(release_common_module, "run", fake_run)
+    assert first_merged_pr_url("alice", "conda/conda", {}) is None
+
+
+@pytest.mark.parametrize("count", [2, 101, 1001])
+def test_first_merged_pr_url_uses_merge_order(
+    monkeypatch: pytest.MonkeyPatch,
+    count: int,
+) -> None:
+    prs = [
+        {
+            "url": f"https://github.com/conda/conda/pull/{index}",
+            "mergedAt": "2025-09-15T09:47:28Z",
+        }
+        for index in range(count)
+    ]
+    # The last PR by creation order was the first to merge.
+    prs[-1]["mergedAt"] = "2025-09-14T19:13:48Z"
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        candidates = prs
+        if "--search" in command:
+            search = command[command.index("--search") + 1]
+            if "merged:<" in search:
+                cutoff = search.split("merged:<")[1]
+                candidates = [pr for pr in prs if pr["mergedAt"] < cutoff]
+        limit = int(command[command.index("--limit") + 1])
+        return json.dumps(candidates[:limit])
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+
+    assert first_merged_pr_url("alice", "conda/conda", {}) == prs[-1]["url"]
+
+
+def test_first_merged_pr_url_omits_unverified_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        if any("merged:<" in argument for argument in command):
+            raise ActionError("HTTP 502")
+        return json.dumps(
+            [
+                {
+                    "url": "https://github.com/conda/conda/pull/42",
+                    "mergedAt": "2025-09-15T09:47:28Z",
+                }
+            ]
+            * 100
+        )
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+
     assert first_merged_pr_url("alice", "conda/conda", {}) is None
 
 
@@ -1010,9 +1066,16 @@ def test_collect_contributors_without_previous_tag(
             sha = command[-1].rsplit("/", 1)[-1]
             login = {"sha1": "alice", "sha2": "Bob"}[sha]
             return json.dumps({"author": {"login": login}})
-        if command[:3] == ["gh", "search", "prs"]:
+        if command[:3] == ["gh", "pr", "list"]:
             login = command[command.index("--author") + 1]
-            return json.dumps([{"url": f"https://github.com/conda/conda/pull/{login}"}])
+            return json.dumps(
+                [
+                    {
+                        "url": f"https://github.com/conda/conda/pull/{login}",
+                        "mergedAt": "2025-09-14T19:13:48Z",
+                    }
+                ]
+            )
         return ""
 
     patch_run(monkeypatch, fake_run)
@@ -1176,7 +1239,7 @@ def test_prepare_release_adds_contributors_section(
         capture: bool = False,
         env: dict[str, str] | None = None,
     ) -> str:
-        if command[:2] == ["gh", "api"] or command[:3] == ["gh", "search", "prs"]:
+        if command[:2] == ["gh", "api"] or command[:3] == ["gh", "pr", "list"]:
             gh_envs.append(env)
         if command[:3] == ["git", "tag", "--list"]:
             return ""
@@ -1196,8 +1259,15 @@ def test_prepare_release_adds_contributors_section(
             sha = command[-1].rsplit("/", 1)[-1]
             login = {"sha1": "alice", "sha2": "Bob"}[sha]
             return json.dumps({"author": {"login": login}})
-        if command[:3] == ["gh", "search", "prs"]:
-            return json.dumps([{"url": "https://github.com/conda/conda/pull/42"}])
+        if command[:3] == ["gh", "pr", "list"]:
+            return json.dumps(
+                [
+                    {
+                        "url": "https://github.com/conda/conda/pull/42",
+                        "mergedAt": "2025-09-14T19:13:48Z",
+                    }
+                ]
+            )
         return ""
 
     patch_run(monkeypatch, fake_run)

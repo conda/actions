@@ -343,38 +343,45 @@ def first_merged_pr_url(
     repository: str,
     env: dict[str, str],
 ) -> str | None:
+    first_url = None
+    search = "sort:created-asc"
     try:
-        prs = run_json(
-            [
-                "gh",
-                "search",
-                "prs",
-                "--repo",
-                repository,
-                "--author",
-                login,
-                "--merged",
-                "--sort",
-                "created",
-                "--order",
-                "asc",
-                "--limit",
-                "1",
-                "--json",
-                "url",
-            ],
-            env=env,
-        )
+        while True:
+            prs = run_json(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--repo",
+                    repository,
+                    "--author",
+                    login,
+                    "--state",
+                    "merged",
+                    "--search",
+                    search,
+                    "--limit",
+                    "100",
+                    "--json",
+                    "mergedAt,url",
+                ],
+                env=env,
+            )
+            if not prs:
+                return first_url
+            first = min(prs, key=lambda pr: (pr["mergedAt"], pr["url"]))
+            first_url = str(first["url"])
+            if len(prs) < 100:
+                return first_url
+            # Narrow by merge date so the earliest merge can be found even
+            # beyond GitHub's 1,000-result search limit.
+            search = f"sort:created-asc merged:<{first['mergedAt']}"
     except ActionError as err:
         print(
             f"::warning::Failed to look up first merged PR for {login}: {err}",
             file=sys.stderr,
         )
         return None
-    if not prs:
-        return None
-    url = prs[0].get("url")
-    return str(url) if url else None
 
 
 def collect_contributors(
