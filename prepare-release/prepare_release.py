@@ -24,9 +24,8 @@ TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.(?P<micro>\d+))$")
 CURRENT_DEVELOPMENTS = "[//]: # (current developments)"
 SECTION_HEADING_RE = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.MULTILINE)
 CONTRIBUTORS_SECTION = "Contributors"
-CONTRIBUTOR_LINE_RE = re.compile(r"^\* @(?P<login>\S+)(?P<suffix>.*)$")
 MAX_LOGIN_LOOKUPS_PER_EMAIL = 5
-MAX_FAILED_LOGIN_LOOKUPS = 20
+MAX_UNRESOLVED_LOGIN_LOOKUPS = 20
 
 
 @dataclass(frozen=True)
@@ -275,20 +274,20 @@ def resolve_logins(
         if commit.hash not in hashes:
             hashes.append(commit.hash)
     unique: dict[str, str] = {}
-    failures = 0
+    unresolved = 0
     for hashes in hashes_by_email.values():
         for commit_hash in hashes[:MAX_LOGIN_LOOKUPS_PER_EMAIL]:
-            if failures >= MAX_FAILED_LOGIN_LOOKUPS:
+            if unresolved >= MAX_UNRESOLVED_LOGIN_LOOKUPS:
                 print(
                     f"::warning::Skipping remaining GitHub login lookups "
-                    f"after {MAX_FAILED_LOGIN_LOOKUPS} unresolved lookups.",
+                    f"after {MAX_UNRESOLVED_LOGIN_LOOKUPS} unresolved lookups.",
                     file=sys.stderr,
                 )
                 return unique
             if login := get_github_login(repository, commit_hash, env=env):
                 unique.setdefault(login.casefold(), login)
                 break
-            failures += 1
+            unresolved += 1
     return unique
 
 
@@ -308,31 +307,24 @@ def is_first_timer(
     # Known limitation: the history check filters by committer date, so a
     # rebased or cherry-picked older commit suppresses the first-timer
     # annotation even when the author is new to the release branch.
-    try:
-        commits = run_json(
-            [
-                "gh",
-                "api",
-                f"repos/{repository}/commits",
-                "--method",
-                "GET",
-                "-f",
-                f"author={login}",
-                "-f",
-                f"until={prev_tag_date}",
-                "-F",
-                "per_page=1",
-                "-f",
-                f"sha={base_branch}",
-            ],
-            env=env,
-        )
-    except ActionError as err:
-        print(
-            f"::warning::Failed to check commit history for {login}: {err}",
-            file=sys.stderr,
-        )
-        return False
+    commits = run_json(
+        [
+            "gh",
+            "api",
+            f"repos/{repository}/commits",
+            "--method",
+            "GET",
+            "-f",
+            f"author={login}",
+            "-f",
+            f"until={prev_tag_date}",
+            "-F",
+            "per_page=1",
+            "-f",
+            f"sha={base_branch}",
+        ],
+        env=env,
+    )
     return not commits
 
 
@@ -343,43 +335,36 @@ def first_merged_pr_url(
 ) -> str | None:
     first_url = None
     search = "sort:created-asc"
-    try:
-        while True:
-            prs = run_json(
-                [
-                    "gh",
-                    "pr",
-                    "list",
-                    "--repo",
-                    repository,
-                    "--author",
-                    login,
-                    "--state",
-                    "merged",
-                    "--search",
-                    search,
-                    "--limit",
-                    "100",
-                    "--json",
-                    "mergedAt,url",
-                ],
-                env=env,
-            )
-            if not prs:
-                return first_url
-            first = min(prs, key=lambda pr: (pr["mergedAt"], pr["url"]))
-            first_url = str(first["url"])
-            if len(prs) < 100:
-                return first_url
-            # Narrow by merge date so the earliest merge can be found even
-            # beyond GitHub's 1,000-result search limit.
-            search = f"sort:created-asc merged:<{first['mergedAt']}"
-    except ActionError as err:
-        print(
-            f"::warning::Failed to look up first merged PR for {login}: {err}",
-            file=sys.stderr,
+    while True:
+        prs = run_json(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--repo",
+                repository,
+                "--author",
+                login,
+                "--state",
+                "merged",
+                "--search",
+                search,
+                "--limit",
+                "100",
+                "--json",
+                "mergedAt,url",
+            ],
+            env=env,
         )
-        return None
+        if not prs:
+            return first_url
+        first = min(prs, key=lambda pr: (pr["mergedAt"], pr["url"]))
+        first_url = str(first["url"])
+        if len(prs) < 100:
+            return first_url
+        # Narrow by merge date so the earliest merge can be found even
+        # beyond GitHub's 1,000-result search limit.
+        search = f"sort:created-asc merged:<{first['mergedAt']}"
 
 
 def collect_contributors(
@@ -581,49 +566,11 @@ def merge_contributors_section(release: str, body: str) -> str:
         )
         heading_end = len(release[: existing.end()].rstrip())
         trailing = release[len(release[:section_end].rstrip()) : section_end]
-        body = merge_contributor_lines(release[existing.end() : section_end], body)
         return release[:heading_end] + "\n\n" + body + trailing + release[section_end:]
 
     insert_at = len(release.rstrip())
     block = f"### {CONTRIBUTORS_SECTION}\n\n{body}"
     return release[:insert_at] + "\n\n" + block + release[insert_at:]
-
-
-def merge_contributor_lines(existing: str, incoming: str) -> str:
-    lines = existing.strip().splitlines()
-    for line in incoming.splitlines():
-        match = CONTRIBUTOR_LINE_RE.fullmatch(line)
-        if not match:
-            if line not in lines:
-                lines.append(line)
-            continue
-
-        login = match["login"].casefold()
-        contributors = [
-            (index, entry)
-            for index, old_line in enumerate(lines)
-            if (entry := CONTRIBUTOR_LINE_RE.fullmatch(old_line))
-        ]
-        for index, entry in contributors:
-            if entry["login"].casefold() == login:
-                # A failed history lookup must not erase an existing annotation.
-                if match["suffix"] and (
-                    not entry["suffix"]
-                    or entry["suffix"].startswith(" made their first commit in ")
-                ):
-                    lines[index] = line
-                break
-        else:
-            insert_at = next(
-                (
-                    index
-                    for index, entry in contributors
-                    if entry["login"].casefold() > login
-                ),
-                len(lines),
-            )
-            lines.insert(insert_at, line)
-    return "\n".join(lines)
 
 
 def get_changed_paths() -> list[Path]:

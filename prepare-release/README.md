@@ -72,8 +72,9 @@ Each generated entry ends with a `Contributors` section listing the GitHub
 logins of commit authors since the previous release tag, sorted
 alphabetically. First-time contributors are annotated with a link to their
 earliest merged PR. The section is omitted when no author resolves to a
-GitHub login. When updating an existing release entry, previously recorded
-contributors and annotations are preserved if a lookup does not resolve them:
+GitHub login. A failed contributor lookup stops the action before it changes
+the changelog or removes news fragments. Successful lookups regenerate the
+contributors section when updating an existing release entry:
 
 ```
 ### Contributors

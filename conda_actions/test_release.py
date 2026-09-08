@@ -122,17 +122,33 @@ def test_get_github_login(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured["env"] == {"GH_TOKEN": "t"}
 
 
-def test_get_github_login_warns_on_failure(
+@pytest.mark.parametrize("message", ["HTTP 502", "Could not resolve host"])
+def test_get_github_login_propagates_request_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    message: str,
 ) -> None:
+    error = ActionError(message)
+
     def fake_run(*args: object, **kwargs: object) -> str:
-        raise ActionError("lookup failed")
+        raise error
 
     monkeypatch.setattr(commands_module, "run", fake_run)
 
-    assert get_github_login("conda/example", "abc123", env={}) is None
-    assert "::warning::Failed to resolve GitHub login" in capsys.readouterr().err
+    with pytest.raises(ActionError) as exc_info:
+        get_github_login("conda/example", "abc123", env={})
+
+    assert exc_info.value is error
+    assert not capsys.readouterr().err
+
+
+def test_get_github_login_propagates_invalid_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(commands_module, "run", lambda *args, **kwargs: "not JSON")
+
+    with pytest.raises(ActionError, match="Failed to parse JSON"):
+        get_github_login("conda/example", "abc123", env={})
 
 
 @pytest.mark.parametrize(

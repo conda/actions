@@ -1556,6 +1556,26 @@ def test_make_github_login_fn_passes_read_token_as_gh_token(
     assert captured["env"]["GITHUB_TOKEN"] == "job-token"
 
 
+@pytest.mark.parametrize("message", ["HTTP 502", "Failed to parse JSON"])
+def test_make_github_login_fn_warns_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    message: str,
+) -> None:
+    def fake_get_github_login(*args: object, **kwargs: object) -> str | None:
+        raise ActionError(message)
+
+    monkeypatch.setattr("prepare_authors.get_github_login", fake_get_github_login)
+
+    login_fn = make_github_login_fn("read-token")
+
+    assert login_fn("conda/example", "abc123") is None
+    assert capsys.readouterr().err == (
+        "::warning::Failed to resolve GitHub login for "
+        f"conda/example@abc123: {message}\n"
+    )
+
+
 def test_create_or_update_pr_scopes_lookup_to_repository_owner() -> None:
     calls: list[tuple[list[str], bool, dict[str, str] | None]] = []
 

@@ -14,8 +14,8 @@ import prepare_release as prepare_release_module
 from conda_actions import commands as commands_module
 from conda_actions import release as release_module
 from prepare_release import (
-    MAX_FAILED_LOGIN_LOOKUPS,
     MAX_LOGIN_LOOKUPS_PER_EMAIL,
+    MAX_UNRESOLVED_LOGIN_LOOKUPS,
     ActionError,
     ContributorCommit,
     collect_contributors,
@@ -561,7 +561,7 @@ def test_resolve_logins_caches_and_skips_unresolvable(
         calls.append(command)
         sha = command[-1].rsplit("/", 1)[-1]
         if sha == "sha2":
-            raise ActionError("lookup failed")
+            return json.dumps({"author": None})
         return json.dumps({"author": {"login": f"user-{sha}"}})
 
     monkeypatch.setattr(commands_module, "run", fake_run)
@@ -575,7 +575,9 @@ def test_resolve_logins_caches_and_skips_unresolvable(
         "user-sha1": "user-sha1",
     }
     assert len(calls) == 2
-    assert "::warning::Failed to resolve GitHub login" in capsys.readouterr().err
+    assert (
+        "::warning::No GitHub login associated with commit" in capsys.readouterr().err
+    )
 
 
 def test_resolve_logins_tries_all_hashes_per_email(
@@ -609,16 +611,16 @@ def test_resolve_logins_caps_lookup_attempts(
     def fake_run(*args: object, **kwargs: object) -> str:
         nonlocal calls
         calls += 1
-        raise ActionError("lookup failed")
+        return json.dumps({"author": None})
 
     monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
-        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+        for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS + 5)
     ]
 
     assert resolve_logins(commits, "conda/conda", {}) == {}
-    assert calls == MAX_FAILED_LOGIN_LOOKUPS
+    assert calls == MAX_UNRESOLVED_LOGIN_LOOKUPS
     assert (
         "::warning::Skipping remaining GitHub login lookups" in capsys.readouterr().err
     )
@@ -633,7 +635,7 @@ def test_resolve_logins_caps_hashes_per_email(
     def fake_run(*args: object, **kwargs: object) -> str:
         nonlocal calls
         calls += 1
-        raise ActionError("lookup failed")
+        return json.dumps({"author": None})
 
     monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
@@ -664,15 +666,15 @@ def test_resolve_logins_successes_do_not_count_toward_cap(
     monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
-        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+        for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS + 5)
     ]
 
     result = resolve_logins(commits, "conda/conda", {})
     assert result == {
         f"user-sha{index}": f"user-sha{index}"
-        for index in range(MAX_FAILED_LOGIN_LOOKUPS + 5)
+        for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS + 5)
     }
-    assert calls == MAX_FAILED_LOGIN_LOOKUPS + 5
+    assert calls == MAX_UNRESOLVED_LOGIN_LOOKUPS + 5
     assert (
         "::warning::Skipping remaining GitHub login lookups"
         not in capsys.readouterr().err
@@ -793,23 +795,20 @@ def test_is_first_timer_encodes_until_offset(
     assert not any("?" in argument for argument in commands[0])
 
 
-def test_is_first_timer_degrades_on_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_is_first_timer_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_run(*args: object, **kwargs: object) -> str:
         raise ActionError("lookup failed")
 
     monkeypatch.setattr(commands_module, "run", fake_run)
 
-    assert not is_first_timer(
-        "alice",
-        "2026-05-01T00:00:00+00:00",
-        "conda/conda",
-        {},
-        "26.7.x",
-    )
-    assert "::warning::" in capsys.readouterr().err
+    with pytest.raises(ActionError, match="lookup failed"):
+        is_first_timer(
+            "alice",
+            "2026-05-01T00:00:00+00:00",
+            "conda/conda",
+            {},
+            "26.7.x",
+        )
 
 
 def test_first_merged_pr_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -840,7 +839,8 @@ def test_first_merged_pr_url_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
         raise ActionError("lookup failed")
 
     monkeypatch.setattr(commands_module, "run", fake_run)
-    assert first_merged_pr_url("alice", "conda/conda", {}) is None
+    with pytest.raises(ActionError, match="lookup failed"):
+        first_merged_pr_url("alice", "conda/conda", {})
 
 
 @pytest.mark.parametrize("count", [2, 101, 1001])
@@ -873,7 +873,7 @@ def test_first_merged_pr_url_uses_merge_order(
     assert first_merged_pr_url("alice", "conda/conda", {}) == prs[-1]["url"]
 
 
-def test_first_merged_pr_url_omits_unverified_candidate(
+def test_first_merged_pr_url_propagates_followup_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_run(command: list[str], **kwargs: object) -> str:
@@ -891,7 +891,8 @@ def test_first_merged_pr_url_omits_unverified_candidate(
 
     monkeypatch.setattr(commands_module, "run", fake_run)
 
-    assert first_merged_pr_url("alice", "conda/conda", {}) is None
+    with pytest.raises(ActionError, match="HTTP 502"):
+        first_merged_pr_url("alice", "conda/conda", {})
 
 
 def test_render_contributors() -> None:
@@ -966,65 +967,44 @@ def test_merge_changelog_entry_appends_contributors() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("existing", "incoming", "expected"),
-    [
-        (
-            (
-                "Thanks to everyone.\n\n"
-                "* @Alice made their first commit in https://example.com/1\n* @bob"
-            ),
-            "* @alice\n* @aaron\n* @carol",
-            (
-                "Thanks to everyone.\n\n* @aaron\n"
-                "* @Alice made their first commit in https://example.com/1\n"
-                "* @bob\n* @carol"
-            ),
-        ),
-        (
-            "* @alice",
-            "* @alice made their first commit in https://example.com/1",
-            "* @alice made their first commit in https://example.com/1",
-        ),
-        (
-            "* @alice made their first commit in https://example.com/2",
-            "* @alice made their first commit in https://example.com/1",
-            "* @alice made their first commit in https://example.com/1",
-        ),
-        (
-            "* @alice helped with the release",
-            "* @alice made their first commit in https://example.com/1",
-            "* @alice helped with the release",
-        ),
-        (
-            "* @alice\n  * Fixed the solver.",
-            "* @bob",
-            "* @alice\n  * Fixed the solver.\n* @bob",
-        ),
-    ],
-    ids=[
-        "partial",
-        "new-annotation",
-        "corrected-annotation",
-        "manual-note",
-        "nested-manual-note",
-    ],
-)
-def test_merge_changelog_entry_preserves_contributor_credits(
-    existing: str, incoming: str, expected: str
-) -> None:
+def test_merge_changelog_entry_replaces_contributors() -> None:
     prefix = "## 26.7.0 (2026-06-05)\n\n### Contributors\n\n"
     suffix = "\n\n### Extra\n\nKeep this text.\n\n\n"
-    release = prefix + existing + suffix
+    release = (
+        prefix
+        + "* @alice made their first commit in https://example.com/1\n* @bob"
+        + suffix
+    )
+    incoming = "* @alice\n* @carol"
     entry = prefix + incoming + "\n\n\n"
 
-    assert merge_changelog_entry(release, entry) == prefix + expected + suffix
+    assert merge_changelog_entry(release, entry) == prefix + incoming + suffix
 
 
-def test_merge_preserves_contributors_after_partial_lookup_failure(
+@pytest.mark.parametrize("failed_lookup", ["login", "history", "first-pr"])
+def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failed_lookup: str,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "## 26.7.0 (2026-06-05)\n\n### Contributors\n\n"
+        "* @alice made their first commit in https://example.com/1\n* @bob\n",
+        encoding="utf-8",
+    )
+    fragment = tmp_path / "news/123-fix"
+    original_changelog = changelog.read_bytes()
+    original_fragment = fragment.read_bytes()
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    calls, pull_requests = mock_prepare_commands(monkeypatch)
     monkeypatch.setattr(prepare_release_module, "get_latest_tag", lambda **_: "26.6.1")
+    monkeypatch.setattr(prepare_release_module, "get_tag_commit_date", lambda _: "date")
     monkeypatch.setattr(
         prepare_release_module,
         "get_contributor_commits",
@@ -1033,25 +1013,47 @@ def test_merge_preserves_contributors_after_partial_lookup_failure(
             ContributorCommit("sha2", "bob@example.com"),
         ],
     )
-    monkeypatch.setattr(prepare_release_module, "get_tag_commit_date", lambda _: "date")
-    monkeypatch.setattr(prepare_release_module, "is_first_timer", lambda *_: False)
 
-    def fake_run(command: list[str], **kwargs: object) -> str:
-        if command[-1].endswith("/sha2"):
-            raise ActionError("HTTP 502")
-        return json.dumps({"author": {"login": "alice"}})
+    def fake_api(command: list[str], **kwargs: object) -> str:
+        calls.append((command, kwargs.get("env")))
+        if command[2].endswith("/commits/sha1"):
+            return json.dumps({"author": {"login": "alice"}})
+        if command[2].endswith("/commits/sha2"):
+            if failed_lookup == "login":
+                raise ActionError("HTTP 502")
+            return json.dumps({"author": {"login": "bob"}})
+        if command[2].endswith("/commits"):
+            if "author=bob" in command:
+                if failed_lookup == "history":
+                    raise ActionError("HTTP 502")
+                return "[]"
+            return '[{"sha": "old"}]'
+        raise ActionError("HTTP 502")
 
-    monkeypatch.setattr(commands_module, "run", fake_run)
-    contributors = collect_contributors("conda/conda", {}, base_branch="26.7.x")
-    entry = render_changelog_entry(
-        "26.7.0", "2026-06-05", {"Bug fixes": ["* New fix."]}, contributors
+    monkeypatch.setattr(commands_module, "run", fake_api)
+
+    assert (
+        prepare_release_module.main(
+            [
+                "prepare",
+                "--repository",
+                "conda/conda",
+                "--token",
+                "test-token",
+            ]
+        )
+        == 1
     )
-    release = "## 26.7.0 (2026-06-05)\n\n### Contributors\n\n* @alice\n* @bob\n\n\n"
 
-    updated = merge_changelog_entry(release, entry)
-
-    assert "* New fix." in updated
-    assert "* @alice\n* @bob" in updated
+    assert "::error::HTTP 502" in capsys.readouterr().err
+    assert changelog.read_bytes() == original_changelog
+    assert fragment.read_bytes() == original_fragment
+    assert not output.exists()
+    assert not pull_requests
+    assert not any(
+        command[:2] in (["git", "add"], ["git", "commit"], ["git", "push"])
+        for command, _ in calls
+    )
 
 
 def test_collect_contributors_without_previous_tag(

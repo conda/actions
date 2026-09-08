@@ -824,11 +824,19 @@ def require_github_token() -> str:
 
 def make_github_login_fn(token: str) -> Callable[[str, str], str | None]:
     def _login(repo: str, commit_hash: str) -> str | None:
-        return get_github_login(
-            repo,
-            commit_hash,
-            env=os.environ | {"GH_TOKEN": token},
-        )
+        try:
+            return get_github_login(
+                repo,
+                commit_hash,
+                env=os.environ | {"GH_TOKEN": token},
+            )
+        except ActionError as err:
+            print(
+                f"::warning::Failed to resolve GitHub login for "
+                f"{repo}@{commit_hash}: {err}",
+                file=sys.stderr,
+            )
+            return None
 
     return _login
 

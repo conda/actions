@@ -65,18 +65,10 @@ def get_github_login(
     *,
     env: dict[str, str],
 ) -> str | None:
-    try:
-        data = run_json(
-            ["gh", "api", f"repos/{repo}/commits/{commit_hash}"],
-            env=env,
-        )
-    except ActionError as err:
-        print(
-            f"::warning::Failed to resolve GitHub login for "
-            f"{repo}@{commit_hash}: {err}",
-            file=sys.stderr,
-        )
-        return None
+    data = run_json(
+        ["gh", "api", f"repos/{repo}/commits/{commit_hash}"],
+        env=env,
+    )
     author = data.get("author") or {}
     login = author.get("login")
     if not login:
