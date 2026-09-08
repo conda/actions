@@ -870,7 +870,7 @@ def test_render_changelog_entry_with_contributors() -> None:
     )
 
 
-def test_merge_changelog_entry_replaces_contributors() -> None:
+def test_merge_changelog_entry_updates_contributors() -> None:
     release = (
         "## 26.7.0 (2026-06-05)\n\n"
         "### Enhancements\n\n"
@@ -905,6 +905,94 @@ def test_merge_changelog_entry_appends_contributors() -> None:
         "### Contributors\n\n"
         "* @alice\n\n\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("existing", "incoming", "expected"),
+    [
+        (
+            (
+                "Thanks to everyone.\n\n"
+                "* @Alice made their first commit in https://example.com/1\n* @bob"
+            ),
+            "* @alice\n* @aaron\n* @carol",
+            (
+                "Thanks to everyone.\n\n* @aaron\n"
+                "* @Alice made their first commit in https://example.com/1\n"
+                "* @bob\n* @carol"
+            ),
+        ),
+        (
+            "* @alice",
+            "* @alice made their first commit in https://example.com/1",
+            "* @alice made their first commit in https://example.com/1",
+        ),
+        (
+            "* @alice made their first commit in https://example.com/2",
+            "* @alice made their first commit in https://example.com/1",
+            "* @alice made their first commit in https://example.com/1",
+        ),
+        (
+            "* @alice helped with the release",
+            "* @alice made their first commit in https://example.com/1",
+            "* @alice helped with the release",
+        ),
+        (
+            "* @alice\n  * Fixed the solver.",
+            "* @bob",
+            "* @alice\n  * Fixed the solver.\n* @bob",
+        ),
+    ],
+    ids=[
+        "partial",
+        "new-annotation",
+        "corrected-annotation",
+        "manual-note",
+        "nested-manual-note",
+    ],
+)
+def test_merge_changelog_entry_preserves_contributor_credits(
+    existing: str, incoming: str, expected: str
+) -> None:
+    prefix = "## 26.7.0 (2026-06-05)\n\n### Contributors\n\n"
+    suffix = "\n\n### Extra\n\nKeep this text.\n\n\n"
+    release = prefix + existing + suffix
+    entry = prefix + incoming + "\n\n\n"
+
+    assert merge_changelog_entry(release, entry) == prefix + expected + suffix
+
+
+def test_merge_preserves_contributors_after_partial_lookup_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(prepare_release_module, "get_latest_tag", lambda **_: "26.6.1")
+    monkeypatch.setattr(
+        prepare_release_module,
+        "get_contributor_commits",
+        lambda _: [
+            ContributorCommit("sha1", "alice@example.com"),
+            ContributorCommit("sha2", "bob@example.com"),
+        ],
+    )
+    monkeypatch.setattr(prepare_release_module, "get_tag_commit_date", lambda _: "date")
+    monkeypatch.setattr(prepare_release_module, "is_first_timer", lambda *_: False)
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        if command[-1].endswith("/sha2"):
+            raise ActionError("HTTP 502")
+        return json.dumps({"author": {"login": "alice"}})
+
+    monkeypatch.setattr(release_common_module, "run", fake_run)
+    contributors = collect_contributors("conda/conda", {}, base_branch="26.7.x")
+    entry = render_changelog_entry(
+        "26.7.0", "2026-06-05", {"Bug fixes": ["* New fix."]}, contributors
+    )
+    release = "## 26.7.0 (2026-06-05)\n\n### Contributors\n\n* @alice\n* @bob\n\n\n"
+
+    updated = merge_changelog_entry(release, entry)
+
+    assert "* New fix." in updated
+    assert "* @alice\n* @bob" in updated
 
 
 def test_collect_contributors_without_previous_tag(

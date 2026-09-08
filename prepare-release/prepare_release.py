@@ -26,6 +26,7 @@ TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.(?P<micro>\d+))$")
 CURRENT_DEVELOPMENTS = "[//]: # (current developments)"
 SECTION_HEADING_RE = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.MULTILINE)
 CONTRIBUTORS_SECTION = "Contributors"
+CONTRIBUTOR_LINE_RE = re.compile(r"^\* @(?P<login>\S+)(?P<suffix>.*)$")
 MAX_LOGIN_LOOKUPS_PER_EMAIL = 5
 MAX_FAILED_LOGIN_LOOKUPS = 20
 
@@ -575,11 +576,49 @@ def merge_contributors_section(release: str, body: str) -> str:
         )
         heading_end = len(release[: existing.end()].rstrip())
         trailing = release[len(release[:section_end].rstrip()) : section_end]
+        body = merge_contributor_lines(release[existing.end() : section_end], body)
         return release[:heading_end] + "\n\n" + body + trailing + release[section_end:]
 
     insert_at = len(release.rstrip())
     block = f"### {CONTRIBUTORS_SECTION}\n\n{body}"
     return release[:insert_at] + "\n\n" + block + release[insert_at:]
+
+
+def merge_contributor_lines(existing: str, incoming: str) -> str:
+    lines = existing.strip().splitlines()
+    for line in incoming.splitlines():
+        match = CONTRIBUTOR_LINE_RE.fullmatch(line)
+        if not match:
+            if line not in lines:
+                lines.append(line)
+            continue
+
+        login = match["login"].casefold()
+        contributors = [
+            (index, entry)
+            for index, old_line in enumerate(lines)
+            if (entry := CONTRIBUTOR_LINE_RE.fullmatch(old_line))
+        ]
+        for index, entry in contributors:
+            if entry["login"].casefold() == login:
+                # A failed history lookup must not erase an existing annotation.
+                if match["suffix"] and (
+                    not entry["suffix"]
+                    or entry["suffix"].startswith(" made their first commit in ")
+                ):
+                    lines[index] = line
+                break
+        else:
+            insert_at = next(
+                (
+                    index
+                    for index, entry in contributors
+                    if entry["login"].casefold() > login
+                ),
+                len(lines),
+            )
+            lines.insert(insert_at, line)
+    return "\n".join(lines)
 
 
 def get_changed_paths() -> list[Path]:
