@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 from argparse import Namespace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -29,6 +32,9 @@ from prepare_release import (
     update_changelog,
     verify_context,
 )
+
+if TYPE_CHECKING:
+    from pytest_httpserver import HTTPServer
 
 
 def patch_run(monkeypatch: pytest.MonkeyPatch, fake_run: object) -> None:
@@ -610,6 +616,40 @@ def test_is_first_timer_without_previous_tag(
     assert is_first_timer("alice", "", "conda/conda", {}, "26.7.x")
 
 
+@pytest.mark.skipif(shutil.which("gh") is None, reason="GitHub CLI is required")
+def test_is_first_timer_sends_get_query(
+    monkeypatch: pytest.MonkeyPatch,
+    httpserver: HTTPServer,
+) -> None:
+    httpserver.expect_oneshot_request(
+        "/repos/conda/conda/commits",
+        method="GET",
+        query_string={
+            "author": "alice",
+            "until": "2026-05-01T00:00:00+00:00",
+            "per_page": "1",
+            "sha": "26.7.x",
+        },
+    ).respond_with_json([])
+    run = release_common_module.run
+
+    def local_run(command: list[str], **kwargs: object) -> str:
+        command = command.copy()
+        command[2] = httpserver.url_for(f"/{command[2]}")
+        return run(command, **kwargs)
+
+    monkeypatch.setattr(release_common_module, "run", local_run)
+    result = is_first_timer(
+        "alice",
+        "2026-05-01T00:00:00+00:00",
+        "conda/conda",
+        os.environ | {"GH_TOKEN": "test-token"},
+        "26.7.x",
+    )
+    assert result
+    httpserver.check()
+
+
 @pytest.mark.parametrize(
     ("payload", "expected"),
     [("[]", True), ('[{"sha": "old"}]', False)],
@@ -642,6 +682,8 @@ def test_is_first_timer_queries_prior_commits_on_release_branch(
         "gh",
         "api",
         "repos/conda/conda/commits",
+        "--method",
+        "GET",
         "-f",
         "author=alice",
         "-f",

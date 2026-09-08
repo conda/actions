@@ -312,6 +312,8 @@ def is_first_timer(
                 "gh",
                 "api",
                 f"repos/{repository}/commits",
+                "--method",
+                "GET",
                 "-f",
                 f"author={login}",
                 "-f",
