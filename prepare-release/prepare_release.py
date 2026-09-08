@@ -108,6 +108,7 @@ def prepare_release(args: Namespace) -> None:
     if not args.repository:
         raise ActionError("No GitHub repository was provided.")
     git_env = os.environ | {"GH_TOKEN": args.token}
+    run(["gh", "auth", "setup-git"], env=git_env)
 
     if not is_current_release_head(base_branch, context["head_sha"], git_env):
         return
@@ -136,7 +137,6 @@ def prepare_release(args: Namespace) -> None:
 
     run(["git", "add", args.changelog_path, *map(str, fragment_paths)])
     run(["git", "commit", "-m", f"Prepare release notes for {version}"])
-    run(["gh", "auth", "setup-git"], env=git_env)
 
     if not is_current_release_head(base_branch, context["head_sha"], git_env):
         return

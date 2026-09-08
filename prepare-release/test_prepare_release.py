@@ -101,9 +101,11 @@ def mock_prepare_commands(
     remote_sha: str = "a" * 40,
     auth_error: bool = False,
     lookup_error: bool = False,
+    require_auth: bool = False,
 ) -> tuple[list[tuple[list[str], dict[str, str] | None]], list[dict[str, object]]]:
     calls: list[tuple[list[str], dict[str, str] | None]] = []
     pull_requests: list[dict[str, object]] = []
+    authenticated = False
 
     def fake_run(
         command: list[str],
@@ -111,14 +113,19 @@ def mock_prepare_commands(
         capture: bool = False,
         env: dict[str, str] | None = None,
     ) -> str:
+        nonlocal authenticated
         calls.append((command, env))
-        if command == ["gh", "auth", "setup-git"] and auth_error:
-            raise ActionError("GitHub authentication failed.")
+        if command == ["gh", "auth", "setup-git"]:
+            if auth_error:
+                raise ActionError("GitHub authentication failed.")
+            authenticated = True
         if command[:3] == ["git", "tag", "--list"]:
             return ""
         if command[:3] == ["git", "status", "--porcelain"]:
             return " M CHANGELOG.md\n D news/123-fix\n"
         if command[:2] == ["git", "ls-remote"]:
+            if require_auth and not authenticated:
+                raise ActionError("Git credentials are not configured.")
             if lookup_error:
                 raise ActionError("Remote branch lookup failed.")
             return f"{remote_sha}\trefs/heads/26.7.x\n"
@@ -337,6 +344,25 @@ def test_prepare_release_checks_head_again_after_contributor_collection(
     assert not output.exists()
 
 
+def test_prepare_release_authenticates_before_reading_remote(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    calls, pull_requests = mock_prepare_commands(monkeypatch, require_auth=True)
+
+    prepare_release(prepare_args())
+
+    auth_env = next(
+        env for command, env in calls if command == ["gh", "auth", "setup-git"]
+    )
+    assert auth_env is not None
+    assert auth_env["GH_TOKEN"] == "test-token"
+    assert pull_requests
+
+
 @pytest.mark.parametrize(
     ("auth_error", "lookup_error", "message"),
     [
@@ -364,6 +390,8 @@ def test_prepare_release_fails_closed_when_publish_check_fails(
         prepare_release(prepare_args())
 
     commands = [command for command, _ in calls]
+    if auth_error:
+        assert not any(command[:2] == ["git", "ls-remote"] for command in commands)
     if not lookup_error:
         assert ["gh", "auth", "setup-git"] in commands
     assert not any(command[:2] == ["git", "push"] for command in commands)
