@@ -121,6 +121,39 @@ def test_parse_unknown_heading_fails() -> None:
     assert "unknown news heading 'Fixes'" in fragment.errors[0]
 
 
+@pytest.mark.parametrize("heading", ["### Bug fixes", "## BUG    FIXES ##"])
+def test_parse_duplicate_heading_fails(heading: str) -> None:
+    fragment = parse_sectioned_news(
+        "news/123-duplicate",
+        "### Bug fixes\n\n* Fix the first issue.\n\n"
+        f"{heading}\n\n* Fix the second issue.\n",
+    )
+
+    assert fragment.errors == (
+        "news/123-duplicate:5: duplicate news heading 'Bug fixes'",
+    )
+    assert fragment.sections["Bug fixes"] == [
+        "* Fix the first issue.",
+        "* Fix the second issue.",
+    ]
+
+
+@pytest.mark.parametrize("bullet", ["", "* Document it.\n"])
+def test_parse_non_bullet_content_fails(bullet: str) -> None:
+    fragment = parse_sectioned_news(
+        "news/123-docs",
+        f"### Docs\n\n{bullet}Unindented paragraph.\n",
+    )
+
+    assert fragment.errors == (
+        (
+            "news/123-docs: non-bullet content in 'Docs' near section line 2: "
+            "'Unindented paragraph.'"
+        ),
+    )
+    assert fragment.sections["Docs"] == ([bullet.strip()] if bullet else [])
+
+
 def test_parse_empty_file_fails() -> None:
     fragment = parse_sectioned_news("news/123-empty", "")
 

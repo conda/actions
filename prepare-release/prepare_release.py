@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
             write_output("head-branch", context["head_branch"])
             write_output("head-sha", context["head_sha"])
             print(f"Verified release context for {context['head_branch']}.")
-        elif args.command == "prepare":
+        else:
             prepare_release(args)
     except ActionError as err:
         print(f"::error::{err}", file=sys.stderr)

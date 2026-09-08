@@ -160,6 +160,74 @@ def test_verify_context_accepts_trusted_release_push(
     }
 
 
+def test_main_verifies_context_and_writes_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_workflow_run_event(tmp_path, monkeypatch)
+    output = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    assert prepare_release_module.main(["verify-context"]) == 0
+
+    assert output.read_text(encoding="utf-8") == (
+        "head-branch=26.7.x\nhead-sha=abc123\n"
+    )
+    assert "Verified release context for 26.7.x." in capsys.readouterr().out
+
+
+def test_main_rejects_other_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_workflow_run_event(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    output = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    assert prepare_release_module.main(["verify-context"]) == 1
+
+    assert "must run from the workflow_run event" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_main_rejects_unknown_subcommand(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        prepare_release_module,
+        "prepare_release",
+        lambda *args: pytest.fail("An invalid command must not prepare a release."),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        prepare_release_module.main(["unknown"])
+
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("event_path", [None, "missing.json"])
+def test_main_rejects_unavailable_event_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    event_path: str | None,
+) -> None:
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "conda/conda")
+    if event_path is None:
+        monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_EVENT_PATH", str(tmp_path / event_path))
+    output = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    assert prepare_release_module.main(["verify-context"]) == 1
+
+    assert "did not conclude successfully" in capsys.readouterr().err
+    assert not output.exists()
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -167,6 +235,8 @@ def test_verify_context_accepts_trusted_release_push(
         ("event", "pull_request", "must come from a push"),
         ("head_repository", "someone/conda", "must come from this repository"),
         ("branch", "main", "does not match"),
+        ("branch", "", "did not include a head branch and SHA"),
+        ("sha", "", "did not include a head branch and SHA"),
     ],
 )
 def test_verify_context_rejects_untrusted_context(
@@ -199,12 +269,33 @@ def test_prepare_release_noops_without_fragments(
         lambda *args, **kwargs: pytest.fail("No commands should run."),
     )
 
-    prepare_release(prepare_args())
+    assert prepare_release_module.main(["prepare"]) == 0
 
     assert (
         "No news fragments found under 'news'. Nothing to do."
         in capsys.readouterr().out
     )
+
+
+def test_prepare_release_skips_publication_without_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    calls, pull_requests = mock_prepare_commands(monkeypatch)
+    monkeypatch.setattr(prepare_release_module, "get_changed_paths", lambda: [])
+
+    prepare_release(prepare_args())
+
+    assert "No release note changes to commit." in capsys.readouterr().out
+    assert not any(
+        command[:2] in (["git", "add"], ["git", "commit"], ["git", "push"])
+        for command, _ in calls
+    )
+    assert not pull_requests
 
 
 def test_prepare_release_rejects_missing_news_directory(
@@ -469,9 +560,27 @@ def test_infer_next_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     subprocess.run(["git", "commit", "-m", "init"], check=True, stdout=subprocess.PIPE)
     subprocess.run(["git", "tag", "26.7.0"], check=True)
     subprocess.run(["git", "tag", "v26.7.1"], check=True)
+    subprocess.run(["git", "tag", "26.7.2rc1"], check=True)
     subprocess.run(["git", "tag", "26.8.0"], check=True)
 
     assert infer_next_version("26.7.x") == "26.7.2"
+
+
+def test_infer_next_version_rejects_non_release_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        prepare_release_module,
+        "run",
+        lambda *args, **kwargs: pytest.fail("No Git commands should run."),
+    )
+
+    with pytest.raises(ActionError, match="Cannot infer release version from branch"):
+        infer_next_version("main")
+
+
+def test_news_fragment_paths_without_directory(tmp_path: Path) -> None:
+    assert prepare_release_module.news_fragment_paths(tmp_path / "missing") == []
 
 
 def test_collect_fragments_preserves_sections(tmp_path: Path) -> None:
@@ -524,6 +633,56 @@ def test_update_changelog_inserts_after_current_developments(tmp_path: Path) -> 
         "## 26.7.0 (2026-06-05)\n\n\n"
         "## 26.6.0 (2026-05-01)\n"
     )
+
+
+def test_update_changelog_requires_existing_file(tmp_path: Path) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+
+    with pytest.raises(ActionError, match="Changelog file does not exist"):
+        update_changelog(changelog, "## 26.7.0 (2026-06-05)\n", "26.7.0")
+
+    assert not changelog.exists()
+
+
+def test_update_changelog_prepends_without_developments_marker(tmp_path: Path) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+    previous = "## 26.6.0 (2026-05-01)\n\n* Previous release notes.\n"
+    changelog.write_text("\n\n" + previous, encoding="utf-8")
+    entry = "## 26.7.0 (2026-06-05)\n\n* New release notes.\n\n"
+
+    update_changelog(changelog, entry, "26.7.0")
+
+    assert changelog.read_text(encoding="utf-8") == entry + previous
+
+
+def test_merge_changelog_entry_appends_new_section() -> None:
+    release = (
+        "## 26.7.0 (2026-06-05)\n\n### Enhancements\n\n* Existing enhancement.\n\n\n"
+    )
+    entry = (
+        "## 26.7.0 (2026-06-06)\n\n"
+        "### Bug fixes\n\n* New fix.\n\n"
+        "### Extra\n\nUnrecognized incoming section.\n"
+    )
+
+    assert merge_changelog_entry(release, entry) == (
+        "## 26.7.0 (2026-06-05)\n\n"
+        "### Enhancements\n\n* Existing enhancement.\n\n"
+        "### Bug fixes\n\n* New fix.\n\n\n"
+    )
+
+
+def test_get_changed_paths_ignores_blank_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        prepare_release_module,
+        "run",
+        lambda *args, **kwargs: " M CHANGELOG.md\n\n D news/123-fix\n",
+    )
+
+    assert prepare_release_module.get_changed_paths() == [
+        Path("CHANGELOG.md"),
+        Path("news/123-fix"),
+    ]
 
 
 def test_update_changelog_amends_existing_version(tmp_path: Path) -> None:
@@ -1466,3 +1625,130 @@ def test_prepare_release_adds_contributors_section(
     ) in changelog
     assert gh_envs
     assert all(env is not None and env["GH_TOKEN"] == "test-token" for env in gh_envs)
+
+
+@pytest.mark.parametrize("existing", [False, True], ids=["create", "update"])
+def test_create_or_update_pr_targets_release_branch(
+    monkeypatch: pytest.MonkeyPatch,
+    existing: bool,
+) -> None:
+    repository = "conda/conda-build"
+    branch = "release-notes-26.7.1"
+    base_branch = "26.7.x"
+    url = f"https://github.com/{repository}/pull/42"
+    calls: list[list[str]] = []
+    monkeypatch.setenv("GH_TOKEN", "unrelated-token")
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture: bool = False,
+        env: dict[str, str] | None = None,
+    ) -> str:
+        calls.append(command)
+        assert env is not None and env["GH_TOKEN"] == "release-token"
+        assert command[command.index("--repo") + 1] == repository
+        assert command[command.index("--base") + 1] == base_branch
+        if command[:3] == ["gh", "pr", "list"]:
+            assert capture
+            assert command[command.index("--head") + 1] == branch
+            assert command[command.index("--state") + 1] == "open"
+            return json.dumps([{"number": 42, "url": url}] if existing else [])
+        if command[:3] == ["gh", "pr", "create"]:
+            assert capture
+            assert command[command.index("--head") + 1] == branch
+            return f"{url}\n"
+        if command[:4] == ["gh", "pr", "edit", "42"]:
+            return ""
+        pytest.fail(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(prepare_release_module, "run", fake_run)
+
+    assert (
+        prepare_release_module.create_or_update_pr(
+            repository=repository,
+            branch=branch,
+            base_branch=base_branch,
+            version="26.7.1",
+            token="release-token",
+        )
+        == url
+    )
+    assert [command[2] for command in calls] == [
+        "list",
+        "edit" if existing else "create",
+    ]
+    mutation = calls[-1]
+    assert mutation[mutation.index("--title") + 1] == "Prepare release notes for 26.7.1"
+    assert mutation[mutation.index("--body") + 1] == (
+        "Prepare release notes for `26.7.1`.\n\n"
+        "This PR updates `CHANGELOG.md` from the news fragments and "
+        "removes the consumed snippets."
+    )
+    assert os.environ["GH_TOKEN"] == "unrelated-token"
+
+
+@pytest.mark.parametrize(
+    ("repository", "token", "message"),
+    [
+        ("", "release-token", "No GitHub repository"),
+        ("conda/conda", "", "No GitHub token"),
+    ],
+)
+def test_create_or_update_pr_requires_repository_and_token(
+    monkeypatch: pytest.MonkeyPatch,
+    repository: str,
+    token: str,
+    message: str,
+) -> None:
+    monkeypatch.setattr(
+        prepare_release_module,
+        "run",
+        lambda *args, **kwargs: pytest.fail("No GitHub commands should run."),
+    )
+
+    with pytest.raises(ActionError, match=message):
+        prepare_release_module.create_or_update_pr(
+            repository=repository,
+            branch="release-notes-26.7.1",
+            base_branch="26.7.x",
+            version="26.7.1",
+            token=token,
+        )
+
+
+@pytest.mark.parametrize("existing", ["", "existing=keep\n"])
+def test_write_output_appends_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing: str,
+) -> None:
+    output = tmp_path / "github-output"
+    if existing:
+        output.write_text(existing, encoding="utf-8")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    prepare_release_module.write_output("version", "26.7.1")
+    prepare_release_module.write_output(
+        "pull-request-url", "https://github.com/conda/conda/pull/42"
+    )
+
+    assert output.read_text(encoding="utf-8") == (
+        existing
+        + "version=26.7.1\n"
+        + "pull-request-url=https://github.com/conda/conda/pull/42\n"
+    )
+
+
+def test_write_output_without_github_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+
+    prepare_release_module.write_output("version", "26.7.1")
+
+    assert not list(tmp_path.iterdir())
+    assert not capsys.readouterr().out
