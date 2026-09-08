@@ -278,12 +278,10 @@ def resolve_logins(
     for hashes in hashes_by_email.values():
         for commit_hash in hashes[:MAX_LOGIN_LOOKUPS_PER_EMAIL]:
             if unresolved >= MAX_UNRESOLVED_LOGIN_LOOKUPS:
-                print(
-                    f"::warning::Skipping remaining GitHub login lookups "
-                    f"after {MAX_UNRESOLVED_LOGIN_LOOKUPS} unresolved lookups.",
-                    file=sys.stderr,
+                raise ActionError(
+                    "Cannot prepare complete contributor list after "
+                    f"{MAX_UNRESOLVED_LOGIN_LOOKUPS} unresolved GitHub login lookups."
                 )
-                return unique
             if login := get_github_login(repository, commit_hash, env=env):
                 unique.setdefault(login.casefold(), login)
                 break

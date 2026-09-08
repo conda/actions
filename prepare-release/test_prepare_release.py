@@ -822,9 +822,12 @@ def test_resolve_logins_tries_distinct_hashes_per_email(
     assert calls == ["sha1", "sha2"]
 
 
-def test_resolve_logins_caps_lookup_attempts(
+@pytest.mark.parametrize(
+    "count", [MAX_UNRESOLVED_LOGIN_LOOKUPS, MAX_UNRESOLVED_LOGIN_LOOKUPS + 5]
+)
+def test_resolve_logins_requires_complete_lookup_within_limit(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    count: int,
 ) -> None:
     calls = 0
 
@@ -836,14 +839,17 @@ def test_resolve_logins_caps_lookup_attempts(
     monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash=f"sha{index}", email=f"user{index}@example.com")
-        for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS + 5)
+        for index in range(count)
     ]
 
-    assert resolve_logins(commits, "conda/conda", {}) == {}
+    if count > MAX_UNRESOLVED_LOGIN_LOOKUPS:
+        with pytest.raises(
+            ActionError, match="Cannot prepare complete contributor list"
+        ):
+            resolve_logins(commits, "conda/conda", {})
+    else:
+        assert resolve_logins(commits, "conda/conda", {}) == {}
     assert calls == MAX_UNRESOLVED_LOGIN_LOOKUPS
-    assert (
-        "::warning::Skipping remaining GitHub login lookups" in capsys.readouterr().err
-    )
 
 
 def test_resolve_logins_caps_hashes_per_email(
@@ -866,8 +872,7 @@ def test_resolve_logins_caps_hashes_per_email(
     assert resolve_logins(commits, "conda/conda", {}) == {}
     assert calls == MAX_LOGIN_LOOKUPS_PER_EMAIL
     assert (
-        "::warning::Skipping remaining GitHub login lookups"
-        not in capsys.readouterr().err
+        capsys.readouterr().err.count("No GitHub login associated with commit") == calls
     )
 
 
@@ -895,10 +900,7 @@ def test_resolve_logins_successes_do_not_count_toward_cap(
         for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS + 5)
     }
     assert calls == MAX_UNRESOLVED_LOGIN_LOOKUPS + 5
-    assert (
-        "::warning::Skipping remaining GitHub login lookups"
-        not in capsys.readouterr().err
-    )
+    assert not capsys.readouterr().err
 
 
 def test_is_first_timer_without_previous_tag(
@@ -1282,7 +1284,7 @@ def test_merge_changelog_entry_replaces_contributors() -> None:
     assert merge_changelog_entry(release, entry) == prefix + incoming + suffix
 
 
-@pytest.mark.parametrize("failed_lookup", ["login", "history", "first-pr"])
+@pytest.mark.parametrize("failed_lookup", ["login", "history", "first-pr", "limit"])
 def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1306,11 +1308,20 @@ def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
     calls, pull_requests = mock_prepare_commands(monkeypatch)
     monkeypatch.setattr(prepare_release_module, "get_latest_tag", lambda **_: "26.6.1")
     monkeypatch.setattr(prepare_release_module, "get_tag_commit_date", lambda _: "date")
+    unresolved = (
+        [
+            ContributorCommit(f"unknown-{index}", f"unknown-{index}@example.com")
+            for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS)
+        ]
+        if failed_lookup == "limit"
+        else []
+    )
     monkeypatch.setattr(
         prepare_release_module,
         "get_contributor_commits",
         lambda _: [
             ContributorCommit("sha1", "alice@example.com"),
+            *unresolved,
             ContributorCommit("sha2", "bob@example.com"),
         ],
     )
@@ -1319,6 +1330,8 @@ def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
         calls.append((command, kwargs.get("env")))
         if command[2].endswith("/commits/sha1"):
             return json.dumps({"author": {"login": "alice"}})
+        if "/commits/unknown-" in command[2]:
+            return json.dumps({"author": None})
         if command[2].endswith("/commits/sha2"):
             if failed_lookup == "login":
                 raise ActionError("HTTP 502")
@@ -1346,7 +1359,18 @@ def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
         == 1
     )
 
-    assert "::error::HTTP 502" in capsys.readouterr().err
+    message = (
+        "Cannot prepare complete contributor list"
+        if failed_lookup == "limit"
+        else "HTTP 502"
+    )
+    assert f"::error::{message}" in capsys.readouterr().err
+    if failed_lookup == "limit":
+        assert not any(
+            command[2].endswith("/commits/sha2")
+            for command, _ in calls
+            if command[:2] == ["gh", "api"]
+        )
     assert changelog.read_bytes() == original_changelog
     assert fragment.read_bytes() == original_fragment
     assert not output.exists()
