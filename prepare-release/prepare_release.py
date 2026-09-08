@@ -114,7 +114,6 @@ def prepare_release(args: Namespace) -> None:
     contributors = collect_contributors(
         args.repository,
         env=git_env,
-        base_branch=base_branch,
         tag_prefix=f"{version.rpartition('.')[0]}.",
     )
     entry = render_changelog_entry(version, release_date, fragments, contributors)
@@ -289,22 +288,14 @@ def resolve_logins(
     return unique
 
 
-def get_tag_commit_date(tag: str) -> str:
-    return run(["git", "log", "-1", "--format=%cI", tag], capture=True).strip()
-
-
 def is_first_timer(
     login: str,
-    prev_tag_date: str,
+    prev_tag: str,
     repository: str,
     env: dict[str, str],
-    base_branch: str,
 ) -> bool:
-    if not prev_tag_date:
+    if not prev_tag:
         return True
-    # Known limitation: the history check filters by committer date, so a
-    # rebased or cherry-picked older commit suppresses the first-timer
-    # annotation even when the author is new to the release branch.
     commits = run_json(
         [
             "gh",
@@ -314,12 +305,10 @@ def is_first_timer(
             "GET",
             "-f",
             f"author={login}",
-            "-f",
-            f"until={prev_tag_date}",
             "-F",
             "per_page=1",
             "-f",
-            f"sha={base_branch}",
+            f"sha={prev_tag}",
         ],
         env=env,
     )
@@ -366,7 +355,6 @@ def collect_contributors(
     repository: str,
     env: dict[str, str],
     *,
-    base_branch: str,
     tag_prefix: str = "",
 ) -> str:
     prev_tag = get_latest_tag(prefix=tag_prefix)
@@ -381,11 +369,10 @@ def collect_contributors(
     if not unique:
         return ""
 
-    prev_tag_date = get_tag_commit_date(prev_tag) if prev_tag else ""
     entries: list[tuple[str, str | None]] = []
     for login in unique.values():
         pr_url = None
-        if is_first_timer(login, prev_tag_date, repository, env, base_branch):
+        if is_first_timer(login, prev_tag, repository, env):
             pr_url = first_merged_pr_url(login, repository, env)
         entries.append((login, pr_url))
     return render_contributors(entries)

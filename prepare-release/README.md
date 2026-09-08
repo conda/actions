@@ -73,8 +73,9 @@ first-contribution lookups use the repository issues API.
 
 Each generated entry ends with a `Contributors` section listing the GitHub
 logins of commit authors since the previous release tag, sorted
-alphabetically. First-time contributors are annotated with a link to their
-earliest merged PR. The section is omitted when no author resolves to a
+alphabetically. Contributors with no commits in the previous release tag's
+history are marked as first-time contributors with a link to their earliest
+merged PR. The section is omitted when no author resolves to a
 GitHub login. A failed contributor lookup or reaching the lookup limit with
 authors still unchecked stops the action before it changes the changelog or
 removes news fragments. Successful lookups regenerate the contributors section

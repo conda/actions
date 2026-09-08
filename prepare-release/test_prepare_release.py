@@ -911,7 +911,7 @@ def test_is_first_timer_without_previous_tag(
         lambda *args, **kwargs: pytest.fail("No commands should run."),
     )
 
-    assert is_first_timer("alice", "", "conda/conda", {}, "26.7.x")
+    assert is_first_timer("alice", "", "conda/conda", {})
 
 
 @pytest.mark.skipif(shutil.which("gh") is None, reason="GitHub CLI is required")
@@ -924,9 +924,8 @@ def test_is_first_timer_sends_get_query(
         method="GET",
         query_string={
             "author": "alice",
-            "until": "2026-05-01T00:00:00+00:00",
             "per_page": "1",
-            "sha": "26.7.x",
+            "sha": "26.7.0",
         },
     ).respond_with_json([])
     run = commands_module.run
@@ -939,10 +938,9 @@ def test_is_first_timer_sends_get_query(
     monkeypatch.setattr(commands_module, "run", local_run)
     result = is_first_timer(
         "alice",
-        "2026-05-01T00:00:00+00:00",
+        "26.7.0",
         "conda/conda",
         os.environ | {"GH_TOKEN": "test-token"},
-        "26.7.x",
     )
     assert result
     httpserver.check()
@@ -952,7 +950,7 @@ def test_is_first_timer_sends_get_query(
     ("payload", "expected"),
     [("[]", True), ('[{"sha": "old"}]', False)],
 )
-def test_is_first_timer_queries_prior_commits_on_release_branch(
+def test_is_first_timer_queries_prior_commits_at_release_tag(
     monkeypatch: pytest.MonkeyPatch,
     payload: str,
     expected: bool,
@@ -968,10 +966,9 @@ def test_is_first_timer_queries_prior_commits_on_release_branch(
     assert (
         is_first_timer(
             "alice",
-            "2026-05-01T00:00:00+00:00",
+            "26.7.0",
             "conda/conda",
             {},
-            "26.7.x",
         )
         is expected
     )
@@ -984,37 +981,106 @@ def test_is_first_timer_queries_prior_commits_on_release_branch(
         "GET",
         "-f",
         "author=alice",
-        "-f",
-        "until=2026-05-01T00:00:00+00:00",
         "-F",
         "per_page=1",
         "-f",
-        "sha=26.7.x",
+        "sha=26.7.0",
     ]
 
 
-def test_is_first_timer_encodes_until_offset(
+def test_collect_contributors_marks_first_timer_after_maintenance_merge(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    commands: list[list[str]] = []
+    monkeypatch.chdir(tmp_path)
 
-    def fake_run(command: list[str], **kwargs: object) -> str:
-        commands.append(command)
-        return "[]"
+    def git(
+        *args: str,
+        author: str = "bob",
+        date: str = "2026-04-11T12:00:00Z",
+    ) -> str:
+        return subprocess.run(
+            ["git", "-c", "commit.gpgsign=false", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=os.environ
+            | {
+                "GIT_AUTHOR_NAME": author,
+                "GIT_AUTHOR_EMAIL": f"{author}@example.com",
+                "GIT_COMMITTER_NAME": "bob",
+                "GIT_COMMITTER_EMAIL": "bob@example.com",
+                "GIT_AUTHOR_DATE": date,
+                "GIT_COMMITTER_DATE": date,
+            },
+        ).stdout.strip()
 
-    monkeypatch.setattr(commands_module, "run", fake_run)
+    git("init", "--initial-branch=26.5.x")
+    git("commit", "--allow-empty", "-m", "Initial release", date="2026-04-01T12:00:00Z")
+    git("branch", "26.3.x")
+    git(
+        "commit",
+        "--allow-empty",
+        "-m",
+        "First contribution",
+        author="alice",
+        date="2026-04-08T12:00:00Z",
+    )
+    git("checkout", "26.3.x")
+    git(
+        "commit",
+        "--allow-empty",
+        "-m",
+        "Maintenance release",
+        date="2026-04-10T12:00:00Z",
+    )
+    git("tag", "26.3.2")
+    git("checkout", "26.5.x")
+    git("merge", "--no-ff", "26.3.x", "-m", "Merge maintenance release")
 
-    assert is_first_timer(
-        "alice",
-        "2026-05-01T00:00:00+00:00",
+    def fake_api(command: list[str], **kwargs: object) -> str:
+        assert command[:2] == ["gh", "api"]
+        endpoint = command[2]
+        if endpoint.endswith("/commits"):
+            fields = dict(
+                argument.split("=", 1) for argument in command if "=" in argument
+            )
+            until = [f"--until={fields['until']}"] if "until" in fields else []
+            commits = git(
+                "log",
+                "--format=%H",
+                "--max-count=1",
+                f"--author={fields['author']}@example.com",
+                *until,
+                fields["sha"],
+            )
+            return json.dumps([{"sha": sha} for sha in commits.splitlines()])
+        if endpoint.endswith("/issues"):
+            return json.dumps(
+                [
+                    [
+                        {
+                            "html_url": "https://github.com/conda/conda/pull/42",
+                            "pull_request": {"merged_at": "2026-04-08T12:00:00Z"},
+                        }
+                    ]
+                ]
+            )
+        email = git("show", "-s", "--format=%ae", endpoint.rsplit("/", 1)[-1])
+        return json.dumps({"author": {"login": email.split("@")[0]}})
+
+    monkeypatch.setattr(commands_module, "run", fake_api)
+
+    # Alice contributed before the maintenance tag's date, but her commit
+    # was not included in that release. She is new to the next series.
+    assert collect_contributors(
         "conda/conda",
         {},
-        "26.7.x",
+        tag_prefix="26.5.",
+    ) == (
+        "* @alice made their first commit in https://github.com/conda/conda/pull/42\n"
+        "* @bob"
     )
-    # The +00:00 offset must survive as a discrete -f value so gh URL-encodes
-    # it; an unencoded + in a query string decodes to a space.
-    assert "until=2026-05-01T00:00:00+00:00" in commands[0]
-    assert not any("?" in argument for argument in commands[0])
 
 
 def test_is_first_timer_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1026,10 +1092,9 @@ def test_is_first_timer_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(ActionError, match="lookup failed"):
         is_first_timer(
             "alice",
-            "2026-05-01T00:00:00+00:00",
+            "26.7.0",
             "conda/conda",
             {},
-            "26.7.x",
         )
 
 
@@ -1307,7 +1372,6 @@ def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     calls, pull_requests = mock_prepare_commands(monkeypatch)
     monkeypatch.setattr(prepare_release_module, "get_latest_tag", lambda **_: "26.6.1")
-    monkeypatch.setattr(prepare_release_module, "get_tag_commit_date", lambda _: "date")
     unresolved = (
         [
             ContributorCommit(f"unknown-{index}", f"unknown-{index}@example.com")
@@ -1416,7 +1480,7 @@ def test_collect_contributors_without_previous_tag(
 
     patch_run(monkeypatch, fake_run)
 
-    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == (
+    assert collect_contributors("conda/conda", {}) == (
         "* @alice made their first commit in "
         "https://github.com/conda/conda/pull/alice\n"
         "* @Bob made their first commit in "
@@ -1439,8 +1503,6 @@ def test_collect_contributors_scopes_previous_tag_to_branch(
             return "26.7.0\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0"
-        if command[:2] == ["git", "log"]:
-            return "2026-05-01T00:00:00+00:00\n"
         if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
@@ -1453,7 +1515,6 @@ def test_collect_contributors_scopes_previous_tag_to_branch(
         collect_contributors(
             "conda/conda",
             {},
-            base_branch="26.7.x",
             tag_prefix="26.7.",
         )
         == "* @alice"
@@ -1481,8 +1542,6 @@ def test_collect_contributors_falls_back_to_previous_series_tag(
             return "" if "--list" in command else "26.6.1\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0"
-        if command[:2] == ["git", "log"]:
-            return "2026-05-01T00:00:00+00:00\n"
         if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
@@ -1495,7 +1554,6 @@ def test_collect_contributors_falls_back_to_previous_series_tag(
         collect_contributors(
             "conda/conda",
             {},
-            base_branch="26.7.x",
             tag_prefix="26.7.",
         )
         == "* @alice"
@@ -1520,8 +1578,6 @@ def test_collect_contributors_dedupes_logins(
             return "26.6.1\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0sha2\0alice@work.example.com\0"
-        if command[:2] == ["git", "log"]:
-            return "2026-05-01T00:00:00+00:00\n"
         if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
@@ -1530,7 +1586,7 @@ def test_collect_contributors_dedupes_logins(
 
     patch_run(monkeypatch, fake_run)
 
-    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == "* @alice"
+    assert collect_contributors("conda/conda", {}) == "* @alice"
 
 
 def test_collect_contributors_skips_unresolvable_authors(
@@ -1542,8 +1598,6 @@ def test_collect_contributors_skips_unresolvable_authors(
             return "26.6.1\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0sha2\0ghost@example.com\0"
-        if command[:2] == ["git", "log"]:
-            return "2026-05-01T00:00:00+00:00\n"
         if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
             return '[{"sha": "old"}]'
         if command[:2] == ["gh", "api"]:
@@ -1554,7 +1608,7 @@ def test_collect_contributors_skips_unresolvable_authors(
 
     patch_run(monkeypatch, fake_run)
 
-    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == "* @alice"
+    assert collect_contributors("conda/conda", {}) == "* @alice"
     assert (
         "::warning::No GitHub login associated with commit" in capsys.readouterr().err
     )
@@ -1575,7 +1629,7 @@ def test_collect_contributors_without_resolved_logins(
 
     patch_run(monkeypatch, fake_run)
 
-    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == ""
+    assert collect_contributors("conda/conda", {}) == ""
     assert (
         "::warning::No GitHub login associated with commit" in capsys.readouterr().err
     )
@@ -1604,8 +1658,6 @@ def test_prepare_release_adds_contributors_section(
             return "26.6.1\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0sha2\0bob@example.com\0"
-        if command[:2] == ["git", "log"]:
-            return "2026-05-01T00:00:00+00:00\n"
         if command[:3] == ["git", "status", "--porcelain"]:
             return " M CHANGELOG.md\n D news/123-fix\n"
         if command[:2] == ["git", "ls-remote"]:
