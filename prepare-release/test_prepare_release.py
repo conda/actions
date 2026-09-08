@@ -232,6 +232,64 @@ def test_prepare_release_rejects_malformed_fragment(
         prepare_release(prepare_args())
 
 
+@pytest.mark.parametrize("field", ["token", "repository"])
+def test_prepare_release_requires_github_configuration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    calls, pull_requests = mock_prepare_commands(monkeypatch)
+    args = prepare_args()
+    setattr(args, field, "")
+    changelog = tmp_path / "CHANGELOG.md"
+    fragment = tmp_path / "news/123-fix"
+    original_changelog = changelog.read_bytes()
+    original_fragment = fragment.read_bytes()
+
+    with pytest.raises(ActionError, match=f"No GitHub {field} was provided"):
+        prepare_release(args)
+
+    assert changelog.read_bytes() == original_changelog
+    assert fragment.read_bytes() == original_fragment
+    assert not any(command[0] == "gh" for command, _ in calls)
+    assert not any(command[:2] == ["git", "push"] for command, _ in calls)
+    assert not pull_requests
+
+
+@pytest.mark.parametrize("response", ["", f"{'a' * 40}\trefs/heads/26.8.x\n"])
+def test_prepare_release_rejects_unexpected_remote_head_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    response: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    calls, pull_requests = mock_prepare_commands(monkeypatch)
+    run = prepare_release_module.run
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        result = run(command, **kwargs)
+        return response if command[:2] == ["git", "ls-remote"] else result
+
+    monkeypatch.setattr(prepare_release_module, "run", fake_run)
+    changelog = tmp_path / "CHANGELOG.md"
+    fragment = tmp_path / "news/123-fix"
+    original_changelog = changelog.read_bytes()
+    original_fragment = fragment.read_bytes()
+
+    with pytest.raises(ActionError, match="Could not determine remote head"):
+        prepare_release(prepare_args())
+
+    assert changelog.read_bytes() == original_changelog
+    assert fragment.read_bytes() == original_fragment
+    assert not any(command[:2] == ["git", "push"] for command, _ in calls)
+    assert not pull_requests
+
+
 def test_prepare_release_skips_stale_workflow_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -580,8 +638,10 @@ def test_resolve_logins_caches_and_skips_unresolvable(
     )
 
 
-def test_resolve_logins_tries_all_hashes_per_email(
+@pytest.mark.parametrize("repeat_count", [1, MAX_LOGIN_LOOKUPS_PER_EMAIL])
+def test_resolve_logins_tries_distinct_hashes_per_email(
     monkeypatch: pytest.MonkeyPatch,
+    repeat_count: int,
 ) -> None:
     calls: list[str] = []
 
@@ -595,6 +655,7 @@ def test_resolve_logins_tries_all_hashes_per_email(
     monkeypatch.setattr(commands_module, "run", fake_run)
     commits = [
         ContributorCommit(hash="sha1", email="a@example.com"),
+    ] * repeat_count + [
         ContributorCommit(hash="sha2", email="a@example.com"),
     ]
 
@@ -1311,6 +1372,27 @@ def test_collect_contributors_skips_unresolvable_authors(
     patch_run(monkeypatch, fake_run)
 
     assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == "* @alice"
+    assert (
+        "::warning::No GitHub login associated with commit" in capsys.readouterr().err
+    )
+
+
+def test_collect_contributors_without_resolved_logins(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "26.6.1\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return "sha1\0ghost@example.com\0"
+        if command == ["gh", "api", "repos/conda/conda/commits/sha1"]:
+            return json.dumps({"author": None})
+        pytest.fail(f"Unexpected command: {command}")
+
+    patch_run(monkeypatch, fake_run)
+
+    assert collect_contributors("conda/conda", {}, base_branch="26.7.x") == ""
     assert (
         "::warning::No GitHub login associated with commit" in capsys.readouterr().err
     )
