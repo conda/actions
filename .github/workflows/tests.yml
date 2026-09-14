@@ -67,10 +67,10 @@ jobs:
           persist-credentials: false
 
       - name: Create Test Author Metadata
+        shell: python
         env:
           AUTHORS_PATH: ${{ runner.temp }}/prepare-authors-smoke.json
         run: |
-          python3 - <<'PY'
           import json
           import os
           import subprocess
@@ -86,7 +86,14 @@ jobs:
           authors = {}
           for offset in range(0, len(fields), 2):
               email, name = fields[offset : offset + 2]
-              entry = authors.setdefault(email, {"name": name, "email": email})
+              entry = authors.setdefault(
+                  email,
+                  {
+                      "name": name,
+                      "email": email,
+                      "github": f"smoke-author-{len(authors)}",
+                  },
+              )
               if name != entry["name"]:
                   aliases = entry.setdefault("aliases", [])
                   if name not in aliases:
@@ -95,7 +102,6 @@ jobs:
               json.dumps(list(authors.values())),
               encoding="utf-8",
           )
-          PY
 
       - name: Run Prepare Authors
         id: prepare-authors
@@ -103,7 +109,8 @@ jobs:
         with:
           authors-path: ${{ runner.temp }}/prepare-authors-smoke.json
           git-remote: prepare-authors-smoke
-          mode: check
+          base-branch: ${{ github.sha }}
+          since: all
 
       - name: Check Result
         env:
