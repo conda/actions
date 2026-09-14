@@ -94,3 +94,10 @@ rules:
       # Synced from conda/infrastructure.
       - stale.yml
       - update.yml
+
+  self-repository:
+    ignore:
+      # The recommended '$/...' syntax is not yet understood by
+      # actionlint; keep using './...' until actionlint supports it.
+      # https://github.com/rhysd/actionlint/issues/711
+      - tests.yml
