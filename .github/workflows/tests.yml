@@ -261,7 +261,7 @@ jobs:
   # required check
   analyze:
     name: Analyze
-    needs: [pytest, read-file, template-files, canary-release]
+    needs: [pytest, prepare-authors, read-file, template-files, canary-release]
     if: '!cancelled()'
     runs-on: ubuntu-latest
     permissions:
