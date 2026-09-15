@@ -1,0 +1,44 @@
+name: Report Bencher benchmarks
+description: Report paired pytest-benchmark results from a completed workflow.
+branding:
+  icon: activity
+  color: green
+
+inputs:
+  project:
+    description: Bencher project slug.
+    required: true
+  api-key:
+    description: Bencher project upload key.
+  api-token:
+    description: Legacy Bencher API token, used instead of api-key.
+  github-token:
+    description: GitHub token with actions read, checks write, and pull-requests write.
+    default: ${{ github.token }}
+  pr-policy:
+    description: Use percentage for 25 percent PR alerts or informational for measurements only.
+    default: percentage
+  ci-id:
+    description: Optional identifier for the Bencher GitHub check.
+  artifact-name:
+    description: Name of the producer's combined benchmark artifact.
+    default: benchmark-results-v3
+
+runs:
+  using: composite
+  steps:
+    - name: Install Bencher
+      uses: bencherdev/bencher@8d75325c3bc59403a2186a056b472c4f49d42838 # v0.6.12
+      with:
+        version: 0.6.12
+    - name: Report benchmarks
+      shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/report.py"
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_API_KEY: ${{ inputs.api-key }}
+        INPUT_API_TOKEN: ${{ inputs.api-token }}
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_PR_POLICY: ${{ inputs.pr-policy }}
+        INPUT_CI_ID: ${{ inputs.ci-id }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}

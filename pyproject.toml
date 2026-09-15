@@ -18,6 +18,7 @@ omit = [
 [tool.pytest.ini_options]
 addopts = [
   "--color=yes",
+  "--cov=bencher",
   "--cov=check-news",
   "--cov=combine-durations",
   "--cov=conda_actions",
