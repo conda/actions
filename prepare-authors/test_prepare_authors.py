@@ -1545,6 +1545,7 @@ def test_load_and_save_metadata_preserves_garbled_email(tmp_path: Path) -> None:
 
     updated, _ = load_metadata(authors)
     assert updated[0]["alternate_emails"] == [garbled_email]
+    assert f"- {garbled_email}\n" in authors.read_text(encoding="utf-8")
 
 
 def test_ensure_allowed_paths() -> None:

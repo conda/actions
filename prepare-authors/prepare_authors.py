@@ -336,6 +336,7 @@ def load_metadata(
     path = Path(filename)
     yaml_engine = YAML()
     yaml_engine.preserve_quotes = True
+    yaml_engine.width = sys.maxsize
     if path.is_file():
         with path.open(encoding="utf-8") as handle:
             metadata = yaml_engine.load(handle)
