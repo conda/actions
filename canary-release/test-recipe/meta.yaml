@@ -4,4 +4,11 @@ package:
 
 build:
   number: 0
-  noarch: generic
+  noarch: generic  # [not win]
+  script: '"{{ PYTHON }}" "{{ RECIPE_DIR }}/run_test.py"'
+
+requirements:
+  host:
+    - python
+  run:
+    - python
