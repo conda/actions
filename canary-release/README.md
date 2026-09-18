@@ -13,6 +13,18 @@ Two channel backends are provided:
   - The final channel can be accessed via `https://github.com/{github-releases-repository}/releases/download/{github-releases-channel-name}`.
   - Github limits each release to 1000 artifacts, 2GB max each. That said, you should only upload only a few artifacts per channel for indexing performance. For example, use a timestamped `github-releases-channel-name` value like `canary-{package-name}-{YYYY-MM-DD}`
 
+## Windows ARM64
+
+Use `subdir: win-arm64` on a `windows-11-arm` runner. The action uses x64
+Miniconda to create a native Python 3.14 build environment from conda-forge.
+It runs `conda-build` and the recipe tests in that environment, using
+conda-forge for the recipe dependencies too. A native Miniconda installer
+is not required.
+
+The recipe must support `win-arm64` and use Python versions available on
+conda-forge for that platform. Set `upload: 'false'` to build and test without
+publishing packages.
+
 ## GitHub Action Usage
 
 In your GitHub repository include the action in your workflows,

@@ -221,7 +221,7 @@ jobs:
 
   canary-release:
     name: Canary release (${{ matrix.name }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs-on || 'ubuntu-latest' }}
     permissions:
       contents: read
     strategy:
@@ -239,6 +239,12 @@ jobs:
             anaconda-org-label: tests
             github-releases-repository: conda/actions
             github-releases-channel-name: tests
+          # TODO: Remove once platform is bootstrapped and proved working
+          - name: Windows ARM64
+            runs-on: windows-11-arm
+            subdir: win-arm64
+            anaconda-org-channel: conda-canary
+            anaconda-org-label: tests
     steps:
       - name: Checkout Source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -251,6 +257,8 @@ jobs:
         with:
           package-name: conda-build-test
           subdir: noarch
+          # TODO: Remove once platform is bootstrapped and proved working
+          base-architecture: ${{ matrix.subdir == 'win-arm64' && 'x64' || '' }}
           conda-build-path: ./canary-release/test-recipe/
           upload: dry-run
           anaconda-org-channel: ${{ matrix.anaconda-org-channel }}

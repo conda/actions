@@ -5,8 +5,11 @@ inputs:
     description: Name of package on anaconda.org, needs to match build file name.
     required: true
   subdir:
-    description: Subdirectory
+    description: Package output subdirectory. win-arm64 uses a native builder on a Windows ARM64 runner.
     required: true
+  base-architecture:
+    description: Architecture to use for the installer provisioning the `base` environment with all build tools. Will be passed to `setup-miniconda`'s `architecture`.
+    required: false
   comment-headline:
     description: Headline for build comment
     required: false
@@ -48,6 +51,9 @@ runs:
   using: composite
   steps:
     - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
+      # TODO: Revert; we just need win-64 installer on win-arm64 while bootstrapping
+      with:
+        architecture: ${{ inputs.base-architecture || '' }}
 
     - name: Set output variables
       id: vars
@@ -98,6 +104,12 @@ runs:
         conda install --yes --quiet git
         echo "::endgroup::"
 
+        if [[ "${INPUT_SUBDIR}" != "noarch" ]]; then
+          echo "::group::Configuring target platform"
+          echo "target_platform: [${INPUT_SUBDIR}]" >> "${INPUT_BUILD_PATH}/conda_build_config.yaml"
+          echo "::endgroup::"
+        fi
+
         echo "::group::Debugging information"
         conda info
         conda config --show-sources
@@ -123,6 +135,10 @@ runs:
             \)
           )
         )
+        if [[ ${#PACKAGES[@]} -eq 0 ]]; then
+          echo "::error::No ${INPUT_PACKAGE_NAME} packages found in ./pkgs/${INPUT_SUBDIR}"
+          exit 1
+        fi
         echo "::endgroup::"
         if [[ "${INPUT_UPLOAD}" == "true" || "${INPUT_UPLOAD}" == "dry-run" ]]; then
           echo "::group::Uploading package"
