@@ -239,10 +239,10 @@ jobs:
             anaconda-org-label: tests
             github-releases-repository: conda/actions
             github-releases-channel-name: tests
+          # TODO: Remove once platform is bootstrapped and proved working
           - name: Windows ARM64
             runs-on: windows-11-arm
             subdir: win-arm64
-            upload: 'false'
     steps:
       - name: Checkout Source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -254,9 +254,9 @@ jobs:
         uses: ./canary-release
         with:
           package-name: conda-build-test
-          subdir: ${{ matrix.subdir || 'noarch' }}
+          subdir: noarch
           conda-build-path: ./canary-release/test-recipe/
-          upload: ${{ matrix.upload || 'dry-run' }}
+          upload: dry-run
           anaconda-org-channel: ${{ matrix.anaconda-org-channel }}
           anaconda-org-label: ${{ matrix.anaconda-org-label }}
           github-releases-repository: ${{ matrix.github-releases-repository }}

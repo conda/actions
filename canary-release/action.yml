@@ -48,6 +48,7 @@ runs:
   using: composite
   steps:
     - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
+      # TODO: Revert; we just need win-64 installer on win-arm64 while bootstrapping
       with:
         architecture: ${{ inputs.subdir == 'win-arm64' && 'x64' || '' }}
       env:
@@ -92,26 +93,21 @@ runs:
       run: |
         echo "::group::Setting up environment"
         set -euo pipefail
-        if [[ "${INPUT_SUBDIR}" == "win-arm64" ]]; then
-          unset CONDA_SUBDIR
-          conda create --name canary-build --platform win-arm64 --yes --quiet \
-            --override-channels --channel conda-forge \
-            python=3.14 conda-build anaconda-client conda-index git
-          conda activate canary-build
-          # Use the native environment's entry point instead of base conda.
-          BUILD_COMMAND=(conda-build --override-channels --channel conda-forge)
-        else
-          conda activate
-          conda update --yes --quiet conda
-          conda remove --force anaconda-auth
-          conda install --yes --quiet conda-build anaconda-client conda-index
-          # git needs to be installed after conda-build
-          # see https://github.com/conda/conda/issues/11758
-          # see https://github.com/conda/actions/pull/47
-          conda install --yes --quiet git
-          BUILD_COMMAND=(conda build)
-        fi
+        conda activate
+        conda update --yes --quiet conda
+        conda remove --force anaconda-auth
+        conda install --yes --quiet conda-build anaconda-client conda-index
+        # git needs to be installed after conda-build
+        # see https://github.com/conda/conda/issues/11758
+        # see https://github.com/conda/actions/pull/47
+        conda install --yes --quiet git
         echo "::endgroup::"
+
+        if [[ "${INPUT_SUBDIR}" != "noarch" ]]; then
+          echo "::group::Configuring target platform"
+          echo "target_platform: [${INPUT_SUBDIR}]" >> "${INPUT_BUILD_PATH}/conda_build_config.yaml"
+          echo "::endgroup::"
+        fi
 
         echo "::group::Debugging information"
         conda info
@@ -125,7 +121,7 @@ runs:
 
         echo "::group::Building package"
         # Keep build args unquoted so callers can pass multiple arguments.
-        "${BUILD_COMMAND[@]}" --croot=./pkgs ${INPUT_BUILD_ARGS} "${INPUT_BUILD_PATH}"
+        conda build --croot=./pkgs ${INPUT_BUILD_ARGS} "${INPUT_BUILD_PATH}"
         echo "::endgroup::"
 
         echo "::group::Find packages"
