@@ -255,6 +255,7 @@ jobs:
         with:
           package-name: conda-build-test
           subdir: noarch
+          # TODO: Remove once platform is bootstrapped and proved working
           base-architecture: ${{ matrix.subdir == 'win-arm64' && 'x64' || '' }}
           conda-build-path: ./canary-release/test-recipe/
           upload: dry-run
