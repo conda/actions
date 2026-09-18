@@ -255,7 +255,7 @@ jobs:
         with:
           package-name: conda-build-test
           subdir: noarch
-          base-architecture: ${{ matrix.subdir == 'win-arm64' && 'arm64' || '' }}
+          base-architecture: ${{ matrix.subdir == 'win-arm64' && 'x64' || '' }}
           conda-build-path: ./canary-release/test-recipe/
           upload: dry-run
           anaconda-org-channel: ${{ matrix.anaconda-org-channel }}
