@@ -8,7 +8,7 @@ inputs:
     description: Package output subdirectory. win-arm64 uses a native builder on a Windows ARM64 runner.
     required: true
   base-architecture:
-    description: "Architecture to use for the installer provisioning the `base` environment with all build tools. Will be passed to `setup-miniconda`'s `architecture`."
+    description: Architecture to use for the installer provisioning the `base` environment with all build tools. Will be passed to `setup-miniconda`'s `architecture`.
     required: false
   comment-headline:
     description: Headline for build comment
