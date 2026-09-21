@@ -106,8 +106,12 @@ runs:
 
         if [[ "${INPUT_SUBDIR}" != "noarch" ]]; then
           echo "::group::Configuring target platform"
-          echo "target_platform: [${INPUT_SUBDIR}]" >> "${INPUT_BUILD_PATH}/conda_build_config.yaml"
+          BUILD_CONFIG="${INPUT_BUILD_PATH}/conda_build_config.yaml"
+          echo "target_platform: [${INPUT_SUBDIR}]" >> "${BUILD_CONFIG}"
+          BUILD_CONFIG_ARGS=(-m "${BUILD_CONFIG}")
           echo "::endgroup::"
+        else
+          BUILD_CONFIG_ARGS=()
         fi
 
         echo "::group::Debugging information"
@@ -122,7 +126,7 @@ runs:
 
         echo "::group::Building package"
         # Keep build args unquoted so callers can pass multiple arguments.
-        conda build --croot=./pkgs ${INPUT_BUILD_ARGS} "${INPUT_BUILD_PATH}"
+        conda build --croot=./pkgs "${BUILD_CONFIG_ARGS[@]}" ${INPUT_BUILD_ARGS} "${INPUT_BUILD_PATH}"
         echo "::endgroup::"
 
         echo "::group::Find packages"
