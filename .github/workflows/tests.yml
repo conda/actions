@@ -243,6 +243,8 @@ jobs:
           - name: Windows ARM64
             runs-on: windows-11-arm
             subdir: win-arm64
+            conda-build-path: ./canary-release/test-recipe-win-arm64/
+            conda-build-arguments: --override-channels -c conda-forge
             anaconda-org-channel: conda-canary
             anaconda-org-label: tests
     steps:
@@ -256,10 +258,11 @@ jobs:
         uses: ./canary-release
         with:
           package-name: conda-build-test
-          subdir: noarch
+          subdir: ${{ matrix.subdir || 'noarch' }}
           # TODO: Remove once platform is bootstrapped and proved working
           base-architecture: ${{ matrix.subdir == 'win-arm64' && 'x64' || '' }}
-          conda-build-path: ./canary-release/test-recipe/
+          conda-build-path: ${{ matrix.conda-build-path || './canary-release/test-recipe/' }}
+          conda-build-arguments: ${{ matrix.conda-build-arguments || '' }}
           upload: dry-run
           anaconda-org-channel: ${{ matrix.anaconda-org-channel }}
           anaconda-org-label: ${{ matrix.anaconda-org-label }}
