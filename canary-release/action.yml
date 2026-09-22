@@ -107,7 +107,8 @@ runs:
         if [[ "${INPUT_SUBDIR}" != "noarch" ]]; then
           echo "::group::Configuring target platform"
           BUILD_CONFIG="${INPUT_BUILD_PATH}/conda_build_config.yaml"
-          echo "target_platform: [${INPUT_SUBDIR}]" >> "${BUILD_CONFIG}"
+          # Inline lists are parsed as conda-build selectors.
+          printf 'target_platform:\n  - %s\n' "${INPUT_SUBDIR}" >> "${BUILD_CONFIG}"
           BUILD_CONFIG_ARGS=(-m "${BUILD_CONFIG}")
           echo "::endgroup::"
         else
