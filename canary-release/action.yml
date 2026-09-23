@@ -121,7 +121,7 @@ runs:
         conda list
         echo "::endgroup::"
 
-        echo "::group:Clean cache"
+        echo "::group::Clean cache"
         conda clean --all --yes
         echo "::endgroup::"
 
