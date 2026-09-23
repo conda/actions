@@ -5,7 +5,7 @@ inputs:
     description: Name of package on anaconda.org, needs to match build file name.
     required: true
   subdir:
-    description: Package output subdirectory. win-arm64 uses a native builder on a Windows ARM64 runner.
+    description: Package output subdirectory and conda-build target platform for non-noarch builds.
     required: true
   base-architecture:
     description: Architecture to use for the installer provisioning the `base` environment with all build tools. Will be passed to `setup-miniconda`'s `architecture`.
