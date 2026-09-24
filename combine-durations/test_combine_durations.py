@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import shutil
 from argparse import ArgumentTypeError
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
+import combine_durations
 from combine_durations import (
     DurationStats,
     aggregate_new_durations,
@@ -114,6 +116,43 @@ def test_aggregate_new_durations() -> None:
         assert stats[os].number_of_tests == 5
         assert stats[os].total_run_time > 0
         assert stats[os].average_run_time > 0
+
+
+def test_aggregate_new_durations_deduplicates(tmp_path: Path) -> None:
+    # same artifact contents uploaded from multiple jobs/runs
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+    (artifacts_dir / "OS1_run1").mkdir()
+    (artifacts_dir / "OS1_run2").mkdir()
+    (artifacts_dir / "OS1_run3").mkdir()
+    for run in ("OS1_run1", "OS1_run2", "OS1_run3"):
+        shutil.copy(ARTIFACTS_DIR / "OS1_run1" / "OS1.json", artifacts_dir / run)
+
+    combined, stats = aggregate_new_durations(artifacts_dir)
+
+    # duplicated uploads are only read once
+    assert all(len(durations) == 1 for durations in combined["OS1"].values())
+    assert len(combined["OS1"]) == stats["OS1"].number_of_tests == 3
+
+
+def test_aggregate_old_durations_warn_limit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    durations_dir = tmp_path / "durations"
+    durations_dir.mkdir()
+    (durations_dir / "OS1.json").write_text(
+        json.dumps({f"test{i}": 1.0 for i in range(10)})
+    )
+    monkeypatch.setattr(combine_durations, "WARN_LIMIT", 5)
+
+    aggregate_old_durations(durations_dir, {"OS1": {}}, unlink=False)
+
+    captured = capsys.readouterr()
+    assert "OS1::test0 not present in new durations, removing" in captured.out
+    assert "OS1::test5 not present in new durations, removing" not in captured.out
+    assert "OS1: … and" in captured.out and "more" in captured.out
 
 
 @pytest.mark.parametrize(

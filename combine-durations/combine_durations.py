@@ -82,6 +82,10 @@ class DurationStats:
 
 STATS_MAP = dict[str, DurationStats]
 
+# keep the exported summary small enough to be inlined into workflow outputs
+SUMMARY_LIMIT = 60_000
+WARN_LIMIT = 100
+
 
 def read_durations(
     path: Path,
@@ -100,7 +104,14 @@ def aggregate_new_durations(artifacts_dir: Path) -> tuple[COMBINED_TYPE, STATS_M
     combined: COMBINED_TYPE = {}
 
     new_stats: dict[str, DurationStats] = {}
-    for path in artifacts_dir.glob("**/*.json"):
+    seen: set[str] = set()
+    for path in sorted(artifacts_dir.glob("**/*.json")):
+        # same artifact contents may be uploaded from multiple jobs/runs;
+        # only read each (name, contents) once
+        if (key := f"{path.stem}:{path.read_bytes()}") in seen:
+            continue
+        seen.add(key)
+
         # read new durations
         os_name, new_data = read_durations(path, new_stats)
 
@@ -136,8 +147,11 @@ def aggregate_old_durations(
             continue
 
         # warn about tests that are no longer present
-        for name in set(old_data) - set(combined[os_name]):
+        removed = sorted(set(old_data) - set(combined[os_name]))
+        for name in removed[:WARN_LIMIT]:
             print(f"⚠️ {os_name}::{name} not present in new durations, removing")
+        if len(removed) > WARN_LIMIT:
+            print(f"⚠️ {os_name}: … and {len(removed) - WARN_LIMIT} more")
 
         # only copy over keys that are still present in new durations
         for key in set(old_data) & set(combined[os_name]):
@@ -171,6 +185,8 @@ def dump_summary(console: Console = CONSOLE) -> None:
     output = os.getenv("GITHUB_OUTPUT")
     if summary or output:
         html = console.export_text()
+        if len(html) > SUMMARY_LIMIT:
+            html = html[:SUMMARY_LIMIT] + "\n⚠️ summary truncated\n"
     if summary:
         Path(summary).write_text(get_step_summary(html))
     if output:
