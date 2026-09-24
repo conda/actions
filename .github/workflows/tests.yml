@@ -221,7 +221,7 @@ jobs:
 
   canary-release:
     name: Canary release (${{ matrix.name }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs-on || 'ubuntu-latest' }}
     permissions:
       contents: read
     strategy:
@@ -239,6 +239,14 @@ jobs:
             anaconda-org-label: tests
             github-releases-repository: conda/actions
             github-releases-channel-name: tests
+          # TODO: Remove once platform is bootstrapped and proved working
+          - name: Windows ARM64
+            runs-on: windows-11-arm
+            subdir: win-arm64
+            conda-build-path: ./canary-release/test-recipe-win-arm64/
+            conda-build-arguments: --override-channels -c conda-forge
+            anaconda-org-channel: conda-canary
+            anaconda-org-label: tests
     steps:
       - name: Checkout Source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -250,8 +258,11 @@ jobs:
         uses: ./canary-release
         with:
           package-name: conda-build-test
-          subdir: noarch
-          conda-build-path: ./canary-release/test-recipe/
+          subdir: ${{ matrix.subdir || 'noarch' }}
+          # TODO: Remove once platform is bootstrapped and proved working
+          base-architecture: ${{ matrix.subdir == 'win-arm64' && 'x64' || '' }}
+          conda-build-path: ${{ matrix.conda-build-path || './canary-release/test-recipe/' }}
+          conda-build-arguments: ${{ matrix.conda-build-arguments || '' }}
           upload: dry-run
           anaconda-org-channel: ${{ matrix.anaconda-org-channel }}
           anaconda-org-label: ${{ matrix.anaconda-org-label }}
