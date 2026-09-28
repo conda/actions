@@ -59,7 +59,7 @@ def is_news_fragment(path: str | Path, news_directory: str | Path = "news") -> b
     if relative.name.startswith("."):
         return False
 
-    if relative.name in {"TEMPLATE", "TEMPLATE.md"}:
+    if relative.name in {"TEMPLATE", "TEMPLATE.md", "README", "README.md"}:
         return False
 
     return relative.suffix in {"", ".md"}
