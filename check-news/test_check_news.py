@@ -75,6 +75,8 @@ def test_is_news_fragment() -> None:
     assert is_news_fragment("news/123-fix.md")
     assert not is_news_fragment("news/TEMPLATE")
     assert not is_news_fragment("news/TEMPLATE.md")
+    assert not is_news_fragment("news/README")
+    assert not is_news_fragment("news/README.md")
     assert not is_news_fragment("news/.DS_Store")
     assert not is_news_fragment("news/nested/123-fix")
     assert not is_news_fragment("docs/123-fix")

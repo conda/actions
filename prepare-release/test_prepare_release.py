@@ -263,6 +263,7 @@ def test_prepare_release_noops_without_fragments(
     news = tmp_path / "news"
     news.mkdir()
     (news / "TEMPLATE").write_text("* <news item>\n", encoding="utf-8")
+    (news / "README.md").write_text("# News fragments\n", encoding="utf-8")
     monkeypatch.setattr(
         prepare_release_module,
         "run",
