@@ -382,7 +382,7 @@ def render_contributors(entries: list[tuple[str, str | None]]) -> str:
     lines = []
     for login, pr_url in sorted(entries, key=lambda entry: entry[0].casefold()):
         if pr_url:
-            lines.append(f"* @{login} made their first commit in {pr_url}")
+            lines.append(f"* @{login} made their first contribution in <{pr_url}>")
         else:
             lines.append(f"* @{login}")
     return "\n".join(lines)

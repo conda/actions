@@ -84,7 +84,7 @@ when updating an existing release entry:
 ```
 ### Contributors
 
-* @alice made their first commit in https://github.com/conda/conda/pull/123
+* @alice made their first contribution in <https://github.com/conda/conda/pull/123>
 * @bob
 * @dependabot[bot]
 ```
