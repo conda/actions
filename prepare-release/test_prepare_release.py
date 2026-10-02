@@ -1079,7 +1079,7 @@ def test_collect_contributors_marks_first_timer_after_maintenance_merge(
         {},
         tag_prefix="26.5.",
     ) == (
-        "* @alice made their first commit in https://github.com/conda/conda/pull/42\n"
+        "* @alice made their first contribution in <https://github.com/conda/conda/pull/42>\n"
         "* @bob"
     )
 
@@ -1274,8 +1274,8 @@ def test_render_contributors() -> None:
     )
 
     assert body == (
-        "* @alice made their first commit in "
-        "https://github.com/conda/conda/pull/42\n"
+        "* @alice made their first contribution in "
+        "<https://github.com/conda/conda/pull/42>\n"
         "* @Bob\n"
         "* @dependabot[bot]"
     )
@@ -1363,7 +1363,7 @@ def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
         "## 26.7.0 (2026-06-05)\n\n### Contributors\n\n"
-        "* @alice made their first commit in https://example.com/1\n* @bob\n",
+        "* @alice made their first contribution in <https://example.com/1>\n* @bob\n",
         encoding="utf-8",
     )
     fragment = tmp_path / "news/123-fix"
@@ -1482,10 +1482,10 @@ def test_collect_contributors_without_previous_tag(
     patch_run(monkeypatch, fake_run)
 
     assert collect_contributors("conda/conda", {}) == (
-        "* @alice made their first commit in "
-        "https://github.com/conda/conda/pull/alice\n"
-        "* @Bob made their first commit in "
-        "https://github.com/conda/conda/pull/Bob"
+        "* @alice made their first contribution in "
+        "<https://github.com/conda/conda/pull/alice>\n"
+        "* @Bob made their first contribution in "
+        "<https://github.com/conda/conda/pull/Bob>"
     )
     assert not any(
         any(argument.startswith("author=") for argument in command)
@@ -1696,8 +1696,8 @@ def test_prepare_release_adds_contributors_section(
         "### Bug fixes\n\n"
         "* Fix the thing. (#123)\n\n"
         "### Contributors\n\n"
-        "* @alice made their first commit in "
-        "https://github.com/conda/conda/pull/42\n"
+        "* @alice made their first contribution in "
+        "<https://github.com/conda/conda/pull/42>\n"
         "* @Bob\n"
     ) in changelog
     assert gh_envs
