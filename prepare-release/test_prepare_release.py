@@ -1485,7 +1485,7 @@ def test_collect_contributors_without_previous_tag(
         "* @alice made their first contribution in "
         "<https://github.com/conda/conda/pull/alice>\n"
         "* @Bob made their first contribution in "
-        "<https://github.com/conda/conda/pull/Bob>\n"
+        "<https://github.com/conda/conda/pull/Bob>"
     )
     assert not any(
         any(argument.startswith("author=") for argument in command)
