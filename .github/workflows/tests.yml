@@ -239,6 +239,22 @@ jobs:
             anaconda-org-label: tests
             github-releases-repository: conda/actions
             github-releases-channel-name: tests
+          - name: rattler-build (noarch)
+            build-tool: rattler-build
+            rattler-build-path: ./canary-release/test-recipe-rattler/
+            anaconda-org-channel: conda-canary
+            anaconda-org-label: tests
+          - name: rattler-build (linux-64)
+            build-tool: rattler-build
+            subdir: linux-64
+            rattler-build-path: ./canary-release/test-recipe-rattler-linux-64/
+            anaconda-org-channel: conda-canary
+            anaconda-org-label: tests
+          - name: rattler-build + GH Releases
+            build-tool: rattler-build
+            rattler-build-path: ./canary-release/test-recipe-rattler/
+            github-releases-repository: conda/actions
+            github-releases-channel-name: tests
           # TODO: Remove once platform is bootstrapped and proved working
           - name: Windows ARM64
             runs-on: windows-11-arm
@@ -263,6 +279,9 @@ jobs:
           base-architecture: ${{ matrix.subdir == 'win-arm64' && 'x64' || '' }}
           conda-build-path: ${{ matrix.conda-build-path || './canary-release/test-recipe/' }}
           conda-build-arguments: ${{ matrix.conda-build-arguments || '' }}
+          build-tool: ${{ matrix.build-tool || 'conda-build' }}
+          rattler-build-path: ${{ matrix.rattler-build-path || './canary-release/test-recipe-rattler/' }}
+          rattler-build-arguments: ${{ matrix.rattler-build-arguments || '' }}
           upload: dry-run
           anaconda-org-channel: ${{ matrix.anaconda-org-channel }}
           anaconda-org-label: ${{ matrix.anaconda-org-label }}
