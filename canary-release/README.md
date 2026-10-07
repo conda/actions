@@ -43,8 +43,6 @@ Notes for `rattler-build`:
 - rattler-build uses conda-forge by default, unlike `conda-build` which uses the
   channels configured in conda. Add channels via `rattler-build-arguments`,
   e.g. `-c my-channel`.
-- `win-arm64` and `base-architecture` are only documented for `conda-build`;
-  `rattler-build` on `win-arm64` is untested.
 
 ```yaml
 - uses: conda/actions/canary-release@main # Pin to a reviewed commit in production.
