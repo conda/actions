@@ -281,7 +281,6 @@ jobs:
           conda-build-arguments: ${{ matrix.conda-build-arguments || '' }}
           build-tool: ${{ matrix.build-tool || 'conda-build' }}
           rattler-build-path: ${{ matrix.rattler-build-path || './canary-release/test-recipe-rattler/' }}
-          rattler-build-arguments: ${{ matrix.rattler-build-arguments || '' }}
           upload: dry-run
           anaconda-org-channel: ${{ matrix.anaconda-org-channel }}
           anaconda-org-label: ${{ matrix.anaconda-org-label }}
