@@ -13,6 +13,50 @@ Two channel backends are provided:
   - The final channel can be accessed via `https://github.com/{github-releases-repository}/releases/download/{github-releases-channel-name}`.
   - Github limits each release to 1000 artifacts, 2GB max each. That said, you should only upload only a few artifacts per channel for indexing performance. For example, use a timestamped `github-releases-channel-name` value like `canary-{package-name}-{YYYY-MM-DD}`
 
+## Build tools
+
+Packages are built with `conda-build` by default. Set `build-tool: rattler-build`
+to build with [rattler-build](https://rattler-build.prefix.dev/) instead.
+`build-tool` accepts `conda-build` or `rattler-build`; any other value fails
+the action.
+
+| | `conda-build` (default) | `rattler-build` |
+| --- | --- | --- |
+| Recipe format | `meta.yaml` | `recipe.yaml` ([v1 format](https://rattler-build.prefix.dev/latest/reference/recipe_file/)) |
+| Recipe path input | `conda-build-path` | `rattler-build-path` |
+| Extra arguments input | `conda-build-arguments` | `rattler-build-arguments` |
+
+The inputs for the tool that is not selected are ignored.
+
+rattler-build is only used to build. Uploads still go through `anaconda-client`
+(anaconda.org) and GitHub Releases (indexed with `conda-index`), and rattler-build
+never uploads anything itself.
+
+Notes for `rattler-build`:
+
+- The recipe's package name must match `package-name`; built packages are
+  discovered in `./pkgs/{subdir}` by that name.
+- For `subdir: noarch`, no `--target-platform` is passed and rattler-build
+  derives the platform from the recipe (`build: noarch: ...`). For any other
+  `subdir`, `--target-platform {subdir}` is passed.
+- Packages are built in the `.conda` format.
+- rattler-build uses conda-forge by default, unlike `conda-build` which uses the
+  channels configured in conda. Add channels via `rattler-build-arguments`,
+  e.g. `-c my-channel`.
+
+```yaml
+- uses: conda/actions/canary-release@main # Pin to a reviewed commit in production.
+  with:
+    package-name: my-package
+    subdir: linux-64
+    build-tool: rattler-build
+    rattler-build-path: recipe
+    rattler-build-arguments: -c conda-forge
+    anaconda-org-channel: conda-canary
+    anaconda-org-label: dev
+    anaconda-org-token: ${{ secrets.CANARY_ANACONDA_ORG_TOKEN }}
+```
+
 ## Windows ARM64
 
 Use `subdir: win-arm64` and `base-architecture: x64` on a `windows-11-arm`
@@ -93,6 +137,11 @@ jobs:
           conda-build-path: recipe
           # extra conda-build arguments (default: empty)
           conda-build-arguments: ${{ matrix.conda-build-arguments || '' }}
+          # build tool: 'conda-build' or 'rattler-build' (default: conda-build)
+          build-tool: conda-build
+          # rattler-build recipe path and extra arguments, only used with build-tool: rattler-build
+          # rattler-build-path: recipe
+          # rattler-build-arguments: ''
           # publish packages after building and testing (default: 'true')
           upload: 'true'
 
