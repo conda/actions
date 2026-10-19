@@ -2,7 +2,9 @@
 
 Generate release notes from conda news fragments and open or update a release
 PR. The action is intended to run from a trusted `workflow_run` event after the
-test workflow succeeds on a protected release branch.
+test workflow succeeds on a protected release branch, or from a
+`workflow_dispatch` run with an explicit `version` input for on-demand release
+projects.
 
 ```yaml
 name: Prepare release notes
@@ -13,6 +15,12 @@ on:
     types: [completed]
     branches:
       - '[0-9]*.[0-9]*.x'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to prepare (MAJOR.MINOR.PATCH).
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
@@ -25,9 +33,12 @@ permissions:
 jobs:
   prepare:
     if: >-
-      github.event.workflow_run.conclusion == 'success'
-      && github.event.workflow_run.event == 'push'
-      && github.event.workflow_run.head_repository.full_name == github.repository
+      github.event_name == 'workflow_dispatch'
+      || (
+        github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_repository.full_name == github.repository
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: conda/actions/prepare-release@main
@@ -35,15 +46,22 @@ jobs:
           token: ${{ secrets.BOT_TOKEN }}
           news-directory: news
           changelog-path: CHANGELOG.md
+          version: ${{ inputs.version }}
 ```
 
 The action checks the same security conditions internally before checkout:
 
-- event is `workflow_run`
-- triggering workflow concluded successfully
-- triggering workflow came from a `push`
-- triggering repository is the current repository
-- triggering branch matches the configured release branch pattern
+- event is `workflow_run` (or `workflow_dispatch` when a `version` is given)
+- for `workflow_run`, the triggering workflow concluded successfully
+- for `workflow_run`, the triggering workflow came from a `push`
+- for `workflow_run`, the triggering repository is the current repository
+- for `workflow_run`, the triggering branch matches the configured release
+  branch pattern
+- for `workflow_dispatch`, the `version` input matches `MAJOR.MINOR.PATCH`
+
+A dispatched run infers the base branch from the branch it was dispatched on
+(usually `main`) and uses the explicit `version` instead of deriving one from
+a release branch.
 
 An existing news directory with no eligible fragments is a successful no-op.
 A missing news directory or a malformed fragment fails the action.
@@ -55,6 +73,7 @@ A missing news directory or a malformed fragment fails the action.
 | `news-directory` | Directory containing news fragments. | `news` |
 | `changelog-path` | Changelog file to update. | `CHANGELOG.md` |
 | `release-branch-pattern` | Comma- or newline-separated release branch glob patterns. | `[0-9]*.[0-9]*.x` |
+| `version` | Release version (`MAJOR.MINOR.PATCH`) for `workflow_dispatch` runs; ignored for `workflow_run` runs. | |
 | `branch-prefix` | Prefix for the generated release-notes branch. | `release-notes-` |
 | `git-author-name` | Git author name for the generated commit. | `Conda Bot` |
 | `git-author-email` | Git author email for the generated commit. | `18747875+conda-bot@users.noreply.github.com` |
@@ -67,7 +86,7 @@ first-contribution lookups use the repository issues API.
 
 | Name | Description |
 |------|-------------|
-| `version` | Release version inferred from the release branch. |
+| `version` | Release version inferred from the release branch or given via the `version` input. |
 | `branch` | Generated release-notes branch. |
 | `pull-request-url` | Generated or updated release PR URL. |
 
