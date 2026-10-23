@@ -74,6 +74,7 @@ def write_workflow_run_event(
 def prepare_args() -> Namespace:
     return Namespace(
         release_branch_pattern="[0-9]*.[0-9]*.x",
+        version="",
         news_directory="news",
         changelog_path="CHANGELOG.md",
         branch_prefix="release-notes-",
@@ -101,6 +102,7 @@ def mock_prepare_commands(
     monkeypatch: pytest.MonkeyPatch,
     *,
     remote_sha: str = "a" * 40,
+    branch: str = "26.7.x",
     auth_error: bool = False,
     lookup_error: bool = False,
     require_auth: bool = False,
@@ -130,7 +132,7 @@ def mock_prepare_commands(
                 raise ActionError("Git credentials are not configured.")
             if lookup_error:
                 raise ActionError("Remote branch lookup failed.")
-            return f"{remote_sha}\trefs/heads/26.7.x\n"
+            return f"{remote_sha}\trefs/heads/{branch}\n"
         return ""
 
     def fake_create_or_update_pr(**kwargs: object) -> str:
@@ -251,6 +253,99 @@ def test_verify_context_rejects_untrusted_context(
 
     with pytest.raises(ActionError, match=message):
         verify_context("[0-9]*.[0-9]*.x")
+
+
+def write_dispatch_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    branch: str = "main",
+    sha: str = "abc123",
+    repository: str = "conda/conda",
+    default_branch: str = "main",
+    ref_type: str = "branch",
+) -> None:
+    payload: dict[str, dict[str, str]] = {}
+    if default_branch:
+        payload["repository"] = {"default_branch": default_branch}
+    path = tmp_path / "event.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("GITHUB_REF_NAME", branch)
+    monkeypatch.setenv("GITHUB_REF_TYPE", ref_type)
+    monkeypatch.setenv("GITHUB_SHA", sha)
+    monkeypatch.setenv("GITHUB_REPOSITORY", repository)
+
+
+def test_verify_context_accepts_dispatch_with_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_dispatch_event(tmp_path, monkeypatch, sha="a" * 40)
+
+    assert verify_context("[0-9]*.[0-9]*.x", "1.2.3") == {
+        "head_branch": "main",
+        "head_sha": "a" * 40,
+    }
+
+
+def test_verify_context_rejects_version_outside_dispatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_workflow_run_event(tmp_path, monkeypatch)
+
+    with pytest.raises(
+        ActionError,
+        match="only supported for workflow_dispatch runs",
+    ):
+        verify_context("[0-9]*.[0-9]*.x", "1.2.3")
+
+
+@pytest.mark.parametrize("version", ["v1.2.3", "1.2", "1.2.3.4", "not-a-version"])
+def test_verify_context_rejects_invalid_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version: str,
+) -> None:
+    write_dispatch_event(tmp_path, monkeypatch)
+
+    with pytest.raises(ActionError, match="Invalid version"):
+        verify_context("[0-9]*.[0-9]*.x", version)
+
+
+def test_verify_context_rejects_tag_dispatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_dispatch_event(tmp_path, monkeypatch, ref_type="tag")
+
+    with pytest.raises(ActionError, match="must come from a branch, not a tag"):
+        verify_context("[0-9]*.[0-9]*.x", "1.2.3")
+
+
+def test_verify_context_rejects_non_default_dispatch_branch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_dispatch_event(tmp_path, monkeypatch, branch="feature")
+
+    with pytest.raises(ActionError, match="is not the repository default branch"):
+        verify_context("[0-9]*.[0-9]*.x", "1.2.3")
+
+
+def test_verify_context_rejects_dispatch_without_default_branch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_dispatch_event(tmp_path, monkeypatch, default_branch="")
+
+    with pytest.raises(
+        ActionError,
+        match="did not include the repository default branch",
+    ):
+        verify_context("[0-9]*.[0-9]*.x", "1.2.3")
 
 
 def test_prepare_release_noops_without_fragments(
@@ -453,6 +548,44 @@ def test_prepare_release_publishes_when_remote_head_matches(
             "token": "test-token",
         }
     ]
+
+
+def test_prepare_release_publishes_dispatched_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_dispatch_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_release_files(tmp_path)
+    calls, pull_requests = mock_prepare_commands(monkeypatch, branch="main")
+    args = prepare_args()
+    args.version = "0.2.0"
+
+    prepare_release(args)
+
+    commands = [command for command, _ in calls]
+    assert commands[-2:] == [
+        ["git", "ls-remote", "--exit-code", "--heads", "origin", "refs/heads/main"],
+        [
+            "git",
+            "push",
+            "--force-with-lease",
+            "origin",
+            "release-notes-0.2.0",
+        ],
+    ]
+    assert not any(command[:3] == ["git", "tag", "--list"] for command in commands)
+    assert pull_requests == [
+        {
+            "repository": "conda/conda",
+            "branch": "release-notes-0.2.0",
+            "base_branch": "main",
+            "version": "0.2.0",
+            "token": "test-token",
+        }
+    ]
+    changelog = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## 0.2.0 (" in changelog
 
 
 @pytest.mark.parametrize("lookup_error", [False, True])

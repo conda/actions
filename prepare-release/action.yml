@@ -14,6 +14,12 @@ inputs:
   release-branch-pattern:
     description: Comma- or newline-separated release branch glob patterns.
     default: '[0-9]*.[0-9]*.x'
+  version:
+    description: >-
+      Release version (MAJOR.MINOR.PATCH, no leading 'v') to prepare in a
+      workflow_dispatch run. Ignored for workflow_run runs, which infer the
+      version from the release branch.
+    default: ''
   branch-prefix:
     description: Prefix for the generated release-notes branch.
     default: release-notes-
@@ -30,7 +36,7 @@ inputs:
     default: ${{ github.token }}
 outputs:
   version:
-    description: Release version inferred from the release branch.
+    description: Release version inferred from the release branch or given via the version input.
     value: ${{ steps.prepare.outputs.version }}
   branch:
     description: Generated release-notes branch.
@@ -49,8 +55,10 @@ runs:
         python "$GITHUB_ACTION_PATH/prepare_release.py"
         verify-context
         --release-branch-pattern "$INPUT_RELEASE_BRANCH_PATTERN"
+        --version "$INPUT_VERSION"
       env:
         INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
+        INPUT_VERSION: ${{ inputs.version }}
         PYTHONPATH: ${{ github.action_path }}/..
 
     - name: Checkout Release Branch
@@ -70,6 +78,7 @@ runs:
         --news-directory "$INPUT_NEWS_DIRECTORY"
         --changelog-path "$INPUT_CHANGELOG_PATH"
         --release-branch-pattern "$INPUT_RELEASE_BRANCH_PATTERN"
+        --version "$INPUT_VERSION"
         --branch-prefix "$INPUT_BRANCH_PREFIX"
         --git-author-name "$INPUT_GIT_AUTHOR_NAME"
         --git-author-email "$INPUT_GIT_AUTHOR_EMAIL"
@@ -79,6 +88,7 @@ runs:
         INPUT_NEWS_DIRECTORY: ${{ inputs.news-directory }}
         INPUT_CHANGELOG_PATH: ${{ inputs.changelog-path }}
         INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
+        INPUT_VERSION: ${{ inputs.version }}
         INPUT_BRANCH_PREFIX: ${{ inputs.branch-prefix }}
         INPUT_GIT_AUTHOR_NAME: ${{ inputs.git-author-name }}
         INPUT_GIT_AUTHOR_EMAIL: ${{ inputs.git-author-email }}

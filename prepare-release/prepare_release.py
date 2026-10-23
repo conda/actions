@@ -21,6 +21,7 @@ from conda_actions.release import (
 
 VERSION_BRANCH_RE = re.compile(r"^(?P<major_minor>\d+\.\d+)\.x$")
 TAG_RE = re.compile(r"^v?(?P<version>\d+\.\d+\.(?P<micro>\d+))$")
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 CURRENT_DEVELOPMENTS = "[//]: # (current developments)"
 SECTION_HEADING_RE = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.MULTILINE)
 CONTRIBUTORS_SECTION = "Contributors"
@@ -62,13 +63,18 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
 
 def add_context_args(parser: ArgumentParser) -> None:
     parser.add_argument("--release-branch-pattern", default="[0-9]*.[0-9]*.x")
+    parser.add_argument(
+        "--version",
+        default="",
+        help="Explicit release version (MAJOR.MINOR.PATCH) for workflow_dispatch runs.",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
         if args.command == "verify-context":
-            context = verify_context(args.release_branch_pattern)
+            context = verify_context(args.release_branch_pattern, args.version)
             write_output("head-branch", context["head_branch"])
             write_output("head-sha", context["head_sha"])
             print(f"Verified release context for {context['head_branch']}.")
@@ -81,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def prepare_release(args: Namespace) -> None:
-    context = verify_context(args.release_branch_pattern)
+    context = verify_context(args.release_branch_pattern, args.version)
     base_branch = context["head_branch"]
 
     news_directory = Path(args.news_directory)
@@ -94,7 +100,7 @@ def prepare_release(args: Namespace) -> None:
         return
     fragments = collect_fragments(fragment_paths)
 
-    version = infer_next_version(base_branch)
+    version = args.version or infer_next_version(base_branch)
     release_date = datetime.now(UTC).date().isoformat()
     release_branch = f"{args.branch_prefix}{version}"
 
@@ -174,10 +180,38 @@ def is_current_release_head(
     return True
 
 
-def verify_context(release_branch_pattern: str) -> dict[str, str]:
+def verify_context(release_branch_pattern: str, version: str = "") -> dict[str, str]:
     event_name = os.environ.get("GITHUB_EVENT_NAME")
     payload = load_event_payload()
     repository = os.environ.get("GITHUB_REPOSITORY")
+
+    if version:
+        if event_name != "workflow_dispatch":
+            raise ActionError(
+                "An explicit version is only supported for workflow_dispatch runs."
+            )
+        if not VERSION_RE.match(version):
+            raise ActionError(
+                f"Invalid version {version!r}, expected MAJOR.MINOR.PATCH "
+                "without a leading 'v'."
+            )
+        if os.environ.get("GITHUB_REF_TYPE") != "branch":
+            raise ActionError("The dispatched run must come from a branch, not a tag.")
+        head_branch = os.environ.get("GITHUB_REF_NAME")
+        head_sha = os.environ.get("GITHUB_SHA")
+        if not head_branch or not head_sha:
+            raise ActionError("The dispatched run did not include a branch and SHA.")
+        default_branch = (payload.get("repository") or {}).get("default_branch")
+        if not default_branch:
+            raise ActionError(
+                "The dispatched run did not include the repository default branch."
+            )
+        if head_branch != default_branch:
+            raise ActionError(
+                f"The dispatched branch {head_branch!r} is not the repository "
+                f"default branch {default_branch!r}."
+            )
+        return {"head_branch": head_branch, "head_sha": head_sha}
 
     if event_name != "workflow_run":
         raise ActionError("prepare-release must run from the workflow_run event.")
