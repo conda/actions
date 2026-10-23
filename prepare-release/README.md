@@ -111,7 +111,12 @@ when updating an existing release entry:
 * @dependabot[bot]
 ```
 
-Before pushing, the action verifies that the triggering SHA is still the tip
-of the release branch. A stale workflow run exits successfully without pushing
+Before pushing, the action verifies that the triggering SHA is still the tip of
+the release branch. A stale workflow run exits successfully without pushing
 or creating or updating a pull request. Authentication or branch lookup
 failures fail the action.
+
+Each run regenerates the release-notes branch from the current base commit and
+force-pushes it, so re-running the action for the same version discards any
+commits added to the PR branch after the previous run (e.g., contributors
+changes); re-run those steps afterwards.
