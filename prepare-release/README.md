@@ -58,10 +58,13 @@ The action checks the same security conditions internally before checkout:
 - for `workflow_run`, the triggering branch matches the configured release
   branch pattern
 - for `workflow_dispatch`, the `version` input matches `MAJOR.MINOR.PATCH`
+- for `workflow_dispatch`, the run was dispatched from a branch (not a tag)
+- for `workflow_dispatch`, the dispatched branch is the repository default
+  branch
 
-A dispatched run infers the base branch from the branch it was dispatched on
-(usually `main`) and uses the explicit `version` instead of deriving one from
-a release branch.
+A dispatched run must be started from the repository default branch (usually
+`main`), which becomes the base branch for the release PR, and uses the
+explicit `version` instead of deriving one from a release branch.
 
 An existing news directory with no eligible fragments is a successful no-op.
 A missing news directory or a malformed fragment fails the action.

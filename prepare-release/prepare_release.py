@@ -195,10 +195,22 @@ def verify_context(release_branch_pattern: str, version: str = "") -> dict[str, 
                 f"Invalid version {version!r}, expected MAJOR.MINOR.PATCH "
                 "without a leading 'v'."
             )
+        if os.environ.get("GITHUB_REF_TYPE") != "branch":
+            raise ActionError("The dispatched run must come from a branch, not a tag.")
         head_branch = os.environ.get("GITHUB_REF_NAME")
         head_sha = os.environ.get("GITHUB_SHA")
         if not head_branch or not head_sha:
             raise ActionError("The dispatched run did not include a branch and SHA.")
+        default_branch = (payload.get("repository") or {}).get("default_branch")
+        if not default_branch:
+            raise ActionError(
+                "The dispatched run did not include the repository default branch."
+            )
+        if head_branch != default_branch:
+            raise ActionError(
+                f"The dispatched branch {head_branch!r} is not the repository "
+                f"default branch {default_branch!r}."
+            )
         return {"head_branch": head_branch, "head_sha": head_sha}
 
     if event_name != "workflow_run":
