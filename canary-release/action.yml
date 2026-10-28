@@ -1,5 +1,5 @@
 name: Canary releases
-description: This builds and uploads canary releases of conda to the provided channel and label on anaconda.org or a Github Releases tag in a given repository.
+description: This builds (with conda-build or rattler-build) and uploads canary releases of conda to the provided channel and label on anaconda.org or a Github Releases tag in a given repository.
 inputs:
   package-name:
     description: Name of package on anaconda.org, needs to match build file name.
@@ -40,6 +40,17 @@ inputs:
     required: false
   conda-build-path:
     description: The path to the conda recipe passed to conda-build.
+    required: false
+    default: recipe
+  build-tool:
+    description: "Tool used to build the package. Must be one of: 'conda-build' (default) or 'rattler-build'. Only affects building; uploads are always done with anaconda-client / GitHub Releases."
+    required: false
+    default: conda-build
+  rattler-build-arguments:
+    description: Command line arguments for rattler-build, appended to the `rattler-build build` command with no processing. Only used if `build-tool` is `rattler-build`.
+    required: false
+  rattler-build-path:
+    description: The path to the rattler-build recipe (a directory containing `recipe.yaml`, or the recipe file itself). Only used if `build-tool` is `rattler-build`.
     required: false
     default: recipe
   upload:
@@ -83,6 +94,9 @@ runs:
         BINSTAR_API_TOKEN: ${{ inputs.anaconda-org-token }}
         INPUT_BUILD_ARGS: ${{ inputs.conda-build-arguments }}
         INPUT_BUILD_PATH: ${{ inputs.conda-build-path }}
+        INPUT_BUILD_TOOL: ${{ inputs.build-tool }}
+        INPUT_RATTLER_BUILD_ARGS: ${{ inputs.rattler-build-arguments }}
+        INPUT_RATTLER_BUILD_PATH: ${{ inputs.rattler-build-path }}
         INPUT_SUBDIR: ${{ inputs.subdir }}
         INPUT_PACKAGE_NAME: ${{ inputs.package-name }}
         INPUT_UPLOAD: ${{ inputs.upload }}
@@ -94,31 +108,43 @@ runs:
       run: |
         echo "::group::Setting up environment"
         set -euo pipefail
+        if [[ "${INPUT_BUILD_TOOL}" != "conda-build" && "${INPUT_BUILD_TOOL}" != "rattler-build" ]]; then
+          echo "::error::Invalid 'build-tool': '${INPUT_BUILD_TOOL}'. Must be 'conda-build' or 'rattler-build'."
+          exit 1
+        fi
         conda activate
         conda update --yes --quiet conda
         conda remove --force anaconda-auth
-        conda install --yes --quiet conda-build anaconda-client conda-index
-        # git needs to be installed after conda-build
-        # see https://github.com/conda/conda/issues/11758
-        # see https://github.com/conda/actions/pull/47
-        conda install --yes --quiet git
+        if [[ "${INPUT_BUILD_TOOL}" == "rattler-build" ]]; then
+          conda install --yes --quiet rattler-build anaconda-client conda-index
+          # rattler-build recipes may use git sources
+          conda install --yes --quiet git
+        else
+          conda install --yes --quiet conda-build anaconda-client conda-index
+          # git needs to be installed after conda-build
+          # see https://github.com/conda/conda/issues/11758
+          # see https://github.com/conda/actions/pull/47
+          conda install --yes --quiet git
+        fi
         echo "::endgroup::"
 
-        if [[ "${INPUT_SUBDIR}" != "noarch" ]]; then
+        BUILD_CONFIG_ARGS=()
+        if [[ "${INPUT_BUILD_TOOL}" == "conda-build" && "${INPUT_SUBDIR}" != "noarch" ]]; then
           echo "::group::Configuring target platform"
           BUILD_CONFIG="${INPUT_BUILD_PATH}/conda_build_config.yaml"
           # Inline lists are parsed as conda-build selectors.
           printf 'target_platform:\n  - %s\n' "${INPUT_SUBDIR}" >> "${BUILD_CONFIG}"
           BUILD_CONFIG_ARGS=(-m "${BUILD_CONFIG}")
           echo "::endgroup::"
-        else
-          BUILD_CONFIG_ARGS=()
         fi
 
         echo "::group::Debugging information"
         conda info
         conda config --show-sources
         conda list
+        if [[ "${INPUT_BUILD_TOOL}" == "rattler-build" ]]; then
+          rattler-build --version
+        fi
         echo "::endgroup::"
 
         echo "::group::Clean cache"
@@ -127,7 +153,23 @@ runs:
 
         echo "::group::Building package"
         # Keep build args unquoted so callers can pass multiple arguments.
-        conda build --croot=./pkgs "${BUILD_CONFIG_ARGS[@]}" ${INPUT_BUILD_ARGS} "${INPUT_BUILD_PATH}"
+        if [[ "${INPUT_BUILD_TOOL}" == "rattler-build" ]]; then
+          # For noarch, rattler-build derives the platform from the recipe.
+          # Do not pass `--target-platform noarch`.
+          if [[ "${INPUT_SUBDIR}" != "noarch" ]]; then
+            RATTLER_PLATFORM_ARGS=(--target-platform "${INPUT_SUBDIR}")
+          else
+            RATTLER_PLATFORM_ARGS=()
+          fi
+          rattler-build build \
+            --recipe "${INPUT_RATTLER_BUILD_PATH}" \
+            --output-dir ./pkgs \
+            --package-format conda \
+            ${RATTLER_PLATFORM_ARGS[@]+"${RATTLER_PLATFORM_ARGS[@]}"} \
+            ${INPUT_RATTLER_BUILD_ARGS}
+        else
+          conda build --croot=./pkgs "${BUILD_CONFIG_ARGS[@]}" ${INPUT_BUILD_ARGS} "${INPUT_BUILD_PATH}"
+        fi
         echo "::endgroup::"
 
         echo "::group::Find packages"
