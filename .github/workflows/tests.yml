@@ -105,7 +105,7 @@ jobs:
 
       - name: Run Prepare Authors
         id: prepare-authors
-        uses: ./prepare-authors
+        uses: ./prepare-authors  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711
         with:
           authors-path: ${{ runner.temp }}/prepare-authors-smoke.json
           git-remote: prepare-authors-smoke
@@ -130,7 +130,7 @@ jobs:
 
       - name: Read Remote JSON
         id: json
-        uses: ./read-file
+        uses: ./read-file  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711
         env:
           # `full_name` is the org/repo slug, extracting from `head` in case PR was opened via a fork
           FULL_NAME: ${{ github.event.pull_request.head.repo.full_name || github.event.repository.full_name }}
@@ -143,7 +143,7 @@ jobs:
 
       - name: Read Local YAML
         id: yaml
-        uses: ./read-file
+        uses: ./read-file  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711
         with:
           path: ./read-file/data/yaml.yaml
           parser: yaml
@@ -180,7 +180,7 @@ jobs:
 
       - name: Template Success
         id: templates-success
-        uses: ./template-files
+        uses: ./template-files  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711
         with:
           config: ./template-files/data/success.yml
           stubs: ./template-files/data/templates
@@ -188,7 +188,7 @@ jobs:
       - name: Template Error
         id: templates-error
         continue-on-error: true
-        uses: ./template-files
+        uses: ./template-files  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711
         with:
           config: ./template-files/data/error.yml
           stubs: ./template-files/data/templates
@@ -255,7 +255,7 @@ jobs:
 
       - name: Canary release
         id: canary-release
-        uses: ./canary-release
+        uses: ./canary-release  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711
         with:
           package-name: conda-build-test
           subdir: ${{ matrix.subdir || 'noarch' }}
