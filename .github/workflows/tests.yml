@@ -231,6 +231,8 @@ jobs:
           - name: anaconda.org
             anaconda-org-channel: conda-canary
             anaconda-org-label: tests
+          - name: anaconda.org (no label)
+            anaconda-org-channel: conda-canary
           - name: GH Releases
             github-releases-repository: conda/actions
             github-releases-channel-name: tests
