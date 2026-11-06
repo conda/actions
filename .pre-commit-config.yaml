@@ -21,7 +21,7 @@ repos:
           )
         args: [--unique]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 38bfb07c0c64c304f47eb52090f8288150c77730  # frozen: v0.17.1
+    rev: 25bcf95026b96e2dd3c0aec3090c3d6ef6ca2e6c  # frozen: v0.17.3
     hooks:
       # lint & attempt to correct failures (e.g. pyupgrade)
       - id: ruff-check
@@ -42,7 +42,7 @@ repos:
         # list fragment included by templates/dependabot.yml
         exclude: ^\.github/template-files/templates/dependabot_extras\.yml$
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 4f85d46a92dc17713078e5de73f8a13190edf6fc  # frozen: 0.38.2
+    rev: 39478bf2c099a58683d3f1aedf675105318b078d  # frozen: 0.39.0
     hooks:
       # verify github syntaxes
       - id: check-github-actions
