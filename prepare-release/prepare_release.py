@@ -173,7 +173,7 @@ def is_current_release_head(
         raise ActionError(f"Could not determine remote head for {base_branch!r}.")
     if remote[0] != head_sha:
         print(
-            f"Skipping stale workflow run for {base_branch}: "
+            f"Skipping stale run for {base_branch}: "
             f"{head_sha} is no longer the branch tip."
         )
         return False
@@ -183,7 +183,6 @@ def is_current_release_head(
 def verify_context(release_branch_pattern: str, version: str = "") -> dict[str, str]:
     event_name = os.environ.get("GITHUB_EVENT_NAME")
     payload = load_event_payload()
-    repository = os.environ.get("GITHUB_REPOSITORY")
 
     if version:
         if event_name != "workflow_dispatch":
@@ -213,30 +212,23 @@ def verify_context(release_branch_pattern: str, version: str = "") -> dict[str, 
             )
         return {"head_branch": head_branch, "head_sha": head_sha}
 
-    if event_name != "workflow_run":
-        raise ActionError("prepare-release must run from the workflow_run event.")
-
-    workflow_run = payload.get("workflow_run") or {}
-    if workflow_run.get("conclusion") != "success":
-        raise ActionError("The triggering workflow_run did not conclude successfully.")
-    if workflow_run.get("event") != "push":
-        raise ActionError("The triggering workflow_run must come from a push event.")
-
-    head_repository = workflow_run.get("head_repository") or {}
-    if head_repository.get("full_name") != repository:
-        raise ActionError("The triggering workflow_run must come from this repository.")
-
-    head_branch = workflow_run.get("head_branch")
-    head_sha = workflow_run.get("head_sha")
-    if not head_branch or not head_sha:
+    if event_name != "push":
         raise ActionError(
-            "The triggering workflow_run did not include a head branch and SHA."
+            "prepare-release must run from the push or workflow_dispatch event."
         )
+
+    if os.environ.get("GITHUB_REF_TYPE") != "branch":
+        raise ActionError("The push must come from a branch, not a tag.")
+
+    head_branch = os.environ.get("GITHUB_REF_NAME")
+    head_sha = os.environ.get("GITHUB_SHA")
+    if not head_branch or not head_sha:
+        raise ActionError("The push did not include a branch and SHA.")
 
     patterns = split_patterns(release_branch_pattern)
     if not any(fnmatch.fnmatchcase(head_branch, pattern) for pattern in patterns):
         raise ActionError(
-            f"The triggering branch {head_branch!r} does not match "
+            f"The pushed branch {head_branch!r} does not match "
             f"{', '.join(patterns)!r}."
         )
 
