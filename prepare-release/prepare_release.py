@@ -228,8 +228,7 @@ def verify_context(release_branch_pattern: str, version: str = "") -> dict[str, 
     patterns = split_patterns(release_branch_pattern)
     if not any(fnmatch.fnmatchcase(head_branch, pattern) for pattern in patterns):
         raise ActionError(
-            f"The pushed branch {head_branch!r} does not match "
-            f"{', '.join(patterns)!r}."
+            f"The pushed branch {head_branch!r} does not match {', '.join(patterns)!r}."
         )
 
     return {"head_branch": head_branch, "head_sha": head_sha}
