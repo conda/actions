@@ -542,7 +542,8 @@ def dump_summary(errors: int, *, console: Console = CONSOLE) -> None:
     if summary_path or output_path:
         html = console.export_text()
     if summary_path:
-        Path(summary_path).write_text(get_summary_text(html))
+        with Path(summary_path).open("a") as fh:
+            fh.write(get_summary_text(html))
     if output_path:
         with Path(output_path).open("a") as fh:
             fh.write(get_output_text(errors, html))
