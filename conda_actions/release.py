@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .commands import ActionError, run, run_json
 
@@ -65,7 +65,13 @@ def parse_nul_records(output: str, width: int) -> list[tuple[str, ...]]:
 @dataclass(frozen=True)
 class GitHubAuthor:
     login: str
-    author_id: str | None
+    author_id: str | None = None
+    # Commit emails seen for this account; filled in by callers.
+    emails: list[str] = field(default_factory=list)
+
+    @property
+    def id(self):
+        return self.author_id or self.login.casefold()
 
 
 def get_github_author(

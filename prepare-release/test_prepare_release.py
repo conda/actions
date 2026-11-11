@@ -13,11 +13,11 @@ import pytest
 import prepare_release as prepare_release_module
 from conda_actions import commands as commands_module
 from conda_actions import release as release_module
+from conda_actions.release import GitHubAuthor
 from prepare_release import (
     MAX_LOGIN_LOOKUPS_PER_EMAIL,
     MAX_UNRESOLVED_LOGIN_LOOKUPS,
     ActionError,
-    Contributor,
     ContributorCommit,
     collect_contributors,
     collect_fragments,
@@ -959,7 +959,7 @@ def test_resolve_logins_caches_and_skips_unresolvable(
     ]
 
     assert resolve_logins(commits, "conda/conda", {}) == {
-        "user-sha1": Contributor(login="user-sha1", emails=["a@example.com"]),
+        "user-sha1": GitHubAuthor(login="user-sha1", emails=["a@example.com"]),
     }
     assert len(calls) == 2
     assert (
@@ -988,12 +988,12 @@ def test_resolve_logins_groups_by_author_id(
     ]
 
     assert list(resolve_logins(commits, "conda/conda", {}).values()) == [
-        Contributor(
+        GitHubAuthor(
             login="alice-new",
             emails=["alice@example.com", "alice@old.example.com"],
-            contributor_id="U_alice",
+            author_id="U_alice",
         ),
-        Contributor(login="bob", emails=["bob@example.com"], contributor_id="U_bob"),
+        GitHubAuthor(login="bob", emails=["bob@example.com"], author_id="U_bob"),
     ]
 
 
@@ -1019,7 +1019,7 @@ def test_resolve_logins_tries_distinct_hashes_per_email(
     ]
 
     assert resolve_logins(commits, "conda/conda", {}) == {
-        "alice": Contributor(login="alice", emails=["a@example.com"]),
+        "alice": GitHubAuthor(login="alice", emails=["a@example.com"]),
     }
     assert calls == ["sha1", "sha2"]
 
@@ -1098,7 +1098,7 @@ def test_resolve_logins_successes_do_not_count_toward_cap(
 
     result = resolve_logins(commits, "conda/conda", {})
     assert result == {
-        f"user-sha{index}": Contributor(
+        f"user-sha{index}": GitHubAuthor(
             login=f"user-sha{index}", emails=[f"user{index}@example.com"]
         )
         for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS + 5)
@@ -1116,7 +1116,7 @@ def test_is_first_timer_without_previous_tag(
     )
 
     assert is_first_timer(
-        Contributor(login="alice", emails=["alice@example.com"]),
+        GitHubAuthor(login="alice", emails=["alice@example.com"]),
         "",
         "conda/conda",
         {},
@@ -1146,10 +1146,10 @@ def test_is_first_timer_queries_account_or_emails_in_one_request(
 
     monkeypatch.setattr(commands_module, "run", fake_run)
 
-    contributor = Contributor(
+    contributor = GitHubAuthor(
         login="alice",
         emails=["alice@example.com", "alice@work.example.com"],
-        contributor_id="U_alice",
+        author_id="U_alice",
     )
     assert is_first_timer(contributor, "26.7.0", "conda/conda", {}) is expected
     assert len(commands) == 1
@@ -1168,13 +1168,13 @@ def test_is_first_timer_queries_account_or_emails_in_one_request(
 @pytest.mark.parametrize(
     ("contributor", "alias", "field"),
     [
-        (Contributor(login="alice", emails=["a@example.com"]), "byEmail", "emails[]"),
-        (Contributor(login="alice", emails=[], contributor_id="U_alice"), "byId", "id"),
+        (GitHubAuthor(login="alice", emails=["a@example.com"]), "byEmail", "emails[]"),
+        (GitHubAuthor(login="alice", emails=[], author_id="U_alice"), "byId", "id"),
     ],
 )
 def test_is_first_timer_queries_only_available_filters(
     monkeypatch: pytest.MonkeyPatch,
-    contributor: Contributor,
+    contributor: GitHubAuthor,
     alias: str,
     field: str,
 ) -> None:
@@ -1201,7 +1201,7 @@ def test_is_first_timer_without_filters(monkeypatch: pytest.MonkeyPatch) -> None
     )
 
     assert is_first_timer(
-        Contributor(login="alice", emails=[]), "26.7.0", "conda/conda", {}
+        GitHubAuthor(login="alice", emails=[]), "26.7.0", "conda/conda", {}
     )
 
 
@@ -1214,7 +1214,7 @@ def test_is_first_timer_requires_release_tag(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(ActionError, match="Release tag 26.7.0 not found"):
         is_first_timer(
-            Contributor(login="alice", emails=["alice@example.com"]),
+            GitHubAuthor(login="alice", emails=["alice@example.com"]),
             "26.7.0",
             "conda/conda",
             {},
@@ -1326,7 +1326,7 @@ def test_resolve_logins_groups_emails_by_login(
     ]
 
     assert resolve_logins(commits, "conda/conda", {}) == {
-        "alice": Contributor(
+        "alice": GitHubAuthor(
             login="Alice",
             emails=["alice@example.com", "alice@work.example.com"],
         ),
@@ -1377,7 +1377,7 @@ def test_is_first_timer_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> N
 
     with pytest.raises(ActionError, match="lookup failed"):
         is_first_timer(
-            Contributor(login="alice", emails=["alice@example.com"]),
+            GitHubAuthor(login="alice", emails=["alice@example.com"]),
             "26.7.0",
             "conda/conda",
             {},

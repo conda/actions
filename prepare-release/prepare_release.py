@@ -14,6 +14,7 @@ from typing import Any
 from conda_actions.commands import ActionError, run, run_json
 from conda_actions.news import SECTION_ORDER, is_news_fragment, parse_sectioned_news
 from conda_actions.release import (
+    GitHubAuthor,
     get_github_author,
     get_latest_tag,
     parse_nul_records,
@@ -33,13 +34,6 @@ MAX_UNRESOLVED_LOGIN_LOOKUPS = 20
 class ContributorCommit:
     hash: str
     email: str
-
-
-@dataclass
-class Contributor:
-    login: str
-    emails: list[str]
-    contributor_id: str | None = None
 
 
 def parse_args(argv: list[str] | None = None) -> Namespace:
@@ -298,13 +292,13 @@ def resolve_logins(
     commits: list[ContributorCommit],
     repository: str,
     env: dict[str, str],
-) -> dict[str, Contributor]:
+) -> dict[str, GitHubAuthor]:
     hashes_by_email: dict[str, list[str]] = {}
     for commit in commits:
         hashes = hashes_by_email.setdefault(commit.email, [])
         if commit.hash not in hashes:
             hashes.append(commit.hash)
-    unique: dict[str, Contributor] = {}
+    unique: dict[str, GitHubAuthor] = {}
     unresolved = 0
     for email, hashes in hashes_by_email.items():
         for commit_hash in hashes[:MAX_LOGIN_LOOKUPS_PER_EMAIL]:
@@ -317,10 +311,7 @@ def resolve_logins(
                 # The account ID is stable across renames; logins are
                 # case-insensitive, so casefold them when there is no ID.
                 contributor = unique.setdefault(
-                    author.author_id or author.login.casefold(),
-                    Contributor(
-                        login=author.login, emails=[], contributor_id=author.author_id
-                    ),
+                    author.id, author
                 )
                 contributor.emails.append(email)
                 break
@@ -329,7 +320,7 @@ def resolve_logins(
 
 
 def is_first_timer(
-    contributor: Contributor,
+    contributor: GitHubAuthor,
     prev_tag: str,
     repository: str,
     env: dict[str, str],
@@ -341,7 +332,7 @@ def is_first_timer(
     # Bot accounts (e.g. dependabot[bot]), and takes only one author per call.
     variables: list[str] = []
     histories: list[str] = []
-    if contributor.contributor_id:
+    if contributor.author_id:
         variables.append("$id: ID!")
         histories.append("byId: history(first: 1, author: {id: $id}) { nodes { oid } }")
     if contributor.emails:
@@ -372,8 +363,8 @@ def is_first_timer(
         "-f",
         f"expression=refs/tags/{prev_tag}",
     ]
-    if contributor.contributor_id:
-        command += ["-f", f"id={contributor.contributor_id}"]
+    if contributor.author_id:
+        command += ["-f", f"id={contributor.author_id}"]
     for email in contributor.emails:
         command += ["-f", f"emails[]={email}"]
     data = run_json(command, env=env)
