@@ -310,9 +310,7 @@ def resolve_logins(
             if author := get_github_author(repository, commit_hash, env=env):
                 # The account ID is stable across renames; logins are
                 # case-insensitive, so casefold them when there is no ID.
-                contributor = unique.setdefault(
-                    author.id, author
-                )
+                contributor = unique.setdefault(author.id, author)
                 contributor.emails.append(email)
                 break
             unresolved += 1
@@ -332,14 +330,18 @@ def is_first_timer(
     # Bot accounts (e.g. dependabot[bot]), and takes only one author per call.
     variables: list[str] = []
     histories: list[str] = []
+    fields: list[str] = []
     if contributor.author_id:
         variables.append("$id: ID!")
         histories.append("byId: history(first: 1, author: {id: $id}) { nodes { oid } }")
+        fields += ["-f", f"id={contributor.author_id}"]
     if contributor.emails:
         variables.append("$emails: [String!]!")
         histories.append(
             "byEmail: history(first: 1, author: {emails: $emails}) { nodes { oid } }"
         )
+        for email in contributor.emails:
+            fields += ["-f", f"emails[]={email}"]
     if not histories:
         return True
     query = (
@@ -362,11 +364,8 @@ def is_first_timer(
         f"name={name}",
         "-f",
         f"expression=refs/tags/{prev_tag}",
+        *fields,
     ]
-    if contributor.author_id:
-        command += ["-f", f"id={contributor.author_id}"]
-    for email in contributor.emails:
-        command += ["-f", f"emails[]={email}"]
     data = run_json(command, env=env)
     tag_commit = data["data"]["repository"]["object"]
     if tag_commit is None:
