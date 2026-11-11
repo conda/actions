@@ -71,6 +71,8 @@ class GitHubAuthor:
 
     @property
     def id(self):
+        # The account ID is stable across renames; logins are
+        # case-insensitive, so casefold them when there is no ID.
         return self.author_id or self.login.casefold()
 
 
