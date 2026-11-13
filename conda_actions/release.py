@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import re
 import sys
+from dataclasses import dataclass, field
 
 from .commands import ActionError, run, run_json
 
 __all__ = [
     "RELEASE_TAG_PATTERN",
+    "GitHubAuthor",
+    "get_github_author",
     "get_github_login",
     "get_latest_tag",
     "normalize_release_tag",
@@ -59,12 +62,24 @@ def parse_nul_records(output: str, width: int) -> list[tuple[str, ...]]:
     ]
 
 
-def get_github_login(
+@dataclass(frozen=True)
+class GitHubAuthor:
+    login: str
+    author_id: str | None = None
+    # Commit emails seen for this account; filled in by callers.
+    emails: list[str] = field(default_factory=list)
+
+    @property
+    def id(self):
+        return self.author_id or self.login.casefold()
+
+
+def get_github_author(
     repo: str,
     commit_hash: str,
     *,
     env: dict[str, str],
-) -> str | None:
+) -> GitHubAuthor | None:
     data = run_json(
         ["gh", "api", f"repos/{repo}/commits/{commit_hash}"],
         env=env,
@@ -77,4 +92,15 @@ def get_github_login(
             file=sys.stderr,
         )
         return None
-    return str(login)
+    node_id = author.get("node_id")
+    return GitHubAuthor(login=str(login), author_id=str(node_id) if node_id else None)
+
+
+def get_github_login(
+    repo: str,
+    commit_hash: str,
+    *,
+    env: dict[str, str],
+) -> str | None:
+    author = get_github_author(repo, commit_hash, env=env)
+    return author.login if author else None

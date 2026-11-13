@@ -14,7 +14,8 @@ from typing import Any
 from conda_actions.commands import ActionError, run, run_json
 from conda_actions.news import SECTION_ORDER, is_news_fragment, parse_sectioned_news
 from conda_actions.release import (
-    get_github_login,
+    GitHubAuthor,
+    get_github_author,
     get_latest_tag,
     parse_nul_records,
 )
@@ -291,53 +292,85 @@ def resolve_logins(
     commits: list[ContributorCommit],
     repository: str,
     env: dict[str, str],
-) -> dict[str, str]:
+) -> dict[str, GitHubAuthor]:
     hashes_by_email: dict[str, list[str]] = {}
     for commit in commits:
         hashes = hashes_by_email.setdefault(commit.email, [])
         if commit.hash not in hashes:
             hashes.append(commit.hash)
-    unique: dict[str, str] = {}
+    unique: dict[str, GitHubAuthor] = {}
     unresolved = 0
-    for hashes in hashes_by_email.values():
+    for email, hashes in hashes_by_email.items():
         for commit_hash in hashes[:MAX_LOGIN_LOOKUPS_PER_EMAIL]:
             if unresolved >= MAX_UNRESOLVED_LOGIN_LOOKUPS:
                 raise ActionError(
                     "Cannot prepare complete contributor list after "
                     f"{MAX_UNRESOLVED_LOGIN_LOOKUPS} unresolved GitHub login lookups."
                 )
-            if login := get_github_login(repository, commit_hash, env=env):
-                unique.setdefault(login.casefold(), login)
+            if author := get_github_author(repository, commit_hash, env=env):
+                # The account ID is stable across renames; logins are
+                # case-insensitive, so casefold them when there is no ID.
+                contributor = unique.setdefault(author.id, author)
+                contributor.emails.append(email)
                 break
             unresolved += 1
     return unique
 
 
 def is_first_timer(
-    login: str,
+    contributor: GitHubAuthor,
     prev_tag: str,
     repository: str,
     env: dict[str, str],
 ) -> bool:
     if not prev_tag:
         return True
-    commits = run_json(
-        [
-            "gh",
-            "api",
-            f"repos/{repository}/commits",
-            "--method",
-            "GET",
-            "-f",
-            f"author={login}",
-            "-F",
-            "per_page=1",
-            "-f",
-            f"sha={prev_tag}",
-        ],
-        env=env,
+    # A single GraphQL query checks for prior commits by account OR by any
+    # commit email. The REST commits API's author=<login> filter does not match
+    # Bot accounts (e.g. dependabot[bot]), and takes only one author per call.
+    variables: list[str] = []
+    histories: list[str] = []
+    fields: list[str] = []
+    if contributor.author_id:
+        variables.append("$id: ID!")
+        histories.append("byId: history(first: 1, author: {id: $id}) { nodes { oid } }")
+        fields += ["-f", f"id={contributor.author_id}"]
+    if contributor.emails:
+        variables.append("$emails: [String!]!")
+        histories.append(
+            "byEmail: history(first: 1, author: {emails: $emails}) { nodes { oid } }"
+        )
+        for email in contributor.emails:
+            fields += ["-f", f"emails[]={email}"]
+    if not histories:
+        return True
+    query = (
+        "query($owner: String!, $name: String!, $expression: String!, "
+        f"{', '.join(variables)}) {{ "
+        "repository(owner: $owner, name: $name) { "
+        "object(expression: $expression) { ... on Commit { "
+        f"{' '.join(histories)} }} }} }} }}"
     )
-    return not commits
+    owner, name = repository.split("/", 1)
+    command = [
+        "gh",
+        "api",
+        "graphql",
+        "-f",
+        f"query={query}",
+        "-f",
+        f"owner={owner}",
+        "-f",
+        f"name={name}",
+        "-f",
+        f"expression=refs/tags/{prev_tag}",
+        *fields,
+    ]
+    data = run_json(command, env=env)
+    tag_commit = data["data"]["repository"]["object"]
+    if tag_commit is None:
+        raise ActionError(f"Release tag {prev_tag} not found in {repository}.")
+    return not any(history["nodes"] for history in tag_commit.values())
 
 
 def first_merged_pr_url(
@@ -395,9 +428,10 @@ def collect_contributors(
         return ""
 
     entries: list[tuple[str, str | None]] = []
-    for login in unique.values():
+    for contributor in unique.values():
+        login = contributor.login
         pr_url = None
-        if is_first_timer(login, prev_tag, repository, env):
+        if is_first_timer(contributor, prev_tag, repository, env):
             pr_url = first_merged_pr_url(login, repository, env)
         entries.append((login, pr_url))
     return render_contributors(entries)

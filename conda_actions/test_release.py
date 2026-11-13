@@ -8,6 +8,8 @@ from conda_actions import commands as commands_module
 from conda_actions import release as release_module
 from conda_actions.commands import ActionError
 from conda_actions.release import (
+    GitHubAuthor,
+    get_github_author,
     get_github_login,
     get_latest_tag,
     normalize_release_tag,
@@ -120,6 +122,31 @@ def test_get_github_login(monkeypatch: pytest.MonkeyPatch) -> None:
     assert get_github_login("conda/example", "abc123", env={"GH_TOKEN": "t"}) == "alice"
     assert captured["command"] == ["gh", "api", "repos/conda/example/commits/abc123"]
     assert captured["env"] == {"GH_TOKEN": "t"}
+
+
+@pytest.mark.parametrize(
+    ("author", "expected"),
+    [
+        (
+            {"login": "dependabot[bot]", "node_id": "BOT_1", "type": "Bot"},
+            GitHubAuthor(login="dependabot[bot]", author_id="BOT_1"),
+        ),
+        ({"login": "alice"}, GitHubAuthor(login="alice", author_id=None)),
+        (None, None),
+    ],
+)
+def test_get_github_author(
+    monkeypatch: pytest.MonkeyPatch,
+    author: dict[str, str] | None,
+    expected: GitHubAuthor | None,
+) -> None:
+    monkeypatch.setattr(
+        commands_module,
+        "run",
+        lambda *args, **kwargs: json.dumps({"author": author}),
+    )
+
+    assert get_github_author("conda/example", "abc123", env={}) == expected
 
 
 @pytest.mark.parametrize("message", ["HTTP 502", "Could not resolve host"])
