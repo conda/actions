@@ -44,30 +44,22 @@ def patch_run(monkeypatch: pytest.MonkeyPatch, fake_run: object) -> None:
     monkeypatch.setattr(commands_module, "run", fake_run)
 
 
-def write_workflow_run_event(
+def write_push_event(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
-    conclusion: str = "success",
-    event: str = "push",
     repository: str = "conda/conda",
-    head_repository: str = "conda/conda",
     branch: str = "26.7.x",
     sha: str = "abc123",
+    ref_type: str = "branch",
 ) -> None:
-    payload = {
-        "workflow_run": {
-            "conclusion": conclusion,
-            "event": event,
-            "head_branch": branch,
-            "head_sha": sha,
-            "head_repository": {"full_name": head_repository},
-        }
-    }
     path = tmp_path / "event.json"
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    path.write_text(json.dumps({}), encoding="utf-8")
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(path))
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_REF_NAME", branch)
+    monkeypatch.setenv("GITHUB_REF_TYPE", ref_type)
+    monkeypatch.setenv("GITHUB_SHA", sha)
     monkeypatch.setenv("GITHUB_REPOSITORY", repository)
 
 
@@ -150,11 +142,11 @@ def mock_prepare_commands(
     return calls, pull_requests
 
 
-def test_verify_context_accepts_trusted_release_push(
+def test_verify_context_accepts_release_push(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    write_workflow_run_event(tmp_path, monkeypatch)
+    write_push_event(tmp_path, monkeypatch)
 
     assert verify_context("[0-9]*.[0-9]*.x") == {
         "head_branch": "26.7.x",
@@ -167,7 +159,7 @@ def test_main_verifies_context_and_writes_outputs(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    write_workflow_run_event(tmp_path, monkeypatch)
+    write_push_event(tmp_path, monkeypatch)
     output = tmp_path / "outputs"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
 
@@ -184,14 +176,16 @@ def test_main_rejects_other_events(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    write_workflow_run_event(tmp_path, monkeypatch)
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    write_push_event(tmp_path, monkeypatch)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
     output = tmp_path / "outputs"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
 
     assert prepare_release_module.main(["verify-context"]) == 1
 
-    assert "must run from the workflow_run event" in capsys.readouterr().err
+    assert "must run from the push or workflow_dispatch event" in (
+        capsys.readouterr().err
+    )
     assert not output.exists()
 
 
@@ -215,8 +209,11 @@ def test_main_rejects_unavailable_event_payload(
     capsys: pytest.CaptureFixture[str],
     event_path: str | None,
 ) -> None:
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
     monkeypatch.setenv("GITHUB_REPOSITORY", "conda/conda")
+    monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
+    monkeypatch.delenv("GITHUB_REF_TYPE", raising=False)
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
     if event_path is None:
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
     else:
@@ -226,19 +223,17 @@ def test_main_rejects_unavailable_event_payload(
 
     assert prepare_release_module.main(["verify-context"]) == 1
 
-    assert "did not conclude successfully" in capsys.readouterr().err
+    assert "must come from a branch, not a tag" in capsys.readouterr().err
     assert not output.exists()
 
 
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("conclusion", "failure", "did not conclude successfully"),
-        ("event", "pull_request", "must come from a push"),
-        ("head_repository", "someone/conda", "must come from this repository"),
+        ("ref_type", "tag", "must come from a branch, not a tag"),
         ("branch", "main", "does not match"),
-        ("branch", "", "did not include a head branch and SHA"),
-        ("sha", "", "did not include a head branch and SHA"),
+        ("branch", "", "did not include a branch and SHA"),
+        ("sha", "", "did not include a branch and SHA"),
     ],
 )
 def test_verify_context_rejects_untrusted_context(
@@ -249,7 +244,7 @@ def test_verify_context_rejects_untrusted_context(
     message: str,
 ) -> None:
     kwargs = {field: value}
-    write_workflow_run_event(tmp_path, monkeypatch, **kwargs)
+    write_push_event(tmp_path, monkeypatch, **kwargs)
 
     with pytest.raises(ActionError, match=message):
         verify_context("[0-9]*.[0-9]*.x")
@@ -294,7 +289,7 @@ def test_verify_context_rejects_version_outside_dispatch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    write_workflow_run_event(tmp_path, monkeypatch)
+    write_push_event(tmp_path, monkeypatch)
 
     with pytest.raises(
         ActionError,
@@ -322,6 +317,18 @@ def test_verify_context_rejects_tag_dispatch(
     write_dispatch_event(tmp_path, monkeypatch, ref_type="tag")
 
     with pytest.raises(ActionError, match="must come from a branch, not a tag"):
+        verify_context("[0-9]*.[0-9]*.x", "1.2.3")
+
+
+@pytest.mark.parametrize("field", ["branch", "sha"])
+def test_verify_context_rejects_dispatch_without_branch_or_sha(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    write_dispatch_event(tmp_path, monkeypatch, **{field: ""})
+
+    with pytest.raises(ActionError, match="did not include a branch and SHA"):
         verify_context("[0-9]*.[0-9]*.x", "1.2.3")
 
 
@@ -354,7 +361,7 @@ def test_prepare_release_noops_without_fragments(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch)
+    write_push_event(tmp_path, monkeypatch)
     news = tmp_path / "news"
     news.mkdir()
     (news / "TEMPLATE").write_text("* <news item>\n", encoding="utf-8")
@@ -379,7 +386,7 @@ def test_prepare_release_skips_publication_without_changes(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(monkeypatch)
     monkeypatch.setattr(prepare_release_module, "get_changed_paths", lambda: [])
@@ -399,7 +406,7 @@ def test_prepare_release_rejects_missing_news_directory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch)
+    write_push_event(tmp_path, monkeypatch)
 
     with pytest.raises(ActionError, match="News directory does not exist: news"):
         prepare_release(prepare_args())
@@ -410,7 +417,7 @@ def test_prepare_release_rejects_malformed_fragment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch)
+    write_push_event(tmp_path, monkeypatch)
     news = tmp_path / "news"
     news.mkdir()
     (news / "123-fix").write_text("not a news fragment\n", encoding="utf-8")
@@ -426,7 +433,7 @@ def test_prepare_release_requires_github_configuration(
     field: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(monkeypatch)
     args = prepare_args()
@@ -453,7 +460,7 @@ def test_prepare_release_rejects_unexpected_remote_head_response(
     response: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(monkeypatch)
     run = prepare_release_module.run
@@ -477,13 +484,13 @@ def test_prepare_release_rejects_unexpected_remote_head_response(
     assert not pull_requests
 
 
-def test_prepare_release_skips_stale_workflow_run(
+def test_prepare_release_skips_stale_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(monkeypatch, remote_sha="b" * 40)
 
@@ -500,7 +507,7 @@ def test_prepare_release_skips_stale_workflow_run(
     ]
     assert not any(command[:2] == ["git", "push"] for command in commands)
     assert not pull_requests
-    assert "Skipping stale workflow run for 26.7.x" in capsys.readouterr().out
+    assert "Skipping stale run for 26.7.x" in capsys.readouterr().out
 
 
 def test_prepare_release_publishes_when_remote_head_matches(
@@ -508,7 +515,7 @@ def test_prepare_release_publishes_when_remote_head_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(monkeypatch)
 
@@ -595,7 +602,7 @@ def test_prepare_release_checks_head_again_after_contributor_collection(
     lookup_error: bool,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(monkeypatch)
     run = prepare_release_module.run
@@ -635,7 +642,7 @@ def test_prepare_release_authenticates_before_reading_remote(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(monkeypatch, require_auth=True)
 
@@ -664,7 +671,7 @@ def test_prepare_release_fails_closed_when_publish_check_fails(
     message: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     calls, pull_requests = mock_prepare_commands(
         monkeypatch,
@@ -1491,7 +1498,7 @@ def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
     failed_lookup: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
@@ -1774,7 +1781,7 @@ def test_prepare_release_adds_contributors_section(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    write_workflow_run_event(tmp_path, monkeypatch, sha="a" * 40)
+    write_push_event(tmp_path, monkeypatch, sha="a" * 40)
     write_release_files(tmp_path)
     gh_envs: list[dict[str, str] | None] = []
 

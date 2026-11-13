@@ -1,18 +1,15 @@
 # Prepare Release
 
 Generate release notes from conda news fragments and open or update a release
-PR. The action is intended to run from a trusted `workflow_run` event after the
-test workflow succeeds on a protected release branch, or from a
-`workflow_dispatch` run with an explicit `version` input for on-demand release
-projects.
+PR. The action is intended to run on pushes to release branches, independent of
+the test workflow's result, or from a `workflow_dispatch` run with an explicit
+`version` input for on-demand release projects.
 
 ```yaml
 name: Prepare release notes
 
 on:
-  workflow_run:
-    workflows: [Tests]
-    types: [completed]
+  push:
     branches:
       - '[0-9]*.[0-9]*.x'
   workflow_dispatch:
@@ -23,7 +20,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  group: ${{ github.workflow }}-${{ github.ref_name }}
   queue: max
   cancel-in-progress: false
 
@@ -32,13 +29,6 @@ permissions:
 
 jobs:
   prepare:
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || (
-        github.event.workflow_run.conclusion == 'success'
-        && github.event.workflow_run.event == 'push'
-        && github.event.workflow_run.head_repository.full_name == github.repository
-      )
     runs-on: ubuntu-latest
     steps:
       - uses: conda/actions/prepare-release@main
@@ -49,14 +39,19 @@ jobs:
           version: ${{ inputs.version }}
 ```
 
-The action checks the same security conditions internally before checkout:
+Release notes are prepared whenever commits land on a release branch. Test
+failures do not block the release notes PR; they remain visible through normal
+CI reporting.
 
-- event is `workflow_run` (or `workflow_dispatch` when a `version` is given)
-- for `workflow_run`, the triggering workflow concluded successfully
-- for `workflow_run`, the triggering workflow came from a `push`
-- for `workflow_run`, the triggering repository is the current repository
-- for `workflow_run`, the triggering branch matches the configured release
-  branch pattern
+Because the action's write token is exercised on every release-branch push,
+confirm that branch protection (or a repository ruleset) covers the release
+branch pattern so only trusted commits can reach those branches.
+
+The action checks the following conditions internally before checkout:
+
+- event is `push` (or `workflow_dispatch` when a `version` is given)
+- for `push`, the push is to a branch (not a tag)
+- for `push`, the pushed branch matches the configured release branch pattern
 - for `workflow_dispatch`, the `version` input matches `MAJOR.MINOR.PATCH`
 - for `workflow_dispatch`, the run was dispatched from a branch (not a tag)
 - for `workflow_dispatch`, the dispatched branch is the repository default
@@ -76,7 +71,7 @@ A missing news directory or a malformed fragment fails the action.
 | `news-directory` | Directory containing news fragments. | `news` |
 | `changelog-path` | Changelog file to update. | `CHANGELOG.md` |
 | `release-branch-pattern` | Comma- or newline-separated release branch glob patterns. | `[0-9]*.[0-9]*.x` |
-| `version` | Release version (`MAJOR.MINOR.PATCH`) for `workflow_dispatch` runs; ignored for `workflow_run` runs. | |
+| `version` | Release version (`MAJOR.MINOR.PATCH`) for `workflow_dispatch` runs; ignored for `push` runs. | |
 | `branch-prefix` | Prefix for the generated release-notes branch. | `release-notes-` |
 | `git-author-name` | Git author name for the generated commit. | `Conda Bot` |
 | `git-author-email` | Git author email for the generated commit. | `18747875+conda-bot@users.noreply.github.com` |
@@ -111,8 +106,8 @@ when updating an existing release entry:
 * @dependabot[bot]
 ```
 
-Before pushing, the action verifies that the triggering SHA is still the tip of
-the release branch. A stale workflow run exits successfully without pushing
+Before pushing, the action verifies that the triggering SHA is still the tip
+of the release branch. A stale run exits successfully without pushing
 or creating or updating a pull request. Authentication or branch lookup
 failures fail the action.
 
