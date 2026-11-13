@@ -204,7 +204,11 @@ jobs:
             code:
               - 'template-files/**'
       - name: Comment on PR
-        if: github.event_name == 'pull_request' && steps.filter.outputs.code == 'true'
+        # fork pull requests do not receive repository secrets
+        if: >-
+          github.event_name == 'pull_request'
+          && steps.filter.outputs.code == 'true'
+          && github.event.pull_request.head.repo.full_name == github.repository
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88  # v3.0.5
         with:
           message: |

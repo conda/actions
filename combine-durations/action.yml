@@ -62,33 +62,50 @@ runs:
         INPUT_WORKFLOW: ${{ inputs.workflow }}
         INPUT_PATTERN: ${{ inputs.pattern }}
 
+    - name: Check for Artifacts
+      id: check
+      shell: bash
+      run: |
+        if [ -n "$(find "$RUNNER_TEMP/artifacts" -name '*.json' -print -quit 2>/dev/null)" ]; then
+          echo skip=false >> "$GITHUB_OUTPUT"
+        else
+          echo skip=true >> "$GITHUB_OUTPUT"
+          echo "::notice::No duration artifacts downloaded, skipping"
+        fi
+
     # `hashFiles` only works on files within the working directory, since `requirements.txt`
     # is not in the working directory we need to manually compute the SHA256 hash
     - name: Compute Hash
+      if: steps.check.outputs.skip != 'true'
       id: hash
       shell: bash
       run: echo hash="$(sha256sum "$GITHUB_ACTION_PATH/requirements.txt" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
     - name: Pip Cache
+      if: steps.check.outputs.skip != 'true'
       uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
       with:
         path: ~/.cache/pip
         key: ${{ github.workflow }}-combine-durations-${{ steps.hash.outputs.hash }}
 
     - name: Setup Python
+      if: steps.check.outputs.skip != 'true'
       uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
         python-version: '>=3.10'
 
     - name: Pip Install
+      if: steps.check.outputs.skip != 'true'
       shell: bash
       run: pip install --quiet -r "$GITHUB_ACTION_PATH/requirements.txt"
 
     - name: Pip List
+      if: steps.check.outputs.skip != 'true'
       shell: bash
       run: pip list
 
     - name: Combine Recent Durations
+      if: steps.check.outputs.skip != 'true'
       id: combine
       shell: bash
       run: >
