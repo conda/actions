@@ -18,8 +18,8 @@ inputs:
     default: ''
   token:
     description: >-
-      Token with `contents: write` permissions to upload artifacts to a release.
-    default: ${{ github.token }}
+      Personal access token with `contents: write` permissions to create the
+      release and its tag (required).
 
 outputs:
   version:

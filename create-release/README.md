@@ -28,8 +28,6 @@ jobs:
       && startsWith(github.event.pull_request.head.ref, 'release-notes-')
       && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout Source
         uses: actions/checkout@<sha>
@@ -71,7 +69,7 @@ The action re-checks these conditions before publishing:
 | `changelog-path`      | Changelog file to read the release notes from.                     | `CHANGELOG.md`        |
 | `branch-prefix`       | Prefix of the release PR branch that names the version to release. | `release-notes-`      |
 | `artifacts-directory` | Directory holding the files to attach to the release.              |                       |
-| `token`               | Token with `contents: write`.                                      | `${{ github.token }}` |
+| `token`               | Personal access token with `contents: write`. Required.            |                       |
 
 ## Action Outputs
 
