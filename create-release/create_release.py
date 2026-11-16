@@ -24,16 +24,12 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
         default="",
         help="Directory holding the files to attach to the release.",
     )
-    parser.add_argument(
-        "--repository",
-        default=os.environ.get("GITHUB_REPOSITORY", ""),
-    )
     parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""))
     return parser.parse_args(argv)
 
 
 def create_release(args: Namespace) -> None:
-    if not args.repository:
+    if not os.environ.get("GITHUB_REPOSITORY"):
         raise ActionError("No GitHub repository was provided.")
     if not args.token:
         raise ActionError("No GitHub token was provided.")
@@ -53,24 +49,27 @@ def create_release(args: Namespace) -> None:
 
     artifacts = resolve_artifacts(args.artifacts_directory)
     env = os.environ | {"GH_TOKEN": args.token}
-    state = release_state(args.repository, version, env)
+    state = release_state(version, env)
     if state == "published":
         print(f"Release {version} is already published. Nothing to do.")
     else:
-        if state is None and tag_exists(args.repository, version, env):
+        if state is None and tag_exists(version, env):
             raise ActionError(
                 f"Tag {version} already exists without a release. "
                 "Delete the tag before creating the release."
             )
         if state is None:
-            create_draft(args.repository, version, commit, notes, artifacts, env)
+            create_draft(version, commit, notes, artifacts, env)
         else:
-            update_draft(args.repository, version, notes, artifacts, env)
-        publish_release(args.repository, version, env)
+            update_draft(version, notes, artifacts, env)
+        publish_release(version, env)
 
     write_output("version", version)
     write_output("commit", commit)
-    write_output("release-url", release_url(args.repository, version))
+    write_output(
+        "release-url",
+        release_url(os.environ["GITHUB_REPOSITORY"], version),
+    )
 
 
 def verify_context(branch_prefix: str) -> dict[str, str]:
@@ -150,9 +149,9 @@ def resolve_artifacts(directory: str) -> list[Path]:
     return sorted(child for child in path.iterdir() if child.is_file())
 
 
-def release_state(repository: str, tag: str, env: dict[str, str]) -> str | None:
+def release_state(tag: str, env: dict[str, str]) -> str | None:
     release = get_json_or_none(
-        ["gh", "api", f"repos/{repository}/releases/tags/{tag}"],
+        ["gh", "release", "view", tag, "--json", "isDraft"],
         env,
     )
     if release is None:
@@ -160,8 +159,8 @@ def release_state(repository: str, tag: str, env: dict[str, str]) -> str | None:
     return "draft" if release.get("isDraft") else "published"
 
 
-def tag_exists(repository: str, tag: str, env: dict[str, str]) -> bool:
-    ref = get_json_or_none(["gh", "api", f"repos/{repository}/git/ref/tags/{tag}"], env)
+def tag_exists(tag: str, env: dict[str, str]) -> bool:
+    ref = get_json_or_none(["gh", "api", f"git/ref/tags/{tag}"], env)
     return ref is not None
 
 
@@ -169,13 +168,14 @@ def get_json_or_none(command: list[str], env: dict[str, str]) -> Any:
     try:
         return run_json(command, env=env)
     except ActionError as err:
-        if "HTTP 404" not in str(err):
+        # gh words a missing release as "release not found"
+        # and a missing ref as HTTP 404.
+        if not any(missing in str(err) for missing in ("HTTP 404", "not found")):
             raise
         return None
 
 
 def create_draft(
-    repository: str,
     version: str,
     commit: str,
     notes: str,
@@ -188,8 +188,6 @@ def create_draft(
         "create",
         version,
         "--draft",
-        "--repo",
-        repository,
         "--target",
         commit,
         "--title",
@@ -201,7 +199,6 @@ def create_draft(
 
 
 def update_draft(
-    repository: str,
     version: str,
     notes: str,
     artifacts: list[Path],
@@ -213,8 +210,6 @@ def update_draft(
             "release",
             "edit",
             version,
-            "--repo",
-            repository,
             "--title",
             version,
             f"--notes={notes}",
@@ -228,8 +223,6 @@ def update_draft(
                 "release",
                 "upload",
                 version,
-                "--repo",
-                repository,
                 "--clobber",
                 *map(str, artifacts),
             ],
@@ -237,11 +230,8 @@ def update_draft(
         )
 
 
-def publish_release(repository: str, version: str, env: dict[str, str]) -> None:
-    run(
-        ["gh", "release", "edit", version, "--repo", repository, "--draft=false"],
-        env=env,
-    )
+def publish_release(version: str, env: dict[str, str]) -> None:
+    run(["gh", "release", "edit", version, "--draft=false"], env=env)
 
 
 def release_url(repository: str, version: str) -> str:

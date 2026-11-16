@@ -43,7 +43,6 @@ runs:
         --changelog-path "$INPUT_CHANGELOG_PATH"
         --branch-prefix "$INPUT_BRANCH_PREFIX"
         --artifacts-directory "$INPUT_ARTIFACTS_DIRECTORY"
-        --repository "$GITHUB_REPOSITORY"
         --token "$INPUT_TOKEN"
       env:
         PYTHONPATH: ${{ github.action_path }}/..

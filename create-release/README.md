@@ -41,19 +41,17 @@ jobs:
         run: <repository-specific build into dist/>
 
       - name: Create Release
-        uses: conda/actions/create-release@main
+        uses: conda/actions/create-release@<sha>
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
           artifacts-directory: dist
 ```
 
-The job must check out `github.event.pull_request.merge_commit_sha`. The notes
-come from the checked-out `CHANGELOG.md`, and the tip of the default branch may
-have moved past the release commit.
-
-`secrets.RELEASE_TOKEN` must be a personal access token. Releases published
-with `github.token` do not start workflows that subscribe to the `release`
-event, such as the release upload or merge-back workflows.
+The job must check out `github.event.pull_request.merge_commit_sha` since
+the notes come from the checked-out `CHANGELOG.md`, and the tip of the
+default branch may have moved past the release commit.
+`secrets.RELEASE_TOKEN` must be a personal access token with permissions
+to create and edit releases and to push tags.
 
 The action re-checks these conditions before publishing:
 

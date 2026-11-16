@@ -67,7 +67,6 @@ def release_args(tmp_path: Path, **overrides: object) -> Namespace:
         changelog_path=str(changelog),
         branch_prefix="release-notes-",
         artifacts_directory="",
-        repository="conda/example",
         token="test-token",
     )
     for name, value in overrides.items():
@@ -89,11 +88,13 @@ def mock_gh(
         *,
         env: dict[str, str] | None = None,
     ) -> object:
-        if "/releases/tags/" in command[2]:
+        if command[1:3] == ["release", "view"]:
             if state is None:
-                raise ActionError("Command failed: gh api\n\ngh: Not Found (HTTP 404)")
+                raise ActionError(
+                    "Command failed: gh release view\n\nrelease not found"
+                )
             return {"isDraft": state == "draft"}
-        if "/git/ref/tags/" in command[2]:
+        if command[1] == "api":
             if not tag:
                 raise ActionError("Command failed: gh api\n\ngh: Not Found (HTTP 404)")
             return {"ref": f"refs/tags/{command[2].rsplit('/', 1)[-1]}"}
@@ -173,8 +174,6 @@ def test_main_reports_action_errors(
             [
                 "--changelog-path",
                 str(changelog),
-                "--repository",
-                "conda/example",
                 "--token",
                 "test-token",
             ]
@@ -192,7 +191,11 @@ def test_create_release_requires_github_configuration(
     field: str,
 ) -> None:
     write_merged_pr_event(tmp_path, monkeypatch)
-    args = release_args(tmp_path, **{field: ""})
+    args = release_args(tmp_path)
+    if field == "repository":
+        monkeypatch.delenv("GITHUB_REPOSITORY")
+    else:
+        args.token = ""
     calls, _ = mock_gh(monkeypatch)
 
     with pytest.raises(ActionError, match=f"No GitHub {field} was provided"):
@@ -225,9 +228,7 @@ def test_create_release_creates_draft_with_artifacts_and_publishes(
         "dist/example-1.2.3-py3-none-any.whl",
         "dist/example-1.2.3.tar.gz",
     ]
-    assert calls[0][5:11] == [
-        "--repo",
-        "conda/example",
+    assert calls[0][5:9] == [
         "--target",
         "a" * 40,
         "--title",
@@ -239,8 +240,6 @@ def test_create_release_creates_draft_with_artifacts_and_publishes(
         "release",
         "edit",
         "1.2.3",
-        "--repo",
-        "conda/example",
         "--draft=false",
     ]
     assert output.read_text(encoding="utf-8") == (
@@ -262,15 +261,13 @@ def test_create_release_publishes_without_artifacts(
 
     assert calls[0][:5] == ["gh", "release", "create", "1.2.3", "--draft"]
     assert calls[0][-1].startswith("--notes=")
-    assert len(calls[0]) == 12
+    assert len(calls[0]) == 10
     assert notes
     assert calls[-1] == [
         "gh",
         "release",
         "edit",
         "1.2.3",
-        "--repo",
-        "conda/example",
         "--draft=false",
     ]
 
@@ -297,8 +294,6 @@ def test_create_release_updates_existing_draft(
         "release",
         "upload",
         "1.2.3",
-        "--repo",
-        "conda/example",
         "--clobber",
         "dist/example-1.2.3.tar.gz",
     ]
@@ -307,8 +302,6 @@ def test_create_release_updates_existing_draft(
         "release",
         "edit",
         "1.2.3",
-        "--repo",
-        "conda/example",
         "--draft=false",
     ]
 
@@ -406,8 +399,6 @@ def test_main_publishes_release(
             [
                 "--changelog-path",
                 args.changelog_path,
-                "--repository",
-                "conda/example",
                 "--token",
                 "test-token",
             ]
