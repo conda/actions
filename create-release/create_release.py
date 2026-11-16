@@ -64,10 +64,9 @@ def create_release(args: Namespace) -> None:
 
     write_output("version", version)
     write_output("commit", commit)
-    write_output(
-        "release-url",
-        release_url(os.environ["GITHUB_REPOSITORY"], version),
-    )
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    release_url = f"{server}/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{version}"
+    write_output("release-url", release_url)
 
 
 def verify_context(branch_prefix: str) -> dict[str, str]:
@@ -132,19 +131,19 @@ def load_event_payload() -> dict[str, Any]:
     event_path = os.environ.get("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
-    path = Path(event_path)
-    if not path.is_file():
+    payload_path = Path(event_path)
+    if not payload_path.is_file():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(payload_path.read_text(encoding="utf-8"))
 
 
 def resolve_artifacts(directory: str) -> list[Path]:
     if not directory:
         return []
-    path = Path(directory)
-    if not path.is_dir():
+    artifacts_dir = Path(directory)
+    if not artifacts_dir.is_dir():
         raise ActionError(f"Artifacts directory does not exist: {directory}")
-    return sorted(child for child in path.iterdir() if child.is_file())
+    return sorted(child for child in artifacts_dir.iterdir() if child.is_file())
 
 
 def release_state(tag: str) -> str | None:
@@ -223,11 +222,6 @@ def update_draft(
 
 def publish_release(version: str) -> None:
     run(["gh", "release", "edit", version, "--draft=false"])
-
-
-def release_url(repository: str, version: str) -> str:
-    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
-    return f"{server}/{repository}/releases/tag/{version}"
 
 
 def write_output(name: str, value: str) -> None:
