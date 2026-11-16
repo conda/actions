@@ -58,6 +58,7 @@ def write_merged_pr_event(
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(path))
     monkeypatch.setenv("GITHUB_EVENT_NAME", event)
     monkeypatch.setenv("GITHUB_REPOSITORY", repository)
+    monkeypatch.setenv("GH_TOKEN", "test-token")
 
 
 def release_args(tmp_path: Path, **overrides: object) -> Namespace:
@@ -67,7 +68,6 @@ def release_args(tmp_path: Path, **overrides: object) -> Namespace:
         changelog_path=str(changelog),
         branch_prefix="release-notes-",
         artifacts_directory="",
-        token="test-token",
     )
     for name, value in overrides.items():
         setattr(args, name, value)
@@ -174,8 +174,6 @@ def test_main_reports_action_errors(
             [
                 "--changelog-path",
                 str(changelog),
-                "--token",
-                "test-token",
             ]
         )
         == 1
@@ -184,22 +182,18 @@ def test_main_reports_action_errors(
     assert "::error::No release notes for 1.2.3" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("field", ["repository", "token"])
+@pytest.mark.parametrize("variable", ["GITHUB_REPOSITORY", "GH_TOKEN"])
 def test_create_release_requires_github_configuration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    field: str,
+    variable: str,
 ) -> None:
     write_merged_pr_event(tmp_path, monkeypatch)
-    args = release_args(tmp_path)
-    if field == "repository":
-        monkeypatch.delenv("GITHUB_REPOSITORY")
-    else:
-        args.token = ""
+    monkeypatch.delenv(variable)
     calls, _ = mock_gh(monkeypatch)
 
-    with pytest.raises(ActionError, match=f"No GitHub {field} was provided"):
-        create_release(args)
+    with pytest.raises(ActionError, match="was provided"):
+        create_release(release_args(tmp_path))
 
     assert not calls
 
@@ -399,8 +393,6 @@ def test_main_publishes_release(
             [
                 "--changelog-path",
                 args.changelog_path,
-                "--token",
-                "test-token",
             ]
         )
         == 0

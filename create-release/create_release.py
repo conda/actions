@@ -24,14 +24,13 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
         default="",
         help="Directory holding the files to attach to the release.",
     )
-    parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""))
     return parser.parse_args(argv)
 
 
 def create_release(args: Namespace) -> None:
     if not os.environ.get("GITHUB_REPOSITORY"):
         raise ActionError("No GitHub repository was provided.")
-    if not args.token:
+    if not os.environ.get("GH_TOKEN"):
         raise ActionError("No GitHub token was provided.")
 
     context = verify_context(args.branch_prefix)
@@ -48,21 +47,20 @@ def create_release(args: Namespace) -> None:
         raise ActionError(f"Release notes for {version} are empty.")
 
     artifacts = resolve_artifacts(args.artifacts_directory)
-    env = os.environ | {"GH_TOKEN": args.token}
-    state = release_state(version, env)
+    state = release_state(version)
     if state == "published":
         print(f"Release {version} is already published. Nothing to do.")
     else:
-        if state is None and tag_exists(version, env):
+        if state is None and tag_exists(version):
             raise ActionError(
                 f"Tag {version} already exists without a release. "
                 "Delete the tag before creating the release."
             )
         if state is None:
-            create_draft(version, commit, notes, artifacts, env)
+            create_draft(version, commit, notes, artifacts)
         else:
-            update_draft(version, notes, artifacts, env)
-        publish_release(version, env)
+            update_draft(version, notes, artifacts)
+        publish_release(version)
 
     write_output("version", version)
     write_output("commit", commit)
@@ -149,24 +147,21 @@ def resolve_artifacts(directory: str) -> list[Path]:
     return sorted(child for child in path.iterdir() if child.is_file())
 
 
-def release_state(tag: str, env: dict[str, str]) -> str | None:
-    release = get_json_or_none(
-        ["gh", "release", "view", tag, "--json", "isDraft"],
-        env,
-    )
+def release_state(tag: str) -> str | None:
+    release = get_json_or_none(["gh", "release", "view", tag, "--json", "isDraft"])
     if release is None:
         return None
     return "draft" if release.get("isDraft") else "published"
 
 
-def tag_exists(tag: str, env: dict[str, str]) -> bool:
-    ref = get_json_or_none(["gh", "api", f"git/ref/tags/{tag}"], env)
+def tag_exists(tag: str) -> bool:
+    ref = get_json_or_none(["gh", "api", f"git/ref/tags/{tag}"])
     return ref is not None
 
 
-def get_json_or_none(command: list[str], env: dict[str, str]) -> Any:
+def get_json_or_none(command: list[str]) -> Any:
     try:
-        return run_json(command, env=env)
+        return run_json(command)
     except ActionError as err:
         # gh words a missing release as "release not found"
         # and a missing ref as HTTP 404.
@@ -180,7 +175,6 @@ def create_draft(
     commit: str,
     notes: str,
     artifacts: list[Path],
-    env: dict[str, str],
 ) -> None:
     command = [
         "gh",
@@ -195,14 +189,13 @@ def create_draft(
         f"--notes={notes}",
         *map(str, artifacts),
     ]
-    run(command, env=env)
+    run(command)
 
 
 def update_draft(
     version: str,
     notes: str,
     artifacts: list[Path],
-    env: dict[str, str],
 ) -> None:
     run(
         [
@@ -214,7 +207,6 @@ def update_draft(
             version,
             f"--notes={notes}",
         ],
-        env=env,
     )
     if artifacts:
         run(
@@ -226,12 +218,11 @@ def update_draft(
                 "--clobber",
                 *map(str, artifacts),
             ],
-            env=env,
         )
 
 
-def publish_release(version: str, env: dict[str, str]) -> None:
-    run(["gh", "release", "edit", version, "--draft=false"], env=env)
+def publish_release(version: str) -> None:
+    run(["gh", "release", "edit", version, "--draft=false"])
 
 
 def release_url(repository: str, version: str) -> str:

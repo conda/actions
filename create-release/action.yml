@@ -43,10 +43,9 @@ runs:
         --changelog-path "$INPUT_CHANGELOG_PATH"
         --branch-prefix "$INPUT_BRANCH_PREFIX"
         --artifacts-directory "$INPUT_ARTIFACTS_DIRECTORY"
-        --token "$INPUT_TOKEN"
       env:
         PYTHONPATH: ${{ github.action_path }}/..
+        GH_TOKEN: ${{ inputs.token }}
         INPUT_CHANGELOG_PATH: ${{ inputs.changelog-path }}
         INPUT_BRANCH_PREFIX: ${{ inputs.branch-prefix }}
         INPUT_ARTIFACTS_DIRECTORY: ${{ inputs.artifacts-directory }}
-        INPUT_TOKEN: ${{ inputs.token }}
