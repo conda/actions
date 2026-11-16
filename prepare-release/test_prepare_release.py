@@ -13,6 +13,7 @@ import pytest
 import prepare_release as prepare_release_module
 from conda_actions import commands as commands_module
 from conda_actions import release as release_module
+from conda_actions.release import GitHubAuthor
 from prepare_release import (
     MAX_LOGIN_LOOKUPS_PER_EMAIL,
     MAX_UNRESOLVED_LOGIN_LOOKUPS,
@@ -42,6 +43,34 @@ def patch_run(monkeypatch: pytest.MonkeyPatch, fake_run: object) -> None:
     monkeypatch.setattr(prepare_release_module, "run", fake_run)
     monkeypatch.setattr(release_module, "run", fake_run)
     monkeypatch.setattr(commands_module, "run", fake_run)
+
+
+def is_graphql(command: list[str]) -> bool:
+    return command[:3] == ["gh", "api", "graphql"]
+
+
+def graphql_fields(command: list[str]) -> dict[str, list[str]]:
+    fields: dict[str, list[str]] = {}
+    for flag, value in zip(command, command[1:], strict=False):
+        if flag == "-f":
+            key, _, field = value.partition("=")
+            fields.setdefault(key, []).append(field)
+    return fields
+
+
+def history_response(*, by_id: bool = False, by_email: bool = False) -> str:
+    def history(found: bool) -> dict[str, object]:
+        return {"nodes": [{"oid": "old"}] if found else []}
+
+    return json.dumps(
+        {
+            "data": {
+                "repository": {
+                    "object": {"byId": history(by_id), "byEmail": history(by_email)}
+                }
+            }
+        }
+    )
 
 
 def write_push_event(
@@ -930,12 +959,42 @@ def test_resolve_logins_caches_and_skips_unresolvable(
     ]
 
     assert resolve_logins(commits, "conda/conda", {}) == {
-        "user-sha1": "user-sha1",
+        "user-sha1": GitHubAuthor(login="user-sha1", emails=["a@example.com"]),
     }
     assert len(calls) == 2
     assert (
         "::warning::No GitHub login associated with commit" in capsys.readouterr().err
     )
+
+
+def test_resolve_logins_groups_by_author_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The same account seen under its current and a former login.
+    authors = {
+        "sha1": {"login": "alice-new", "node_id": "U_alice"},
+        "sha2": {"login": "alice-old", "node_id": "U_alice"},
+        "sha3": {"login": "bob", "node_id": "U_bob"},
+    }
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        return json.dumps({"author": authors[command[-1].rsplit("/", 1)[-1]]})
+
+    monkeypatch.setattr(commands_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash="sha1", email="alice@example.com"),
+        ContributorCommit(hash="sha2", email="alice@old.example.com"),
+        ContributorCommit(hash="sha3", email="bob@example.com"),
+    ]
+
+    assert list(resolve_logins(commits, "conda/conda", {}).values()) == [
+        GitHubAuthor(
+            login="alice-new",
+            emails=["alice@example.com", "alice@old.example.com"],
+            author_id="U_alice",
+        ),
+        GitHubAuthor(login="bob", emails=["bob@example.com"], author_id="U_bob"),
+    ]
 
 
 @pytest.mark.parametrize("repeat_count", [1, MAX_LOGIN_LOOKUPS_PER_EMAIL])
@@ -959,7 +1018,9 @@ def test_resolve_logins_tries_distinct_hashes_per_email(
         ContributorCommit(hash="sha2", email="a@example.com"),
     ]
 
-    assert resolve_logins(commits, "conda/conda", {}) == {"alice": "alice"}
+    assert resolve_logins(commits, "conda/conda", {}) == {
+        "alice": GitHubAuthor(login="alice", emails=["a@example.com"]),
+    }
     assert calls == ["sha1", "sha2"]
 
 
@@ -1037,7 +1098,9 @@ def test_resolve_logins_successes_do_not_count_toward_cap(
 
     result = resolve_logins(commits, "conda/conda", {})
     assert result == {
-        f"user-sha{index}": f"user-sha{index}"
+        f"user-sha{index}": GitHubAuthor(
+            login=f"user-sha{index}", emails=[f"user{index}@example.com"]
+        )
         for index in range(MAX_UNRESOLVED_LOGIN_LOOKUPS + 5)
     }
     assert calls == MAX_UNRESOLVED_LOGIN_LOOKUPS + 5
@@ -1052,81 +1115,110 @@ def test_is_first_timer_without_previous_tag(
         lambda *args, **kwargs: pytest.fail("No commands should run."),
     )
 
-    assert is_first_timer("alice", "", "conda/conda", {})
-
-
-@pytest.mark.skipif(shutil.which("gh") is None, reason="GitHub CLI is required")
-def test_is_first_timer_sends_get_query(
-    monkeypatch: pytest.MonkeyPatch,
-    httpserver: HTTPServer,
-) -> None:
-    httpserver.expect_oneshot_request(
-        "/repos/conda/conda/commits",
-        method="GET",
-        query_string={
-            "author": "alice",
-            "per_page": "1",
-            "sha": "26.7.0",
-        },
-    ).respond_with_json([])
-    run = commands_module.run
-
-    def local_run(command: list[str], **kwargs: object) -> str:
-        command = command.copy()
-        command[2] = httpserver.url_for(f"/{command[2]}")
-        return run(command, **kwargs)
-
-    monkeypatch.setattr(commands_module, "run", local_run)
-    result = is_first_timer(
-        "alice",
-        "26.7.0",
+    assert is_first_timer(
+        GitHubAuthor(login="alice", emails=["alice@example.com"]),
+        "",
         "conda/conda",
-        os.environ | {"GH_TOKEN": "test-token"},
+        {},
     )
-    assert result
-    httpserver.check()
 
 
 @pytest.mark.parametrize(
-    ("payload", "expected"),
-    [("[]", True), ('[{"sha": "old"}]', False)],
+    ("by_id", "by_email", "expected"),
+    [
+        (False, False, True),
+        (True, False, False),
+        (False, True, False),
+        (True, True, False),
+    ],
 )
-def test_is_first_timer_queries_prior_commits_at_release_tag(
+def test_is_first_timer_queries_account_or_emails_in_one_request(
     monkeypatch: pytest.MonkeyPatch,
-    payload: str,
+    by_id: bool,
+    by_email: bool,
     expected: bool,
 ) -> None:
     commands: list[list[str]] = []
 
     def fake_run(command: list[str], **kwargs: object) -> str:
         commands.append(command)
-        return payload
+        return history_response(by_id=by_id, by_email=by_email)
 
     monkeypatch.setattr(commands_module, "run", fake_run)
 
-    assert (
+    contributor = GitHubAuthor(
+        login="alice",
+        emails=["alice@example.com", "alice@work.example.com"],
+        author_id="U_alice",
+    )
+    assert is_first_timer(contributor, "26.7.0", "conda/conda", {}) is expected
+    assert len(commands) == 1
+    assert is_graphql(commands[0])
+    fields = graphql_fields(commands[0])
+    assert fields.pop("query")[0].count("history(") == 2
+    assert fields == {
+        "owner": ["conda"],
+        "name": ["conda"],
+        "expression": ["refs/tags/26.7.0"],
+        "id": ["U_alice"],
+        "emails[]": ["alice@example.com", "alice@work.example.com"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("contributor", "alias", "field"),
+    [
+        (GitHubAuthor(login="alice", emails=["a@example.com"]), "byEmail", "emails[]"),
+        (GitHubAuthor(login="alice", emails=[], author_id="U_alice"), "byId", "id"),
+    ],
+)
+def test_is_first_timer_queries_only_available_filters(
+    monkeypatch: pytest.MonkeyPatch,
+    contributor: GitHubAuthor,
+    alias: str,
+    field: str,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        return json.dumps({"data": {"repository": {"object": {alias: {"nodes": []}}}}})
+
+    monkeypatch.setattr(commands_module, "run", fake_run)
+
+    assert is_first_timer(contributor, "26.7.0", "conda/conda", {})
+    fields = graphql_fields(commands[0])
+    query = fields.pop("query")[0]
+    assert query.count("history(") == 1
+    assert f"{alias}:" in query
+    assert fields.keys() & {"id", "emails[]"} == {field}
+
+
+def test_is_first_timer_without_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_run(
+        monkeypatch,
+        lambda *args, **kwargs: pytest.fail("No commands should run."),
+    )
+
+    assert is_first_timer(
+        GitHubAuthor(login="alice", emails=[]), "26.7.0", "conda/conda", {}
+    )
+
+
+def test_is_first_timer_requires_release_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        commands_module,
+        "run",
+        lambda *args, **kwargs: json.dumps({"data": {"repository": {"object": None}}}),
+    )
+
+    with pytest.raises(ActionError, match="Release tag 26.7.0 not found"):
         is_first_timer(
-            "alice",
+            GitHubAuthor(login="alice", emails=["alice@example.com"]),
             "26.7.0",
             "conda/conda",
             {},
         )
-        is expected
-    )
-    assert len(commands) == 1
-    assert commands[0] == [
-        "gh",
-        "api",
-        "repos/conda/conda/commits",
-        "--method",
-        "GET",
-        "-f",
-        "author=alice",
-        "-F",
-        "per_page=1",
-        "-f",
-        "sha=26.7.0",
-    ]
 
 
 def test_collect_contributors_marks_first_timer_after_maintenance_merge(
@@ -1182,20 +1274,17 @@ def test_collect_contributors_marks_first_timer_after_maintenance_merge(
     def fake_api(command: list[str], **kwargs: object) -> str:
         assert command[:2] == ["gh", "api"]
         endpoint = command[2]
-        if endpoint.endswith("/commits"):
-            fields = dict(
-                argument.split("=", 1) for argument in command if "=" in argument
-            )
-            until = [f"--until={fields['until']}"] if "until" in fields else []
+        if is_graphql(command):
+            fields = graphql_fields(command)
             commits = git(
                 "log",
                 "--format=%H",
                 "--max-count=1",
-                f"--author={fields['author']}@example.com",
-                *until,
-                fields["sha"],
+                "--fixed-strings",
+                *(f"--author=<{email}>" for email in fields["emails[]"]),
+                fields["expression"][0],
             )
-            return json.dumps([{"sha": sha} for sha in commits.splitlines()])
+            return history_response(by_email=bool(commits))
         if endpoint.endswith("/issues"):
             return json.dumps(
                 [
@@ -1224,6 +1313,62 @@ def test_collect_contributors_marks_first_timer_after_maintenance_merge(
     )
 
 
+def test_resolve_logins_groups_emails_by_login(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        return json.dumps({"author": {"login": "Alice"}})
+
+    monkeypatch.setattr(commands_module, "run", fake_run)
+    commits = [
+        ContributorCommit(hash="sha1", email="alice@example.com"),
+        ContributorCommit(hash="sha2", email="alice@work.example.com"),
+    ]
+
+    assert resolve_logins(commits, "conda/conda", {}) == {
+        "alice": GitHubAuthor(
+            login="Alice",
+            emails=["alice@example.com", "alice@work.example.com"],
+        ),
+    }
+
+
+def test_collect_contributors_does_not_mark_bot_with_history_as_first_timer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bot_email = "49699333+dependabot[bot]@users.noreply.github.com"
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> str:
+        commands.append(command)
+        if command[:3] == ["git", "tag", "--merged"]:
+            return "26.6.1\n"
+        if command[:2] == ["git", "log"] and "-z" in command:
+            return f"sha1\0{bot_email}\0"
+        if is_graphql(command):
+            fields = graphql_fields(command)
+            assert fields["expression"] == ["refs/tags/26.6.1"]
+            assert fields["id"] == ["BOT_dependabot"]
+            assert fields["emails[]"] == [bot_email]
+            return history_response(by_email=True)
+        if command[:2] == ["gh", "api"] and command[2].endswith("/issues"):
+            pytest.fail("First PR lookup should not run for returning bots.")
+        if command[:2] == ["gh", "api"]:
+            return json.dumps(
+                {"author": {"login": "dependabot[bot]", "node_id": "BOT_dependabot"}}
+            )
+        return ""
+
+    patch_run(monkeypatch, fake_run)
+
+    assert collect_contributors("conda/conda", {}) == "* @dependabot[bot]"
+    assert sum(is_graphql(command) for command in commands) == 1
+    assert not any(
+        any(argument.startswith("author=") for argument in command)
+        for command in commands
+    )
+
+
 def test_is_first_timer_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_run(*args: object, **kwargs: object) -> str:
         raise ActionError("lookup failed")
@@ -1232,7 +1377,7 @@ def test_is_first_timer_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> N
 
     with pytest.raises(ActionError, match="lookup failed"):
         is_first_timer(
-            "alice",
+            GitHubAuthor(login="alice", emails=["alice@example.com"]),
             "26.7.0",
             "conda/conda",
             {},
@@ -1541,12 +1686,12 @@ def test_prepare_release_fails_before_writing_on_contributor_lookup_error(
             if failed_lookup == "login":
                 raise ActionError("HTTP 502")
             return json.dumps({"author": {"login": "bob"}})
-        if command[2].endswith("/commits"):
-            if "author=bob" in command:
+        if is_graphql(command):
+            if "emails[]=bob@example.com" in command:
                 if failed_lookup == "history":
                     raise ActionError("HTTP 502")
-                return "[]"
-            return '[{"sha": "old"}]'
+                return history_response()
+            return history_response(by_email=True)
         raise ActionError("HTTP 502")
 
     monkeypatch.setattr(commands_module, "run", fake_api)
@@ -1627,10 +1772,7 @@ def test_collect_contributors_without_previous_tag(
         "* @Bob made their first contribution in "
         "<https://github.com/conda/conda/pull/Bob>"
     )
-    assert not any(
-        any(argument.startswith("author=") for argument in command)
-        for command in commands
-    )
+    assert not any(is_graphql(command) for command in commands)
 
 
 def test_collect_contributors_scopes_previous_tag_to_branch(
@@ -1644,8 +1786,8 @@ def test_collect_contributors_scopes_previous_tag_to_branch(
             return "26.7.0\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0"
-        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
-            return '[{"sha": "old"}]'
+        if is_graphql(command):
+            return history_response(by_email=True)
         if command[:2] == ["gh", "api"]:
             return json.dumps({"author": {"login": "alice"}})
         return ""
@@ -1683,8 +1825,8 @@ def test_collect_contributors_falls_back_to_previous_series_tag(
             return "" if "--list" in command else "26.6.1\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0"
-        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
-            return '[{"sha": "old"}]'
+        if is_graphql(command):
+            return history_response(by_email=True)
         if command[:2] == ["gh", "api"]:
             return json.dumps({"author": {"login": "alice"}})
         return ""
@@ -1706,7 +1848,8 @@ def test_collect_contributors_falls_back_to_previous_series_tag(
     )
     assert log_command[-1] == "26.6.1..HEAD"
     assert any(
-        any(argument.startswith("author=") for argument in command)
+        is_graphql(command)
+        and graphql_fields(command)["expression"] == ["refs/tags/26.6.1"]
         for command in commands
     )
 
@@ -1719,8 +1862,8 @@ def test_collect_contributors_dedupes_logins(
             return "26.6.1\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0sha2\0alice@work.example.com\0"
-        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
-            return '[{"sha": "old"}]'
+        if is_graphql(command):
+            return history_response(by_email=True)
         if command[:2] == ["gh", "api"]:
             return json.dumps({"author": {"login": "alice"}})
         return ""
@@ -1739,8 +1882,8 @@ def test_collect_contributors_skips_unresolvable_authors(
             return "26.6.1\n"
         if command[:2] == ["git", "log"] and "-z" in command:
             return "sha1\0alice@example.com\0sha2\0ghost@example.com\0"
-        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
-            return '[{"sha": "old"}]'
+        if is_graphql(command):
+            return history_response(by_email=True)
         if command[:2] == ["gh", "api"]:
             if command[-1].endswith("/sha2"):
                 return json.dumps({"author": None})
@@ -1803,8 +1946,9 @@ def test_prepare_release_adds_contributors_section(
             return " M CHANGELOG.md\n D news/123-fix\n"
         if command[:2] == ["git", "ls-remote"]:
             return f"{'a' * 40}\trefs/heads/26.7.x\n"
-        if command[:2] == ["gh", "api"] and command[2].endswith("/commits"):
-            return "[]" if "author=alice" in command else '[{"sha": "old"}]'
+        if is_graphql(command):
+            is_new = "emails[]=alice@example.com" in command
+            return history_response(by_email=not is_new)
         if command[:2] == ["gh", "api"] and command[2].endswith("/issues"):
             return json.dumps(
                 [
