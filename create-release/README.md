@@ -44,7 +44,7 @@ jobs:
         uses: conda/actions/create-release@main
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
-          artifacts: dist/*
+          artifacts-directory: dist
 ```
 
 The job must check out `github.event.pull_request.merge_commit_sha`. The notes
@@ -68,12 +68,12 @@ The action re-checks these conditions before publishing:
 
 ## Action Inputs
 
-| Name             | Description                                                        | Default               |
-| ---------------- | ------------------------------------------------------------------ | --------------------- |
-| `changelog-path` | Changelog file to read the release notes from.                     | `CHANGELOG.md`        |
-| `branch-prefix`  | Prefix of the release PR branch that names the version to release. | `release-notes-`      |
-| `artifacts`      | Newline-separated glob patterns of files to attach to the release. |                       |
-| `token`          | Token with `contents: write`.                                      | `${{ github.token }}` |
+| Name                  | Description                                                        | Default               |
+| --------------------- | ------------------------------------------------------------------ | --------------------- |
+| `changelog-path`      | Changelog file to read the release notes from.                     | `CHANGELOG.md`        |
+| `branch-prefix`       | Prefix of the release PR branch that names the version to release. | `release-notes-`      |
+| `artifacts-directory` | Directory holding the files to attach to the release.              |                       |
+| `token`               | Token with `contents: write`.                                      | `${{ github.token }}` |
 
 ## Action Outputs
 

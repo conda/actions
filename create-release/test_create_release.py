@@ -66,7 +66,7 @@ def release_args(tmp_path: Path, **overrides: object) -> Namespace:
     args = Namespace(
         changelog_path=str(changelog),
         branch_prefix="release-notes-",
-        artifacts="",
+        artifacts_directory="",
         repository="conda/example",
         token="test-token",
     )
@@ -218,7 +218,7 @@ def test_create_release_creates_draft_with_artifacts_and_publishes(
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     calls, notes = mock_gh(monkeypatch)
 
-    create_release(release_args(tmp_path, artifacts="dist/*"))
+    create_release(release_args(tmp_path, artifacts_directory="dist"))
 
     assert calls[0][:5] == ["gh", "release", "create", "1.2.3", "--draft"]
     assert calls[0][-2:] == [
@@ -281,11 +281,13 @@ def test_create_release_updates_existing_draft(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     write_merged_pr_event(tmp_path, monkeypatch)
-    artifact = tmp_path / "example-1.2.3.tar.gz"
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    artifact = dist / "example-1.2.3.tar.gz"
     artifact.write_text("sdist", encoding="utf-8")
     calls, notes = mock_gh(monkeypatch, state="draft")
 
-    create_release(release_args(tmp_path, artifacts="*.tar.gz"))
+    create_release(release_args(tmp_path, artifacts_directory="dist"))
 
     assert calls[0][:3] == ["gh", "release", "edit"]
     assert "--draft" not in calls[0]
@@ -298,7 +300,7 @@ def test_create_release_updates_existing_draft(
         "--repo",
         "conda/example",
         "--clobber",
-        "example-1.2.3.tar.gz",
+        "dist/example-1.2.3.tar.gz",
     ]
     assert calls[2] == [
         "gh",
@@ -377,19 +379,17 @@ def test_create_release_rejects_empty_release_notes(
 def test_resolve_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     dist = tmp_path / "dist"
-    nested = dist / "nested"
-    nested.mkdir(parents=True)
+    (dist / "nested").mkdir(parents=True)
     first = Path("dist/a.whl")
-    second = Path("dist/nested/b.tar.gz")
+    second = Path("dist/b.tar.gz")
     (tmp_path / first).write_text("a", encoding="utf-8")
     (tmp_path / second).write_text("b", encoding="utf-8")
-    (dist / "empty").mkdir()
 
     assert resolve_artifacts("") == []
-    assert resolve_artifacts("\n  \n") == []
-    assert resolve_artifacts("dist/*") == [first]
-    assert resolve_artifacts("dist/*\ndist/**/*.tar.gz") == [first, second]
-    assert resolve_artifacts("missing/*") == []
+    assert resolve_artifacts("dist") == [first, second]
+    for missing in ["missing", str(first)]:
+        with pytest.raises(ActionError, match="Artifacts directory does not exist"):
+            resolve_artifacts(missing)
 
 
 def test_main_publishes_release(

@@ -11,15 +11,14 @@ inputs:
   branch-prefix:
     description: Prefix of the release PR branch that names the version to release.
     default: release-notes-
-  artifacts:
+  artifacts-directory:
     description: >-
-      Newline-separated glob patterns of files to attach to the release. Leave
-      empty when the release has no files.
+      Directory holding the files to attach to the release. Leave empty when
+      the release has no files.
     default: ''
   token:
     description: >-
-      Token with contents: write. Use a personal access token, not
-      github.token, so the release event starts other workflows.
+      Token with `contents: write` permissions to upload artifacts to a release.
     default: ${{ github.token }}
 
 outputs:
@@ -43,12 +42,12 @@ runs:
         python "$GITHUB_ACTION_PATH/create_release.py"
         --changelog-path "$INPUT_CHANGELOG_PATH"
         --branch-prefix "$INPUT_BRANCH_PREFIX"
-        --artifacts "$INPUT_ARTIFACTS"
+        --artifacts-directory "$INPUT_ARTIFACTS_DIRECTORY"
         --repository "$GITHUB_REPOSITORY"
         --token "$INPUT_TOKEN"
       env:
         PYTHONPATH: ${{ github.action_path }}/..
         INPUT_CHANGELOG_PATH: ${{ inputs.changelog-path }}
         INPUT_BRANCH_PREFIX: ${{ inputs.branch-prefix }}
-        INPUT_ARTIFACTS: ${{ inputs.artifacts }}
+        INPUT_ARTIFACTS_DIRECTORY: ${{ inputs.artifacts-directory }}
         INPUT_TOKEN: ${{ inputs.token }}

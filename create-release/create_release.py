@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import glob
 import json
 import os
 import re
@@ -21,9 +20,9 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
     parser.add_argument("--changelog-path", default="CHANGELOG.md")
     parser.add_argument("--branch-prefix", default="release-notes-")
     parser.add_argument(
-        "--artifacts",
+        "--artifacts-directory",
         default="",
-        help="Newline-separated glob patterns of files to attach to the release.",
+        help="Directory holding the files to attach to the release.",
     )
     parser.add_argument(
         "--repository",
@@ -52,7 +51,7 @@ def create_release(args: Namespace) -> None:
     if not notes:
         raise ActionError(f"Release notes for {version} are empty.")
 
-    artifacts = resolve_artifacts(args.artifacts)
+    artifacts = resolve_artifacts(args.artifacts_directory)
     env = os.environ | {"GH_TOKEN": args.token}
     state = release_state(args.repository, version, env)
     if state == "published":
@@ -142,14 +141,13 @@ def load_event_payload() -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def resolve_artifacts(artifacts: str) -> list[Path]:
-    patterns = [line.strip() for line in artifacts.splitlines() if line.strip()]
-    matched = {
-        Path(match)
-        for pattern in patterns
-        for match in glob.glob(pattern, recursive=True)
-    }
-    return sorted(path for path in matched if path.is_file())
+def resolve_artifacts(directory: str) -> list[Path]:
+    if not directory:
+        return []
+    path = Path(directory)
+    if not path.is_dir():
+        raise ActionError(f"Artifacts directory does not exist: {directory}")
+    return sorted(child for child in path.iterdir() if child.is_file())
 
 
 def release_state(repository: str, tag: str, env: dict[str, str]) -> str | None:
