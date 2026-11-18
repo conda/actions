@@ -18,7 +18,7 @@ from jinja2.environment import Environment
 from jinja2.loaders import FileSystemLoader
 from jinja2.runtime import Context, Undefined
 from jinja2.utils import missing
-from jsonschema import validate
+from jsonschema import ValidationError, validate
 from rich import box
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
@@ -323,18 +323,30 @@ def update_config(config_path: Path, obsolete: list[tuple[str, int]]) -> int:
         return 0
 
     # regular loads do not preserve comments, so use a round-trip load
-    config = yamlrocks.loads(config_path.read_bytes(), option=yamlrocks.OPT_ROUND_TRIP)
-
-    # remove in reverse order so the indices of earlier entries remain valid
-    for upstream_name, index in sorted(obsolete, reverse=True):
-        del config[upstream_name][index]
-        if not config[upstream_name]:
-            del config[upstream_name]
+    try:
+        config = yamlrocks.loads(
+            config_path.read_bytes(), option=yamlrocks.OPT_ROUND_TRIP
+        )
+    except OSError as err:
+        # OSError: configuration is not readable
+        perror(f"* :cross_mark: Failed to read `{config_path}`: {err}")
+        return 1
+    except yamlrocks.YAMLRocksError as err:
+        # YAMLRocksError: configuration is not valid YAML
+        perror(f"* :cross_mark: Failed to parse `{config_path}`: {err}")
+        return 1
 
     try:
+        # remove in reverse order so the indices of earlier entries remain valid
+        for upstream_name, index in sorted(obsolete, reverse=True):
+            del config[upstream_name][index]
+            if not config[upstream_name]:
+                del config[upstream_name]
+
         config_path.write_bytes(config.to_yaml())
-    except OSError as err:
+    except (OSError, ValueError) as err:
         # OSError: configuration is not writable
+        # ValueError: rewrite would corrupt the document, e.g. removing an anchor
         perror(f"* :cross_mark: Failed to update `{config_path}`: {err}")
         return 1
 
@@ -612,7 +624,12 @@ def main():
         sys.exit(0)
     errors = 0
 
-    config = read_config(args.config)
+    try:
+        config = read_config(args.config)
+    except (ValidationError, yamlrocks.YAMLRocksError) as err:
+        perror(f":cross_mark: Failed to read `{args.config}`: {err}")
+        dump_summary(1, removals)
+        sys.exit(1)
 
     # initialize stub loader
     loader = FileSystemLoader(args.stubs)
