@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     AuditCurrent = tuple[str, str, str]
     AuditCounter = dict[str, int]
     AuditRegister = dict[str, Any]
+    Removal = tuple[Path, str | None]
     StubsCacheKey = tuple[weakref.ref[BaseLoader], str]
 
 
@@ -510,10 +511,11 @@ def iterate_config(
     gh: Github,
     env: Environment,
     current_repo: Repository,
-) -> int:
+) -> tuple[int, list[Removal]]:
     # iterate over configuration and template files
     errors = 0
     obsolete: list[tuple[str, int]] = []
+    removals: list[Removal] = []
     for upstream_name, files in config.items():
         try:
             if upstream_name.startswith("."):
@@ -540,27 +542,41 @@ def iterate_config(
             if remove:
                 file_errors = remove_file(dst)
                 file_obsolete = not file_errors
+                src = None  # explicit removal: no missing source to report
             else:
                 file_errors, file_obsolete = template_file(
                     env, current_repo, upstream_repo, src, dst, context
                 )
             if file_obsolete:
                 obsolete.append((upstream_name, index))
+                removals.append((dst, src))
             errors += file_errors
 
     errors += update_config(config_path, obsolete)
-    return errors
+    return errors, removals
 
 
-def get_summary_text(html: str) -> str:
-    return f"### Templating Audit\n{html}"
+def get_removals_text(removals: Sequence[Removal]) -> str:
+    if not removals:
+        return ""
+
+    lines = ["**Removed files**", ""]
+    for dst, src in removals:
+        reason = f" (`{src}` not found)" if src else ""
+        lines.append(f"- `{dst}`{reason}")
+    return "\n".join(lines) + "\n\n"
 
 
-def get_output_text(errors: int, html: str) -> str:
+def get_summary_text(html: str, removals: Sequence[Removal]) -> str:
+    return f"### Templating Audit\n{get_removals_text(removals)}{html}"
+
+
+def get_output_text(errors: int, html: str, removals: Sequence[Removal]) -> str:
     return (
         # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
         # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
         f"summary<<GITHUB_OUTPUT_summary\n"
+        f"{get_removals_text(removals)}"
         f"<details{' open' if errors else ''}>\n"
         f"<summary>Templating Audit</summary>\n"
         f"\n"
@@ -571,7 +587,9 @@ def get_output_text(errors: int, html: str) -> str:
     )
 
 
-def dump_summary(errors: int, *, console: Console = CONSOLE) -> None:
+def dump_summary(
+    errors: int, removals: Sequence[Removal], *, console: Console = CONSOLE
+) -> None:
     # dump summary to GitHub Actions summary
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
     output_path = os.getenv("GITHUB_OUTPUT")
@@ -579,17 +597,18 @@ def dump_summary(errors: int, *, console: Console = CONSOLE) -> None:
         html = console.export_text()
     if summary_path:
         with Path(summary_path).open("a") as fh:
-            fh.write(get_summary_text(html))
+            fh.write(get_summary_text(html, removals))
     if output_path:
         with Path(output_path).open("a") as fh:
-            fh.write(get_output_text(errors, html))
+            fh.write(get_output_text(errors, html, removals))
 
 
 def main():
     args = parse_args()
+    removals: list[Removal] = []
     if not args.config:
         print(":warning-emoji: No configuration file found, nothing to update")
-        dump_summary()
+        dump_summary(0, removals)
         sys.exit(0)
     errors = 0
 
@@ -626,7 +645,7 @@ def main():
         errors += 1
 
     if not errors:
-        errors += iterate_config(args.config, config, gh, env, current_repo)
+        errors, removals = iterate_config(args.config, config, gh, env, current_repo)
 
     # provide audit of stub usage
     stubs = defaultdict(int)
@@ -644,7 +663,7 @@ def main():
     if errors:
         perror(f"Got {errors} error(s)")
 
-    dump_summary(errors)
+    dump_summary(errors, removals)
     sys.exit(errors)
 
 

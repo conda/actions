@@ -505,16 +505,19 @@ def test_iterate_config(
 
     environment = AuditEnvironment(loader=FileSystemLoader(tmp_path))
     current = LocalRepository(tmp_path)
-    assert (
-        iterate_config(
-            config_path, read_config(config_path), None, environment, current
-        )
-        == 0
+    errors, removals = iterate_config(
+        config_path, read_config(config_path), None, environment, current
     )
+    assert errors == 0
 
     # destination handling
     assert (tmp_path / "keep.txt").read_text() == "keep"
     assert not (tmp_path / "gone").exists()
+    assert removals == [
+        (Path("gone"), "missing"),
+        (Path("absent.txt"), None),
+        (Path("absent2.txt"), None),
+    ]
 
     # obsolete entries are gone, everything else (including comments) is kept
     assert read_config(config_path) == {
@@ -549,12 +552,11 @@ def test_iterate_config_fetch_error(
     monkeypatch.setattr(LocalRepository, "get_contents", fail)
     environment = AuditEnvironment(loader=FileSystemLoader(tmp_path))
     current = LocalRepository(tmp_path)
-    assert (
-        iterate_config(
-            config_path, read_config(config_path), None, environment, current
-        )
-        == 1
+    errors, removals = iterate_config(
+        config_path, read_config(config_path), None, environment, current
     )
+    assert errors == 1
+    assert removals == []
     assert (tmp_path / "kept").read_text() == "kept"
     assert config_path.read_text() == ".upstream:\n  - src: keep\n    dst: kept\n"
     _, stderr = capsys.readouterr()
@@ -562,17 +564,28 @@ def test_iterate_config_fetch_error(
 
 
 def test_get_summary_text() -> None:
-    summary = get_summary_text(text := uuid4().hex)
+    summary = get_summary_text(text := uuid4().hex, [])
     assert text in summary
+    assert "Removed files" not in summary
+
+    summary = get_summary_text(text, [(Path("a.txt"), "missing.txt")])
+    assert "- `a.txt` (`missing.txt` not found)" in summary
+    assert summary.index("**Removed files**") < summary.index(text)
 
 
 def test_get_output_text() -> None:
-    output = get_output_text(0, text := uuid4().hex)
+    output = get_output_text(0, text := uuid4().hex, [])
     assert "<details>" in output
     assert text in output
-    output = get_output_text(1, text := uuid4().hex)
+    assert "Removed files" not in output
+    output = get_output_text(1, text := uuid4().hex, [])
     assert "<details open>" in output
     assert text in output
+
+    # removals are rendered before, and therefore outside, the details block
+    output = get_output_text(0, text, [(Path("a.txt"), None)])
+    assert "- `a.txt`\n" in output
+    assert output.index("- `a.txt`") < output.index("<details>")
 
 
 def test_dump_summary(
@@ -587,23 +600,26 @@ def test_dump_summary(
 
     print(text := uuid4().hex, console=console)
     perror(error := uuid4().hex, console=console)
-    dump_summary(0, console=console)
+    dump_summary(0, [], console=console)
     stdout, stderr = capsys.readouterr()
     assert text in stdout
     assert error in stderr
-    first = get_summary_text(f"{text}\n{error}\n")
+    first = get_summary_text(f"{text}\n{error}\n", [])
     assert step_summary.read_text() == old_summary + first
-    assert output.read_text() == old + get_output_text(0, f"{text}\n{error}\n")
+    assert output.read_text() == old + get_output_text(0, f"{text}\n{error}\n", [])
 
     output.write_text(old)
 
     print(text := uuid4().hex, console=console)
     perror(error := uuid4().hex, console=console)
-    dump_summary(1, console=console)
+    removals = [(Path("a.txt"), "missing.txt")]
+    dump_summary(1, removals, console=console)
     stdout, stderr = capsys.readouterr()
     assert text in stdout
     assert error in stderr
     assert step_summary.read_text() == old_summary + first + get_summary_text(
-        f"{text}\n{error}\n"
+        f"{text}\n{error}\n", removals
     )
-    assert output.read_text() == old + get_output_text(1, f"{text}\n{error}\n")
+    assert output.read_text() == old + get_output_text(
+        1, f"{text}\n{error}\n", removals
+    )
