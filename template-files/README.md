@@ -56,3 +56,10 @@ user/repo:
   - dst: path/to/remove
     remove: true
 ```
+
+## Missing Sources
+
+A `src` that no longer exists upstream is treated as if it had `remove: true`: the
+destination is deleted and the entry is dropped from this config in the same run.
+Entries whose destination is already gone are dropped too. Other fetch failures are
+still reported as errors, and the config keeps its comments either way.

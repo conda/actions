@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-import yaml
+import yamlrocks
+from github import GithubException
 from jinja2.environment import Environment
 from jinja2.exceptions import TemplateNotFound
 from jinja2.loaders import FileSystemLoader
@@ -30,6 +31,7 @@ from template_files import (
     dump_summary,
     get_output_text,
     get_summary_text,
+    iterate_config,
     parse_args,
     parse_config,
     perror,
@@ -340,7 +342,7 @@ def test_read_config(path: Path, raises: bool) -> None:
 def test_parse_config(path: Path | None, config: dict | None, raises: bool) -> None:
     # read config from path
     if path:
-        config = yaml.load(path.read_text(), Loader=yaml.SafeLoader)
+        config = yamlrocks.loads(path.read_bytes())
     # either path or config must be provided
     assert config is not None
 
@@ -390,64 +392,170 @@ def test_template_file(tmp_path: Path, capsys: CaptureFixture) -> None:
     upstream = LocalRepository(UPSTREAM)
 
     # template without errors
-    assert (
-        template_file(
-            environment,
-            current,
-            upstream,
-            "success",
-            tmp_path / "out",
-            {"variable": "value"},
-        )
-        == 0
-    )
+    assert template_file(
+        environment,
+        current,
+        upstream,
+        "success",
+        tmp_path / "out",
+        {"variable": "value"},
+    ) == (0, False)
     stdout, stderr = capsys.readouterr()
     assert stdout
     assert not stderr
 
     # template with missing context
-    assert (
-        template_file(environment, current, upstream, "success", tmp_path / "out", {})
-        == 1
-    )
+    assert template_file(
+        environment, current, upstream, "success", tmp_path / "out", {}
+    ) == (1, False)
     stdout, stderr = capsys.readouterr()
     assert stdout
     assert stderr
 
-    # template missing file
-    assert (
-        template_file(environment, current, upstream, "missing", tmp_path / "out", {})
-        == 1
-    )
+    # missing source: remove dst and mark the config entry obsolete
+    assert template_file(
+        environment, current, upstream, "missing", tmp_path / "out", {}
+    ) == (0, True)
+    assert not (tmp_path / "out").exists()
     stdout, stderr = capsys.readouterr()
-    assert not stdout
-    assert stderr
+    assert "not found" in stdout
+    assert "removed" in stdout
+    assert not stderr
+
+    # missing source and missing destination
+    assert template_file(
+        environment, current, upstream, "missing", tmp_path / "out", {}
+    ) == (0, True)
+    stdout, stderr = capsys.readouterr()
+    assert "already removed" in stdout
+    assert not stderr
 
     # template python error
-    assert (
-        template_file(
-            environment, current, upstream, "python_error", tmp_path / "out", {}
-        )
-        == 1
-    )
+    assert template_file(
+        environment, current, upstream, "python_error", tmp_path / "out", {}
+    ) == (1, False)
     stdout, stderr = capsys.readouterr()
     assert not stdout
     assert stderr
 
     # template error
-    assert (
-        template_file(
-            environment, current, upstream, "template_error", tmp_path / "out", {}
-        )
-        == 1
-    )
+    assert template_file(
+        environment, current, upstream, "template_error", tmp_path / "out", {}
+    ) == (1, False)
     stdout, stderr = capsys.readouterr()
     assert not stdout
     assert stderr
 
 
-def test_iterate_config() -> None:
-    pass
+def test_template_file_fetch_error(
+    tmp_path: Path, capsys: CaptureFixture, monkeypatch: MonkeyPatch
+) -> None:
+    environment = AuditEnvironment(loader=FileSystemLoader(UPSTREAM))
+    current = LocalRepository(tmp_path)
+    upstream = LocalRepository(UPSTREAM)
+    dst = tmp_path / "out"
+    dst.write_text("existing")
+
+    def fail(src: str) -> None:
+        raise GithubException(500, "boom")
+
+    # failed fetches other than a missing source must not delete dst
+    monkeypatch.setattr(upstream, "get_contents", fail)
+    assert template_file(environment, current, upstream, "success", dst, {}) == (
+        1,
+        False,
+    )
+    assert dst.read_text() == "existing"
+    stdout, stderr = capsys.readouterr()
+    assert not stdout
+    assert "Failed to fetch" in stderr
+
+
+def test_iterate_config(
+    tmp_path: Path, capsys: CaptureFixture, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    (upstream := tmp_path / ".upstream").mkdir()
+    (upstream / "keep").write_text("keep")
+    (tmp_path / ".other").mkdir()
+    (tmp_path / "gone").write_text("gone")
+
+    (config_path := tmp_path / "config.yml").write_text(
+        "# leading comment\n"
+        ".upstream:\n"
+        "  # keep this entry\n"
+        "  - src: keep\n"
+        "    dst: keep.txt\n"
+        "  # source was retired upstream\n"
+        "  - src: missing\n"
+        "    dst: gone\n"
+        "  # destination is already gone\n"
+        "  - dst: absent.txt\n"
+        "    remove: true\n"
+        "\n"
+        "# empty after cleanup\n"
+        ".other:\n"
+        "  - dst: absent2.txt\n"
+        "    remove: true\n"
+    )
+
+    environment = AuditEnvironment(loader=FileSystemLoader(tmp_path))
+    current = LocalRepository(tmp_path)
+    assert (
+        iterate_config(
+            config_path, read_config(config_path), None, environment, current
+        )
+        == 0
+    )
+
+    # destination handling
+    assert (tmp_path / "keep.txt").read_text() == "keep"
+    assert not (tmp_path / "gone").exists()
+
+    # obsolete entries are gone, everything else (including comments) is kept
+    assert read_config(config_path) == {
+        ".upstream": [{"src": "keep", "dst": "keep.txt"}]
+    }
+    config_text = config_path.read_text()
+    assert config_text.startswith("# leading comment\n")
+    assert "keep this entry" in config_text
+    assert "retired upstream" not in config_text
+
+    stdout, stderr = capsys.readouterr()
+    assert "not found" in stdout
+    assert "already removed" in stdout
+    assert "Removed obsolete entries" in stdout
+    assert not stderr
+
+
+def test_iterate_config_fetch_error(
+    tmp_path: Path, capsys: CaptureFixture, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    (tmp_path / ".upstream").mkdir()
+    (tmp_path / "kept").write_text("kept")
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(".upstream:\n  - src: keep\n    dst: kept\n")
+
+    def fail(self: LocalRepository, src: str) -> None:
+        raise GithubException(500, "boom")
+
+    # other fetch failures are errors and leave dst and the config untouched
+    monkeypatch.setattr(LocalRepository, "get_contents", fail)
+    environment = AuditEnvironment(loader=FileSystemLoader(tmp_path))
+    current = LocalRepository(tmp_path)
+    assert (
+        iterate_config(
+            config_path, read_config(config_path), None, environment, current
+        )
+        == 1
+    )
+    assert (tmp_path / "kept").read_text() == "kept"
+    assert config_path.read_text() == ".upstream:\n  - src: keep\n    dst: kept\n"
+    _, stderr = capsys.readouterr()
+    assert "Failed to fetch" in stderr
 
 
 def test_get_summary_text() -> None:

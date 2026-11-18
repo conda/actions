@@ -12,8 +12,8 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-from github import Auth, Github, UnknownObjectException
+import yamlrocks
+from github import Auth, Github, GithubException, UnknownObjectException
 from jinja2.environment import Environment
 from jinja2.loaders import FileSystemLoader
 from jinja2.runtime import Context, Undefined
@@ -276,10 +276,7 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
 
 def read_config(config: Path) -> dict:
     # read and validate configuration file
-    config = yaml.load(
-        config.read_text(),
-        Loader=yaml.SafeLoader,
-    )
+    config = yamlrocks.loads(config.read_bytes())
     validate(
         config,
         schema={
@@ -317,6 +314,31 @@ def read_config(config: Path) -> dict:
         },
     )
     return config
+
+
+def update_config(config_path: Path, obsolete: list[tuple[str, int]]) -> int:
+    """Drop obsolete entries from the configuration, preserving comments."""
+    if not obsolete:
+        return 0
+
+    # regular loads do not preserve comments, so use a round-trip load
+    config = yamlrocks.loads(config_path.read_bytes(), option=yamlrocks.OPT_ROUND_TRIP)
+
+    # remove in reverse order so the indices of earlier entries remain valid
+    for upstream_name, index in sorted(obsolete, reverse=True):
+        del config[upstream_name][index]
+        if not config[upstream_name]:
+            del config[upstream_name]
+
+    try:
+        config_path.write_bytes(config.to_yaml())
+    except OSError as err:
+        # OSError: configuration is not writable
+        perror(f"* :cross_mark: Failed to update `{config_path}`: {err}")
+        return 1
+
+    print(f"* :memo: Removed obsolete entries from `{config_path}`")
+    return 0
 
 
 def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, Any]]:
@@ -376,13 +398,24 @@ def template_file(
     src: str | None,
     dst: Path,
     context: dict[str, Any],
-) -> int:
+) -> tuple[int, bool]:
     # fetch src file
     try:
         content = upstream_repo.get_contents(src).decoded_content.decode()
-    except UnknownObjectException as err:
-        perror(f"* :cross_mark: Failed to fetch `{src}`: {err}", indent=INDENT)
-        return 1
+    except GithubException as err:
+        if err.status != 404:
+            # GithubException: anything but a missing file, e.g. an API failure,
+            # must not delete `dst`
+            perror(f"* :cross_mark: Failed to fetch `{src}`: {err}", indent=INDENT)
+            return 1, False
+
+        # missing src: treat as if it had `remove: true`
+        print(
+            f"* :wastebasket: `{src}` not found in `{upstream_repo.full_name}`",
+            indent=INDENT,
+        )
+        errors = remove_file(dst)
+        return errors, not errors
 
     # standard context with source and destination details
     standard_context = {
@@ -405,7 +438,7 @@ def template_file(
         except Exception as err:
             # Exception: catch all errors whether they are Jinja2 or Python errors
             perror(f"* :cross_mark: Failed to template `{src}`: {err}", indent=INDENT)
-            return 1
+            return 1, False
 
         # display stubs & context for this file
         table = None
@@ -442,7 +475,7 @@ def template_file(
         if table:
             print(table, indent=INDENT * 2)
 
-        return int(error)
+        return int(error), False
 
 
 class LocalContents:
@@ -483,6 +516,7 @@ def iterate_config(
 ) -> int:
     # iterate over configuration and template files
     errors = 0
+    obsolete: list[tuple[str, int]] = []
     for upstream_name, files in config.items():
         try:
             if upstream_name.startswith("."):
@@ -498,7 +532,7 @@ def iterate_config(
         else:
             print(f"* :arrows_counterclockwise: Fetching files from `{upstream_name}`")
 
-        for file in files:
+        for index, file in enumerate(files):
             try:
                 # parse/standardize configuration
                 src, dst, remove, context = parse_config(file)
@@ -507,12 +541,17 @@ def iterate_config(
                 continue
 
             if remove:
-                errors += remove_file(dst)
+                file_errors = remove_file(dst)
+                file_obsolete = not file_errors
             else:
-                errors += template_file(
+                file_errors, file_obsolete = template_file(
                     env, current_repo, upstream_repo, src, dst, context
                 )
+            if file_obsolete:
+                obsolete.append((upstream_name, index))
+            errors += file_errors
 
+    errors += update_config(config_path, obsolete)
     return errors
 
 
