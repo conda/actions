@@ -418,17 +418,20 @@ def test_template_file(tmp_path: Path, capsys: CaptureFixture) -> None:
     ) == (0, True)
     assert not (tmp_path / "out").exists()
     stdout, stderr = capsys.readouterr()
-    assert "not found" in stdout
-    assert "removed" in stdout
     assert not stderr
+    assert "removed" in next(
+        line for line in stdout.splitlines() if "not found" in line
+    )
 
     # missing source and missing destination
     assert template_file(
         environment, current, upstream, "missing", tmp_path / "out", {}
     ) == (0, True)
     stdout, stderr = capsys.readouterr()
-    assert "already removed" in stdout
     assert not stderr
+    assert "already removed" in next(
+        line for line in stdout.splitlines() if "not found" in line
+    )
 
     # template python error
     assert template_file(

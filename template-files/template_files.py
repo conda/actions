@@ -375,19 +375,20 @@ def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, An
     return src, dst, remove, context
 
 
-def remove_file(dst: Path) -> int:
+def remove_file(dst: Path, missing: str | None = None) -> int:
+    reason = f" (`{missing}` not found)" if missing else ""
     try:
         dst.unlink()
     except FileNotFoundError:
         # FileNotFoundError: dst does not exist
-        print(f"* :warning-emoji: `{dst}` already removed", indent=INDENT)
+        print(f"* :warning-emoji: `{dst}` already removed{reason}", indent=INDENT)
     except (IsADirectoryError, PermissionError) as err:
         # IsADirectoryError: dst is a directory
         # PermissionError: not possible to remove dst
-        perror(f"* :cross_mark: Failed to remove `{dst}`: {err}", indent=INDENT)
+        perror(f"* :cross_mark: Failed to remove `{dst}`{reason}: {err}", indent=INDENT)
         return 1
     else:
-        print(f"* :cross_mark_button: `{dst}` removed", indent=INDENT)
+        print(f"* :cross_mark_button: `{dst}` removed{reason}", indent=INDENT)
     return 0  # no errors
 
 
@@ -410,8 +411,7 @@ def template_file(
             return 1, False
 
         # missing src: treat as if it had `remove: true`
-        print(f"* :wastebasket: `{src}` not found, removing `{dst}`", indent=INDENT)
-        errors = remove_file(dst)
+        errors = remove_file(dst, missing=src)
         return errors, not errors
 
     # standard context with source and destination details
