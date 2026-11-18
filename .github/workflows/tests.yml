@@ -178,6 +178,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Create Removal Targets
+        run: |
+          mkdir -p .github_cache/template-files/success
+          touch .github_cache/template-files/success/remove-explicit.txt
+          touch .github_cache/template-files/success/remove-implicit.txt
+
       - name: Template Success
         id: templates-success
         uses: ./template-files  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711

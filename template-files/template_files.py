@@ -387,7 +387,7 @@ def remove_file(dst: Path) -> int:
         perror(f"* :cross_mark: Failed to remove `{dst}`: {err}", indent=INDENT)
         return 1
     else:
-        print(f"* :cross_mark_button: `{dst}` removed")
+        print(f"* :cross_mark_button: `{dst}` removed", indent=INDENT)
     return 0  # no errors
 
 
@@ -410,10 +410,7 @@ def template_file(
             return 1, False
 
         # missing src: treat as if it had `remove: true`
-        print(
-            f"* :wastebasket: `{src}` not found in `{upstream_repo.full_name}`",
-            indent=INDENT,
-        )
+        print(f"* :wastebasket: `{src}` not found, removing `{dst}`", indent=INDENT)
         errors = remove_file(dst)
         return errors, not errors
 
