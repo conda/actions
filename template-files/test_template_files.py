@@ -39,6 +39,7 @@ from template_files import (
     read_config,
     remove_file,
     template_file,
+    update_config,
     validate_dir,
     validate_file,
 )
@@ -474,6 +475,38 @@ def test_template_file_fetch_error(
     assert "Failed to fetch" in stderr
 
 
+def test_update_config_anchor(tmp_path: Path, capsys: CaptureFixture) -> None:
+    config_path = tmp_path / "config.yml"
+    original = (
+        ".upstream:\n"
+        "  - src: missing\n"
+        "    dst: a\n"
+        "    with: &vars\n"
+        "      variable: value\n"
+        "  - src: keep\n"
+        "    dst: b\n"
+        "    with: *vars\n"
+    )
+    config_path.write_text(original)
+
+    # dropping an anchor that is still referenced must not corrupt the config
+    assert update_config(config_path, [(".upstream", 0)]) == 1
+    assert config_path.read_text() == original
+    _, stderr = capsys.readouterr()
+    assert "anchor" in stderr
+
+
+def test_update_config_invalid_yaml(tmp_path: Path, capsys: CaptureFixture) -> None:
+    config_path = tmp_path / "config.yml"
+    original = "a: [unclosed\n"
+    config_path.write_text(original)
+
+    assert update_config(config_path, [("a", 0)]) == 1
+    assert config_path.read_text() == original
+    _, stderr = capsys.readouterr()
+    assert "Failed to parse" in stderr
+
+
 def test_iterate_config(
     tmp_path: Path, capsys: CaptureFixture, monkeypatch: MonkeyPatch
 ) -> None:
@@ -566,16 +599,19 @@ def test_iterate_config_fetch_error(
 def test_get_summary_text() -> None:
     summary = get_summary_text(text := uuid4().hex, [])
     assert text in summary
+    assert "### :mag: Templating Audit" in summary
     assert "Removed files" not in summary
 
     summary = get_summary_text(text, [(Path("a.txt"), "missing.txt")])
-    assert "- `a.txt` (`missing.txt` not found)" in summary
-    assert summary.index("**Removed files**") < summary.index(text)
+    assert "> :wastebasket: **Removed files**" in summary
+    assert "> - `a.txt` (`missing.txt` not found)" in summary
+    assert summary.index("> [!NOTE]") < summary.index(text)
 
 
 def test_get_output_text() -> None:
     output = get_output_text(0, text := uuid4().hex, [])
     assert "<details>" in output
+    assert "<summary>:mag: Templating Audit</summary>" in output
     assert text in output
     assert "Removed files" not in output
     output = get_output_text(1, text := uuid4().hex, [])
@@ -584,8 +620,8 @@ def test_get_output_text() -> None:
 
     # removals are rendered before, and therefore outside, the details block
     output = get_output_text(0, text, [(Path("a.txt"), None)])
-    assert "- `a.txt`\n" in output
-    assert output.index("- `a.txt`") < output.index("<details>")
+    assert "> - `a.txt`\n" in output
+    assert output.index("> [!NOTE]") < output.index("<details>")
 
 
 def test_dump_summary(

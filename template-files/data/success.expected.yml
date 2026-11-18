@@ -1,0 +1,7 @@
+./templates:
+  - src: file1.txt
+    dst: .github_cache/template-files/success/file1.txt
+  - src: file2.txt
+    dst: .github_cache/template-files/success/file2.txt
+    with:
+      variable: value
