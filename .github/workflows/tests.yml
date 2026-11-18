@@ -44,7 +44,13 @@ jobs:
           python-version: '>=3.12'
 
       - name: Install Dependencies
-        run: pip install --quiet -r requirements.txt -r combine-durations/requirements.txt -r prepare-authors/requirements.txt -r template-files/requirements.txt
+        run: >-
+          pip install --quiet
+          -r requirements.txt
+          -r combine-durations/requirements.txt
+          -r prepare-authors/requirements.txt
+          -r read-file/requirements.txt
+          -r template-files/requirements.txt
 
       - name: Run Tests
         run: pytest
