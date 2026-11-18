@@ -572,15 +572,15 @@ def get_removals_text(removals: Sequence[Removal]) -> str:
     if not removals:
         return ""
 
-    lines = ["**Removed files**", ""]
+    lines = ["> [!NOTE]", "> :wastebasket: **Removed files**", ">"]
     for dst, src in removals:
         reason = f" (`{src}` not found)" if src else ""
-        lines.append(f"- `{dst}`{reason}")
+        lines.append(f"> - `{dst}`{reason}")
     return "\n".join(lines) + "\n\n"
 
 
 def get_summary_text(html: str, removals: Sequence[Removal]) -> str:
-    return f"### Templating Audit\n{get_removals_text(removals)}{html}"
+    return f"### :mag: Templating Audit\n{get_removals_text(removals)}{html}"
 
 
 def get_output_text(errors: int, html: str, removals: Sequence[Removal]) -> str:
@@ -590,7 +590,7 @@ def get_output_text(errors: int, html: str, removals: Sequence[Removal]) -> str:
         f"summary<<GITHUB_OUTPUT_summary\n"
         f"{get_removals_text(removals)}"
         f"<details{' open' if errors else ''}>\n"
-        f"<summary>Templating Audit</summary>\n"
+        f"<summary>:mag: Templating Audit</summary>\n"
         f"\n"
         f"{html}\n"
         f"\n"
