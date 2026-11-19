@@ -8,6 +8,7 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Any
 
+from conda_actions.changelog import find_release_entry
 from conda_actions.commands import ActionError, run, run_json
 
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -116,17 +117,8 @@ def verify_context(branch_prefix: str) -> dict[str, str]:
 
 
 def release_notes(changelog: str, version: str) -> str | None:
-    heading = re.search(
-        rf"^##\s+{re.escape(version)}\s+\([^)\n]*\)\s*$",
-        changelog,
-        flags=re.MULTILINE,
-    )
-    if not heading:
-        return None
-
-    following = re.search(r"^##\s+", changelog[heading.end() :], re.MULTILINE)
-    end = heading.end() + following.start() if following else len(changelog)
-    return changelog[heading.end() : end].strip()
+    entry = find_release_entry(changelog, version)
+    return entry.body if entry else None
 
 
 def load_event_payload() -> dict[str, Any]:

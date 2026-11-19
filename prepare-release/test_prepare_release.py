@@ -13,6 +13,7 @@ import pytest
 import prepare_release as prepare_release_module
 from conda_actions import commands as commands_module
 from conda_actions import release as release_module
+from conda_actions.changelog import merge_changelog_entry
 from prepare_release import (
     MAX_LOGIN_LOOKUPS_PER_EMAIL,
     MAX_UNRESOLVED_LOGIN_LOOKUPS,
@@ -25,7 +26,6 @@ from prepare_release import (
     get_contributor_commits,
     infer_next_version,
     is_first_timer,
-    merge_changelog_entry,
     prepare_release,
     render_changelog_entry,
     render_contributors,
