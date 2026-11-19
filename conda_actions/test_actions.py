@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-import yaml
+import yamlrocks
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -62,7 +62,7 @@ def test_action_script_imports_from_action_pythonpath(
 
 def read_steps(action: Action, id: str | None = None) -> list[dict] | dict:
     path = REPOSITORY / action / "action.yml"
-    steps = yaml.safe_load(path.read_text())["runs"]["steps"]
+    steps = yamlrocks.loads(path.read_bytes())["runs"]["steps"]
     if id is None:
         return steps
     return next(step for step in steps if step.get("id") == id)

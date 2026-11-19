@@ -12,13 +12,13 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-from github import Auth, Github, UnknownObjectException
+import yamlrocks
+from github import Auth, Github, GithubException, UnknownObjectException
 from jinja2.environment import Environment
 from jinja2.loaders import FileSystemLoader
 from jinja2.runtime import Context, Undefined
 from jinja2.utils import missing
-from jsonschema import validate
+from jsonschema import ValidationError, validate
 from rich import box
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     AuditCurrent = tuple[str, str, str]
     AuditCounter = dict[str, int]
     AuditRegister = dict[str, Any]
+    Removal = tuple[Path, str | None]
     StubsCacheKey = tuple[weakref.ref[BaseLoader], str]
 
 
@@ -276,10 +277,7 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
 
 def read_config(config: Path) -> dict:
     # read and validate configuration file
-    config = yaml.load(
-        config.read_text(),
-        Loader=yaml.SafeLoader,
-    )
+    config = yamlrocks.loads(config.read_bytes())
     validate(
         config,
         schema={
@@ -319,6 +317,43 @@ def read_config(config: Path) -> dict:
     return config
 
 
+def update_config(config_path: Path, obsolete: list[tuple[str, int]]) -> int:
+    """Drop obsolete entries from the configuration, preserving comments."""
+    if not obsolete:
+        return 0
+
+    # regular loads do not preserve comments, so use a round-trip load
+    try:
+        config = yamlrocks.loads(
+            config_path.read_bytes(), option=yamlrocks.OPT_ROUND_TRIP
+        )
+    except OSError as err:
+        # OSError: configuration is not readable
+        perror(f"* :cross_mark: Failed to read `{config_path}`: {err}")
+        return 1
+    except yamlrocks.YAMLRocksError as err:
+        # YAMLRocksError: configuration is not valid YAML
+        perror(f"* :cross_mark: Failed to parse `{config_path}`: {err}")
+        return 1
+
+    try:
+        # remove in reverse order so the indices of earlier entries remain valid
+        for upstream_name, index in sorted(obsolete, reverse=True):
+            del config[upstream_name][index]
+            if not config[upstream_name]:
+                del config[upstream_name]
+
+        config_path.write_bytes(config.to_yaml())
+    except (OSError, ValueError) as err:
+        # OSError: configuration is not writable
+        # ValueError: rewrite would corrupt the document, e.g. removing an anchor
+        perror(f"* :cross_mark: Failed to update `{config_path}`: {err}")
+        return 1
+
+    print(f"* :memo: Removed obsolete entries from `{config_path}`")
+    return 0
+
+
 def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, Any]]:
     src: str | None
     dst: Path
@@ -353,19 +388,20 @@ def parse_config(file: str | dict) -> tuple[str | None, Path, bool, dict[str, An
     return src, dst, remove, context
 
 
-def remove_file(dst: Path) -> int:
+def remove_file(dst: Path, missing: str | None = None) -> int:
+    reason = f" (`{missing}` not found)" if missing else ""
     try:
         dst.unlink()
     except FileNotFoundError:
         # FileNotFoundError: dst does not exist
-        print(f"* :warning-emoji: `{dst}` already removed", indent=INDENT)
+        print(f"* :warning-emoji: `{dst}` already removed{reason}", indent=INDENT)
     except (IsADirectoryError, PermissionError) as err:
         # IsADirectoryError: dst is a directory
         # PermissionError: not possible to remove dst
-        perror(f"* :cross_mark: Failed to remove `{dst}`: {err}", indent=INDENT)
+        perror(f"* :cross_mark: Failed to remove `{dst}`{reason}: {err}", indent=INDENT)
         return 1
     else:
-        print(f"* :cross_mark_button: `{dst}` removed")
+        print(f"* :cross_mark_button: `{dst}` removed{reason}", indent=INDENT)
     return 0  # no errors
 
 
@@ -376,13 +412,20 @@ def template_file(
     src: str | None,
     dst: Path,
     context: dict[str, Any],
-) -> int:
+) -> tuple[int, bool]:
     # fetch src file
     try:
         content = upstream_repo.get_contents(src).decoded_content.decode()
-    except UnknownObjectException as err:
-        perror(f"* :cross_mark: Failed to fetch `{src}`: {err}", indent=INDENT)
-        return 1
+    except GithubException as err:
+        if err.status != 404:
+            # GithubException: anything but a missing file, e.g. an API failure,
+            # must not delete `dst`
+            perror(f"* :cross_mark: Failed to fetch `{src}`: {err}", indent=INDENT)
+            return 1, False
+
+        # missing src: treat as if it had `remove: true`
+        errors = remove_file(dst, missing=src)
+        return errors, not errors
 
     # standard context with source and destination details
     standard_context = {
@@ -405,7 +448,7 @@ def template_file(
         except Exception as err:
             # Exception: catch all errors whether they are Jinja2 or Python errors
             perror(f"* :cross_mark: Failed to template `{src}`: {err}", indent=INDENT)
-            return 1
+            return 1, False
 
         # display stubs & context for this file
         table = None
@@ -442,7 +485,7 @@ def template_file(
         if table:
             print(table, indent=INDENT * 2)
 
-        return int(error)
+        return int(error), False
 
 
 class LocalContents:
@@ -480,9 +523,11 @@ def iterate_config(
     gh: Github,
     env: Environment,
     current_repo: Repository,
-) -> int:
+) -> tuple[int, list[Removal]]:
     # iterate over configuration and template files
     errors = 0
+    obsolete: list[tuple[str, int]] = []
+    removals: list[Removal] = []
     for upstream_name, files in config.items():
         try:
             if upstream_name.startswith("."):
@@ -498,7 +543,7 @@ def iterate_config(
         else:
             print(f"* :arrows_counterclockwise: Fetching files from `{upstream_name}`")
 
-        for file in files:
+        for index, file in enumerate(files):
             try:
                 # parse/standardize configuration
                 src, dst, remove, context = parse_config(file)
@@ -507,26 +552,45 @@ def iterate_config(
                 continue
 
             if remove:
-                errors += remove_file(dst)
+                file_errors = remove_file(dst)
+                file_obsolete = not file_errors
+                src = None  # explicit removal: no missing source to report
             else:
-                errors += template_file(
+                file_errors, file_obsolete = template_file(
                     env, current_repo, upstream_repo, src, dst, context
                 )
+            if file_obsolete:
+                obsolete.append((upstream_name, index))
+                removals.append((dst, src))
+            errors += file_errors
 
-    return errors
+    errors += update_config(config_path, obsolete)
+    return errors, removals
 
 
-def get_summary_text(html: str) -> str:
-    return f"### Templating Audit\n{html}"
+def get_removals_text(removals: Sequence[Removal]) -> str:
+    if not removals:
+        return ""
+
+    lines = ["> [!NOTE]", "> :wastebasket: **Removed files**", ">"]
+    for dst, src in removals:
+        reason = f" (`{src}` not found)" if src else ""
+        lines.append(f"> - `{dst}`{reason}")
+    return "\n".join(lines) + "\n\n"
 
 
-def get_output_text(errors: int, html: str) -> str:
+def get_summary_text(html: str, removals: Sequence[Removal]) -> str:
+    return f"### :mag: Templating Audit\n{get_removals_text(removals)}{html}"
+
+
+def get_output_text(errors: int, html: str, removals: Sequence[Removal]) -> str:
     return (
         # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#setting-an-output-parameter
         # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
         f"summary<<GITHUB_OUTPUT_summary\n"
+        f"{get_removals_text(removals)}"
         f"<details{' open' if errors else ''}>\n"
-        f"<summary>Templating Audit</summary>\n"
+        f"<summary>:mag: Templating Audit</summary>\n"
         f"\n"
         f"{html}\n"
         f"\n"
@@ -535,7 +599,9 @@ def get_output_text(errors: int, html: str) -> str:
     )
 
 
-def dump_summary(errors: int, *, console: Console = CONSOLE) -> None:
+def dump_summary(
+    errors: int, removals: Sequence[Removal], *, console: Console = CONSOLE
+) -> None:
     # dump summary to GitHub Actions summary
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
     output_path = os.getenv("GITHUB_OUTPUT")
@@ -543,21 +609,27 @@ def dump_summary(errors: int, *, console: Console = CONSOLE) -> None:
         html = console.export_text()
     if summary_path:
         with Path(summary_path).open("a") as fh:
-            fh.write(get_summary_text(html))
+            fh.write(get_summary_text(html, removals))
     if output_path:
         with Path(output_path).open("a") as fh:
-            fh.write(get_output_text(errors, html))
+            fh.write(get_output_text(errors, html, removals))
 
 
 def main():
     args = parse_args()
+    removals: list[Removal] = []
     if not args.config:
         print(":warning-emoji: No configuration file found, nothing to update")
-        dump_summary()
+        dump_summary(0, removals)
         sys.exit(0)
     errors = 0
 
-    config = read_config(args.config)
+    try:
+        config = read_config(args.config)
+    except (ValidationError, yamlrocks.YAMLRocksError) as err:
+        perror(f":cross_mark: Failed to read `{args.config}`: {err}")
+        dump_summary(1, removals)
+        sys.exit(1)
 
     # initialize stub loader
     loader = FileSystemLoader(args.stubs)
@@ -590,7 +662,7 @@ def main():
         errors += 1
 
     if not errors:
-        errors += iterate_config(args.config, config, gh, env, current_repo)
+        errors, removals = iterate_config(args.config, config, gh, env, current_repo)
 
     # provide audit of stub usage
     stubs = defaultdict(int)
@@ -608,7 +680,7 @@ def main():
     if errors:
         perror(f"Got {errors} error(s)")
 
-    dump_summary(errors)
+    dump_summary(errors, removals)
     sys.exit(errors)
 
 

@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-import yaml
+import yamlrocks
+from github import GithubException
 from jinja2.environment import Environment
 from jinja2.exceptions import TemplateNotFound
 from jinja2.loaders import FileSystemLoader
@@ -30,6 +31,7 @@ from template_files import (
     dump_summary,
     get_output_text,
     get_summary_text,
+    iterate_config,
     parse_args,
     parse_config,
     perror,
@@ -37,6 +39,7 @@ from template_files import (
     read_config,
     remove_file,
     template_file,
+    update_config,
     validate_dir,
     validate_file,
 )
@@ -340,7 +343,7 @@ def test_read_config(path: Path, raises: bool) -> None:
 def test_parse_config(path: Path | None, config: dict | None, raises: bool) -> None:
     # read config from path
     if path:
-        config = yaml.load(path.read_text(), Loader=yaml.SafeLoader)
+        config = yamlrocks.loads(path.read_bytes())
     # either path or config must be provided
     assert config is not None
 
@@ -390,78 +393,235 @@ def test_template_file(tmp_path: Path, capsys: CaptureFixture) -> None:
     upstream = LocalRepository(UPSTREAM)
 
     # template without errors
-    assert (
-        template_file(
-            environment,
-            current,
-            upstream,
-            "success",
-            tmp_path / "out",
-            {"variable": "value"},
-        )
-        == 0
-    )
+    assert template_file(
+        environment,
+        current,
+        upstream,
+        "success",
+        tmp_path / "out",
+        {"variable": "value"},
+    ) == (0, False)
     stdout, stderr = capsys.readouterr()
     assert stdout
     assert not stderr
 
     # template with missing context
-    assert (
-        template_file(environment, current, upstream, "success", tmp_path / "out", {})
-        == 1
-    )
+    assert template_file(
+        environment, current, upstream, "success", tmp_path / "out", {}
+    ) == (1, False)
     stdout, stderr = capsys.readouterr()
     assert stdout
     assert stderr
 
-    # template missing file
-    assert (
-        template_file(environment, current, upstream, "missing", tmp_path / "out", {})
-        == 1
-    )
+    # missing source: remove dst and mark the config entry obsolete
+    assert template_file(
+        environment, current, upstream, "missing", tmp_path / "out", {}
+    ) == (0, True)
+    assert not (tmp_path / "out").exists()
     stdout, stderr = capsys.readouterr()
-    assert not stdout
-    assert stderr
+    assert not stderr
+    assert "removed" in next(
+        line for line in stdout.splitlines() if "not found" in line
+    )
+
+    # missing source and missing destination
+    assert template_file(
+        environment, current, upstream, "missing", tmp_path / "out", {}
+    ) == (0, True)
+    stdout, stderr = capsys.readouterr()
+    assert not stderr
+    assert "already removed" in next(
+        line for line in stdout.splitlines() if "not found" in line
+    )
 
     # template python error
-    assert (
-        template_file(
-            environment, current, upstream, "python_error", tmp_path / "out", {}
-        )
-        == 1
-    )
+    assert template_file(
+        environment, current, upstream, "python_error", tmp_path / "out", {}
+    ) == (1, False)
     stdout, stderr = capsys.readouterr()
     assert not stdout
     assert stderr
 
     # template error
-    assert (
-        template_file(
-            environment, current, upstream, "template_error", tmp_path / "out", {}
-        )
-        == 1
-    )
+    assert template_file(
+        environment, current, upstream, "template_error", tmp_path / "out", {}
+    ) == (1, False)
     stdout, stderr = capsys.readouterr()
     assert not stdout
     assert stderr
 
 
-def test_iterate_config() -> None:
-    pass
+def test_template_file_fetch_error(
+    tmp_path: Path, capsys: CaptureFixture, monkeypatch: MonkeyPatch
+) -> None:
+    environment = AuditEnvironment(loader=FileSystemLoader(UPSTREAM))
+    current = LocalRepository(tmp_path)
+    upstream = LocalRepository(UPSTREAM)
+    dst = tmp_path / "out"
+    dst.write_text("existing")
+
+    def fail(src: str) -> None:
+        raise GithubException(500, "boom")
+
+    # failed fetches other than a missing source must not delete dst
+    monkeypatch.setattr(upstream, "get_contents", fail)
+    assert template_file(environment, current, upstream, "success", dst, {}) == (
+        1,
+        False,
+    )
+    assert dst.read_text() == "existing"
+    stdout, stderr = capsys.readouterr()
+    assert not stdout
+    assert "Failed to fetch" in stderr
+
+
+def test_update_config_anchor(tmp_path: Path, capsys: CaptureFixture) -> None:
+    config_path = tmp_path / "config.yml"
+    original = (
+        ".upstream:\n"
+        "  - src: missing\n"
+        "    dst: a\n"
+        "    with: &vars\n"
+        "      variable: value\n"
+        "  - src: keep\n"
+        "    dst: b\n"
+        "    with: *vars\n"
+    )
+    config_path.write_text(original)
+
+    # dropping an anchor that is still referenced must not corrupt the config
+    assert update_config(config_path, [(".upstream", 0)]) == 1
+    assert config_path.read_text() == original
+    _, stderr = capsys.readouterr()
+    assert "anchor" in stderr
+
+
+def test_update_config_invalid_yaml(tmp_path: Path, capsys: CaptureFixture) -> None:
+    config_path = tmp_path / "config.yml"
+    original = "a: [unclosed\n"
+    config_path.write_text(original)
+
+    assert update_config(config_path, [("a", 0)]) == 1
+    assert config_path.read_text() == original
+    _, stderr = capsys.readouterr()
+    assert "Failed to parse" in stderr
+
+
+def test_iterate_config(
+    tmp_path: Path, capsys: CaptureFixture, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    (upstream := tmp_path / ".upstream").mkdir()
+    (upstream / "keep").write_text("keep")
+    (tmp_path / ".other").mkdir()
+    (tmp_path / "gone").write_text("gone")
+
+    (config_path := tmp_path / "config.yml").write_text(
+        "# leading comment\n"
+        ".upstream:\n"
+        "  # keep this entry\n"
+        "  - src: keep\n"
+        "    dst: keep.txt\n"
+        "  # source was retired upstream\n"
+        "  - src: missing\n"
+        "    dst: gone\n"
+        "  # destination is already gone\n"
+        "  - dst: absent.txt\n"
+        "    remove: true\n"
+        "\n"
+        "# empty after cleanup\n"
+        ".other:\n"
+        "  - dst: absent2.txt\n"
+        "    remove: true\n"
+    )
+
+    environment = AuditEnvironment(loader=FileSystemLoader(tmp_path))
+    current = LocalRepository(tmp_path)
+    errors, removals = iterate_config(
+        config_path, read_config(config_path), None, environment, current
+    )
+    assert errors == 0
+
+    # destination handling
+    assert (tmp_path / "keep.txt").read_text() == "keep"
+    assert not (tmp_path / "gone").exists()
+    assert removals == [
+        (Path("gone"), "missing"),
+        (Path("absent.txt"), None),
+        (Path("absent2.txt"), None),
+    ]
+
+    # obsolete entries are gone, everything else (including comments) is kept
+    assert read_config(config_path) == {
+        ".upstream": [{"src": "keep", "dst": "keep.txt"}]
+    }
+    config_text = config_path.read_text()
+    assert config_text.startswith("# leading comment\n")
+    assert "keep this entry" in config_text
+    assert "retired upstream" not in config_text
+
+    stdout, stderr = capsys.readouterr()
+    assert "not found" in stdout
+    assert "already removed" in stdout
+    assert "Removed obsolete entries" in stdout
+    assert not stderr
+
+
+def test_iterate_config_fetch_error(
+    tmp_path: Path, capsys: CaptureFixture, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    (tmp_path / ".upstream").mkdir()
+    (tmp_path / "kept").write_text("kept")
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(".upstream:\n  - src: keep\n    dst: kept\n")
+
+    def fail(self: LocalRepository, src: str) -> None:
+        raise GithubException(500, "boom")
+
+    # other fetch failures are errors and leave dst and the config untouched
+    monkeypatch.setattr(LocalRepository, "get_contents", fail)
+    environment = AuditEnvironment(loader=FileSystemLoader(tmp_path))
+    current = LocalRepository(tmp_path)
+    errors, removals = iterate_config(
+        config_path, read_config(config_path), None, environment, current
+    )
+    assert errors == 1
+    assert removals == []
+    assert (tmp_path / "kept").read_text() == "kept"
+    assert config_path.read_text() == ".upstream:\n  - src: keep\n    dst: kept\n"
+    _, stderr = capsys.readouterr()
+    assert "Failed to fetch" in stderr
 
 
 def test_get_summary_text() -> None:
-    summary = get_summary_text(text := uuid4().hex)
+    summary = get_summary_text(text := uuid4().hex, [])
     assert text in summary
+    assert "### :mag: Templating Audit" in summary
+    assert "Removed files" not in summary
+
+    summary = get_summary_text(text, [(Path("a.txt"), "missing.txt")])
+    assert "> :wastebasket: **Removed files**" in summary
+    assert "> - `a.txt` (`missing.txt` not found)" in summary
+    assert summary.index("> [!NOTE]") < summary.index(text)
 
 
 def test_get_output_text() -> None:
-    output = get_output_text(0, text := uuid4().hex)
+    output = get_output_text(0, text := uuid4().hex, [])
     assert "<details>" in output
+    assert "<summary>:mag: Templating Audit</summary>" in output
     assert text in output
-    output = get_output_text(1, text := uuid4().hex)
+    assert "Removed files" not in output
+    output = get_output_text(1, text := uuid4().hex, [])
     assert "<details open>" in output
     assert text in output
+
+    # removals are rendered before, and therefore outside, the details block
+    output = get_output_text(0, text, [(Path("a.txt"), None)])
+    assert "> - `a.txt`\n" in output
+    assert output.index("> [!NOTE]") < output.index("<details>")
 
 
 def test_dump_summary(
@@ -476,23 +636,26 @@ def test_dump_summary(
 
     print(text := uuid4().hex, console=console)
     perror(error := uuid4().hex, console=console)
-    dump_summary(0, console=console)
+    dump_summary(0, [], console=console)
     stdout, stderr = capsys.readouterr()
     assert text in stdout
     assert error in stderr
-    first = get_summary_text(f"{text}\n{error}\n")
+    first = get_summary_text(f"{text}\n{error}\n", [])
     assert step_summary.read_text() == old_summary + first
-    assert output.read_text() == old + get_output_text(0, f"{text}\n{error}\n")
+    assert output.read_text() == old + get_output_text(0, f"{text}\n{error}\n", [])
 
     output.write_text(old)
 
     print(text := uuid4().hex, console=console)
     perror(error := uuid4().hex, console=console)
-    dump_summary(1, console=console)
+    removals = [(Path("a.txt"), "missing.txt")]
+    dump_summary(1, removals, console=console)
     stdout, stderr = capsys.readouterr()
     assert text in stdout
     assert error in stderr
     assert step_summary.read_text() == old_summary + first + get_summary_text(
-        f"{text}\n{error}\n"
+        f"{text}\n{error}\n", removals
     )
-    assert output.read_text() == old + get_output_text(1, f"{text}\n{error}\n")
+    assert output.read_text() == old + get_output_text(
+        1, f"{text}\n{error}\n", removals
+    )

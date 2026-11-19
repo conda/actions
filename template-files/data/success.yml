@@ -5,3 +5,9 @@
     dst: .github_cache/template-files/success/file2.txt
     with:
       variable: value
+  # explicit removal: delete dst and drop this entry from the config
+  - dst: .github_cache/template-files/success/remove-explicit.txt
+    remove: true
+  # implicit removal: src no longer exists, so delete dst and drop this entry
+  - src: retired.txt
+    dst: .github_cache/template-files/success/remove-implicit.txt

@@ -41,10 +41,16 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '>=3.9'
+          python-version: '>=3.12'
 
       - name: Install Dependencies
-        run: pip install --quiet -r requirements.txt -r combine-durations/requirements.txt -r prepare-authors/requirements.txt -r template-files/requirements.txt
+        run: >-
+          pip install --quiet
+          -r requirements.txt
+          -r combine-durations/requirements.txt
+          -r prepare-authors/requirements.txt
+          -r read-file/requirements.txt
+          -r template-files/requirements.txt
 
       - name: Run Tests
         run: pytest
@@ -178,6 +184,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Create Removal Targets
+        run: |
+          mkdir -p .github_cache/template-files/success
+          touch .github_cache/template-files/success/remove-explicit.txt
+          touch .github_cache/template-files/success/remove-implicit.txt
+
       - name: Template Success
         id: templates-success
         uses: ./template-files  # zizmor: ignore[self-repository] '$/...' unsupported by actionlint; see https://github.com/rhysd/actionlint/issues/711
@@ -194,7 +206,9 @@ jobs:
           stubs: ./template-files/data/templates
 
       - name: Run Tests
-        run: diff --recursive .github_cache/template-files template-files/data/expected
+        run: |
+          diff --recursive .github_cache/template-files template-files/data/expected
+          diff template-files/data/success.yml template-files/data/success.expected.yml
 
       - name: Filter Changes
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -215,11 +229,13 @@ jobs:
             ### Template Success
             > [!WARNING]
             > This is what the audit looks like when the templating has no errors.
+
             ${{ steps.templates-success.outputs.summary }}
 
             ### Template Error
             > [!WARNING]
             > This is what the audit looks like when templating results in errors.
+
             ${{ steps.templates-error.outputs.summary }}
           GITHUB_TOKEN: ${{ secrets.SANDBOX_TEMPLATE_TOKEN }}  # zizmor: ignore[secrets-outside-env] Repository-level token for sticky PR test comments.
 
