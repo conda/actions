@@ -11,6 +11,7 @@ from typing import Any
 from conda_actions.commands import ActionError, run, run_json
 
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+RELEASE_BRANCH_RE = re.compile(r"^\d+\.\d+\.x$")
 
 
 def parse_args(argv: list[str] | None = None) -> Namespace:
@@ -82,17 +83,18 @@ def verify_context(branch_prefix: str) -> dict[str, str]:
     if head_repository.get("full_name") != os.environ.get("GITHUB_REPOSITORY"):
         raise ActionError("The merged pull request must come from this repository.")
 
-    default_branch = (payload.get("repository") or {}).get("default_branch")
-    if not default_branch:
-        raise ActionError(
-            "The event payload did not include the repository default branch."
-        )
-    base_branch = (pull_request.get("base") or {}).get("ref")
-    if base_branch != default_branch:
-        raise ActionError(
-            f"The pull request base branch {base_branch!r} is not the repository "
-            f"default branch {default_branch!r}."
-        )
+    base_branch = (pull_request.get("base") or {}).get("ref", "")
+    if not RELEASE_BRANCH_RE.match(base_branch):
+        default_branch = (payload.get("repository") or {}).get("default_branch")
+        if not default_branch:
+            raise ActionError(
+                "The event payload did not include the repository default branch."
+            )
+        if base_branch != default_branch:
+            raise ActionError(
+                f"The pull request base branch {base_branch!r} is not the repository "
+                f"default branch {default_branch!r} or a release branch."
+            )
 
     head_branch = (pull_request.get("head") or {}).get("ref") or ""
     if not head_branch.startswith(branch_prefix):

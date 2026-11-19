@@ -131,13 +131,25 @@ def test_verify_context_accepts_merged_release_pull_request(
     }
 
 
+def test_verify_context_accepts_release_branch_as_base(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_merged_pr_event(tmp_path, monkeypatch, base="1.2.x")
+
+    assert verify_context("release-notes-") == {
+        "version": "1.2.3",
+        "commit": "a" * 40,
+    }
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
         ("event", "push", "must run from the pull_request event"),
         ("merged", False, "was not merged"),
         ("head_repository", "someone/example", "must come from this repository"),
-        ("base", "1.2.x", "is not the repository default branch"),
+        ("base", "feature", "is not the repository default branch"),
         ("default_branch", "", "did not include the repository default branch"),
         ("branch", "main", "does not start with 'release-notes-'"),
         ("branch", "release-notes-1.2", "Invalid release version"),
