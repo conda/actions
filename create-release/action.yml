@@ -20,7 +20,7 @@ inputs:
     description: >-
       Personal access token with `contents: write` permissions to create the
       release and its tag (required).
-      required: true
+    required: true
 
 outputs:
   version:
