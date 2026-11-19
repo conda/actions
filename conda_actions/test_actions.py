@@ -38,6 +38,7 @@ jq --raw-output "$filter" "$FAKE_GH_ARTIFACTS"
     "script",
     [
         "check-news/check_news.py",
+        "create-release/create_release.py",
         "prepare-authors/prepare_authors.py",
         "prepare-release/prepare_release.py",
     ],
