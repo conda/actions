@@ -146,7 +146,7 @@ runs:
 
     # if unsigned, create PR
     - name: Create PR with new CLA signee
-      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # zizmor: ignore[superfluous-actions] Retain action behavior; v8.1.1; gh rewrite is out of scope here.
+      uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # zizmor: ignore[superfluous-actions] Retain action behavior; v8.1.1; gh rewrite is out of scope here.
       id: pull
       if: steps.metadata.outputs.has_signed == 'false'
       with:

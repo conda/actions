@@ -17,7 +17,7 @@ inputs:
   version:
     description: >-
       Release version (MAJOR.MINOR.PATCH, no leading 'v') to prepare in a
-      workflow_dispatch run. Ignored for workflow_run runs, which infer the
+      workflow_dispatch run. Ignored for push runs, which infer the
       version from the release branch.
     default: ''
   branch-prefix:

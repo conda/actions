@@ -467,7 +467,9 @@ def test_get_output_text() -> None:
 def test_dump_summary(
     capsys: CaptureFixture, monkeypatch: MonkeyPatch, tmp_path: Path, console: Console
 ) -> None:
-    (step_summary := tmp_path / "step_summary").write_text("text to overwrite\n")
+    (step_summary := tmp_path / "step_summary").write_text(
+        old_summary := "text to append\n"
+    )
     (output := tmp_path / "output").write_text(old := "text to append\n")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(step_summary))
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
@@ -478,7 +480,8 @@ def test_dump_summary(
     stdout, stderr = capsys.readouterr()
     assert text in stdout
     assert error in stderr
-    assert step_summary.read_text() == get_summary_text(f"{text}\n{error}\n")
+    first = get_summary_text(f"{text}\n{error}\n")
+    assert step_summary.read_text() == old_summary + first
     assert output.read_text() == old + get_output_text(0, f"{text}\n{error}\n")
 
     output.write_text(old)
@@ -489,5 +492,7 @@ def test_dump_summary(
     stdout, stderr = capsys.readouterr()
     assert text in stdout
     assert error in stderr
-    assert step_summary.read_text() == get_summary_text(f"{text}\n{error}\n")
+    assert step_summary.read_text() == old_summary + first + get_summary_text(
+        f"{text}\n{error}\n"
+    )
     assert output.read_text() == old + get_output_text(1, f"{text}\n{error}\n")
