@@ -145,6 +145,8 @@ def resolve_artifacts(directory: str) -> list[Path]:
     artifacts_dir = Path(directory)
     if not artifacts_dir.is_dir():
         raise ActionError(f"Artifacts directory does not exist: {directory}")
+    if not next(artifacts_dir.iterdir(), None):
+        raise ActionError(f"Artifacts directory is empty: {directory}")
     return sorted(child for child in artifacts_dir.iterdir() if child.is_file())
 
 

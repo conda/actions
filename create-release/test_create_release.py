@@ -391,6 +391,17 @@ def test_resolve_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
             resolve_artifacts(missing)
 
 
+def test_resolve_artifacts_rejects_empty_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dist").mkdir()
+
+    with pytest.raises(ActionError, match="Artifacts directory is empty"):
+        resolve_artifacts("dist")
+
+
 def test_main_publishes_release(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
