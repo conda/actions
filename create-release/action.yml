@@ -18,7 +18,7 @@ inputs:
     default: ''
   token:
     description: >-
-      Personal access token with `contents: write` permissions to create the
+      GitHub token with `contents: write` permissions to create the
       release and its tag (required).
     required: true
 
