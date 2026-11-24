@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -7,6 +8,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from conda_actions.changelog import find_release_entry
 from conda_actions.commands import ActionError, run, run_json
@@ -39,30 +41,46 @@ def create_release(args: Namespace) -> None:
     version = context["version"]
     commit = context["commit"]
 
-    changelog = Path(args.changelog_path)
-    if not changelog.is_file():
-        raise ActionError(f"Changelog file does not exist: {changelog}")
-    notes = release_notes(changelog.read_text(encoding="utf-8"), version)
-    if notes is None:
-        raise ActionError(f"No release notes for {version} in {changelog}.")
-    if not notes:
-        raise ActionError(f"Release notes for {version} are empty.")
-
     artifacts = resolve_artifacts(args.artifacts_directory)
-    state = release_state(version)
-    if state == "published":
-        print(f"Release {version} is already published. Nothing to do.")
+    digests = {artifact.name: file_digest(artifact) for artifact in artifacts}
+    release = get_release(version)
+    verify_source(version, commit, release)
+    if release is not None and not release["isDraft"]:
+        verify_published(release, version, commit, artifacts, digests)
+        print(f"Release {version} is already published and matches these files.")
     else:
-        if state is None and tag_exists(version):
-            raise ActionError(
-                f"Tag {version} already exists without a release. "
-                "Delete the tag before creating the release."
-            )
-        if state is None:
+        changelog = Path(args.changelog_path)
+        if not changelog.is_file():
+            raise ActionError(f"Changelog file does not exist: {changelog}")
+        notes = release_notes(changelog.read_text(encoding="utf-8"), version)
+        if notes is None:
+            raise ActionError(f"No release notes for {version} in {changelog}.")
+        if not notes:
+            raise ActionError(f"Release notes for {version} are empty.")
+
+        if release is None:
             create_draft(version, commit, notes, artifacts)
         else:
-            update_draft(version, notes, artifacts)
+            missing = missing_artifacts(release, digests)
+            update_draft(
+                version,
+                commit,
+                notes,
+                [artifact for artifact in artifacts if artifact.name in missing],
+            )
+        release = get_release(version)
+        if release is None or not release["isDraft"]:
+            raise ActionError(
+                "The release changed before publication. Retry the action."
+            )
+        verify_source(version, commit, release)
+        if missing_artifacts(release, digests):
+            raise ActionError("The draft is missing release assets.")
         publish_release(version)
+        release = get_release(version)
+        if release is None:
+            raise ActionError("The published release could not be read.")
+        verify_published(release, version, commit, artifacts, digests)
 
     write_output("version", version)
     write_output("commit", commit)
@@ -137,21 +155,116 @@ def resolve_artifacts(directory: str) -> list[Path]:
     artifacts_dir = Path(directory)
     if not artifacts_dir.is_dir():
         raise ActionError(f"Artifacts directory does not exist: {directory}")
-    if not next(artifacts_dir.iterdir(), None):
-        raise ActionError(f"Artifacts directory is empty: {directory}")
-    return sorted(child for child in artifacts_dir.iterdir() if child.is_file())
+    artifacts = sorted(child for child in artifacts_dir.iterdir() if child.is_file())
+    if not artifacts:
+        raise ActionError(f"Artifacts directory contains no files: {directory}")
+    return artifacts
 
 
-def release_state(tag: str) -> str | None:
-    release = get_json_or_none(["gh", "release", "view", tag, "--json", "isDraft"])
+def get_release(tag: str) -> dict[str, Any] | None:
+    return get_json_or_none(
+        [
+            "gh",
+            "release",
+            "view",
+            tag,
+            "--repo",
+            os.environ["GITHUB_REPOSITORY"],
+            "--json",
+            "databaseId,isDraft,isImmutable,targetCommitish",
+        ]
+    )
+
+
+def file_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
+
+
+def missing_artifacts(release: dict[str, Any], digests: dict[str, str]) -> set[str]:
+    endpoint = (
+        f"repos/{os.environ['GITHUB_REPOSITORY']}/releases/"
+        f"{release['databaseId']}/assets?per_page=100"
+    )
+    pages = run_json(["gh", "api", "--paginate", "--slurp", endpoint])
+    assets = [asset for page in pages for asset in page]
+    names = {asset["name"] for asset in assets}
+    unexpected = names - digests.keys()
+    if unexpected:
+        raise ActionError(
+            f"The release has unexpected assets: {', '.join(sorted(unexpected))}"
+        )
+    for asset in assets:
+        name = asset["name"]
+        if asset["state"] != "uploaded":
+            raise ActionError(f"Release asset {name!r} has not finished uploading.")
+        digest = asset.get("digest")
+        if not digest or not digest.startswith("sha256:"):
+            raise ActionError(
+                f"Release asset {name!r} has no SHA-256 digest and cannot be verified."
+            )
+        if digest != digests[name]:
+            raise ActionError(f"Release asset {name!r} differs from the local file.")
+    return digests.keys() - names
+
+
+def verify_source(version: str, commit: str, release: dict[str, Any] | None) -> None:
+    tagged_commit = tag_commit(version)
+    if tagged_commit is not None and tagged_commit != commit:
+        raise ActionError(f"Tag {version} points to a different commit.")
     if release is None:
+        return
+    if not release["isDraft"]:
+        if tagged_commit is None:
+            raise ActionError(f"Published release {version} has no matching tag.")
+        return
+    target = release["targetCommitish"]
+    if target != commit:
+        endpoint = (
+            f"repos/{os.environ['GITHUB_REPOSITORY']}/commits/{quote(target, safe='')}"
+        )
+        if run_json(["gh", "api", endpoint])["sha"] != commit:
+            raise ActionError(f"Draft release {version} targets a different commit.")
+
+
+def verify_published(
+    release: dict[str, Any],
+    version: str,
+    commit: str,
+    artifacts: list[Path],
+    digests: dict[str, str],
+) -> None:
+    if release["isDraft"] or not release["isImmutable"]:
+        raise ActionError("The release is not published with immutability enabled.")
+    verify_source(version, commit, release)
+    if missing_artifacts(release, digests):
+        raise ActionError("The published release is missing release assets.")
+    repository = os.environ["GITHUB_REPOSITORY"]
+    run(["gh", "release", "verify", version, "--repo", repository])
+    for artifact in artifacts:
+        run(
+            [
+                "gh",
+                "release",
+                "verify-asset",
+                version,
+                str(artifact),
+                "--repo",
+                repository,
+            ]
+        )
+
+
+def tag_commit(tag: str) -> str | None:
+    repository = os.environ["GITHUB_REPOSITORY"]
+    endpoint = f"repos/{repository}/git/ref/tags/{quote(tag, safe='')}"
+    if get_json_or_none(["gh", "api", endpoint]) is None:
         return None
-    return "draft" if release.get("isDraft") else "published"
-
-
-def tag_exists(tag: str) -> bool:
-    ref = get_json_or_none(["gh", "api", f"git/ref/tags/{tag}"])
-    return ref is not None
+    reference = quote(f"refs/tags/{tag}", safe="")
+    return run_json(["gh", "api", f"repos/{repository}/commits/{reference}"])["sha"]
 
 
 def get_json_or_none(command: list[str]) -> Any:
@@ -177,6 +290,8 @@ def create_draft(
         "create",
         version,
         "--draft",
+        "--repo",
+        os.environ["GITHUB_REPOSITORY"],
         "--target",
         commit,
         "--title",
@@ -189,19 +304,25 @@ def create_draft(
 
 def update_draft(
     version: str,
+    commit: str,
     notes: str,
     artifacts: list[Path],
 ) -> None:
+    repository = os.environ["GITHUB_REPOSITORY"]
     run(
         [
             "gh",
             "release",
             "edit",
             version,
+            "--repo",
+            repository,
+            "--target",
+            commit,
             "--title",
             version,
             f"--notes={notes}",
-        ],
+        ]
     )
     if artifacts:
         run(
@@ -210,14 +331,25 @@ def update_draft(
                 "release",
                 "upload",
                 version,
-                "--clobber",
+                "--repo",
+                repository,
                 *map(str, artifacts),
-            ],
+            ]
         )
 
 
 def publish_release(version: str) -> None:
-    run(["gh", "release", "edit", version, "--draft=false"])
+    run(
+        [
+            "gh",
+            "release",
+            "edit",
+            version,
+            "--repo",
+            os.environ["GITHUB_REPOSITORY"],
+            "--draft=false",
+        ]
+    )
 
 
 def write_output(name: str, value: str) -> None:
