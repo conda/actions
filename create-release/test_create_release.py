@@ -10,7 +10,7 @@ import create_release as create_release_module
 from conda_actions.commands import ActionError
 from create_release import (
     create_release,
-    release_notes,
+    release_notes_from_changelog,
     resolve_artifacts,
     verify_context,
 )
@@ -210,7 +210,7 @@ def test_verify_context_rejects_untrusted_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     field: str,
-    value: object,
+    value: str | bool,
     message: str,
 ) -> None:
     write_merged_pr_event(tmp_path, monkeypatch, **{field: value})
@@ -618,11 +618,16 @@ def test_create_release_updates_draft_without_artifacts(
 
 
 def test_release_notes_does_not_match_a_longer_version() -> None:
-    assert release_notes("## 1.2.30 (2026-09-01)\n\n* Notes.\n", "1.2.3") is None
+    assert (
+        release_notes_from_changelog("## 1.2.30 (2026-09-01)\n\n* Notes.\n", "1.2.3")
+        is None
+    )
 
 
 def test_release_notes_handles_crlf() -> None:
     assert (
-        release_notes("## 1.2.3 (2026-09-01)\r\n\r\n* Notes.\r\n", "1.2.3")
+        release_notes_from_changelog(
+            "## 1.2.3 (2026-09-01)\r\n\r\n* Notes.\r\n", "1.2.3"
+        )
         == "* Notes."
     )

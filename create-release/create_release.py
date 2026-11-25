@@ -52,7 +52,9 @@ def create_release(args: Namespace) -> None:
         changelog = Path(args.changelog_path)
         if not changelog.is_file():
             raise ActionError(f"Changelog file does not exist: {changelog}")
-        notes = release_notes(changelog.read_text(encoding="utf-8"), version)
+        notes = release_notes_from_changelog(
+            changelog.read_text(encoding="utf-8"), version
+        )
         if notes is None:
             raise ActionError(f"No release notes for {version} in {changelog}.")
         if not notes:
@@ -134,7 +136,7 @@ def verify_context(branch_prefix: str) -> dict[str, str]:
     return {"version": version, "commit": commit}
 
 
-def release_notes(changelog: str, version: str) -> str | None:
+def release_notes_from_changelog(changelog: str, version: str) -> str | None:
     entry = find_release_entry(changelog, version)
     return entry.body if entry else None
 
