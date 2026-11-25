@@ -79,9 +79,15 @@ def mock_gh(
     *,
     state: str | None = None,
     tag: bool = False,
+    tag_sha: str = "a" * 40,
+    commit_sha: str = "a" * 40,
+    target_commitish: str = "a" * 40,
 ) -> tuple[list[list[str]], list[str]]:
     calls: list[list[str]] = []
     notes: list[str] = []
+    assets: dict[str, dict[str, str]] = {}
+    release_state = state
+    tag = tag or state == "published"
 
     def fake_run_json(
         command: list[str],
@@ -89,15 +95,31 @@ def mock_gh(
         env: dict[str, str] | None = None,
     ) -> object:
         if command[1:3] == ["release", "view"]:
-            if state is None:
+            if release_state is None:
                 raise ActionError(
                     "Command failed: gh release view\n\nrelease not found"
                 )
-            return {"isDraft": state == "draft"}
+            return {
+                "databaseId": 123,
+                "isDraft": release_state == "draft",
+                "isImmutable": release_state == "published",
+                "targetCommitish": target_commitish,
+            }
         if command[1] == "api":
-            if not tag:
-                raise ActionError("Command failed: gh api\n\ngh: Not Found (HTTP 404)")
-            return {"ref": f"refs/tags/{command[2].rsplit('/', 1)[-1]}"}
+            endpoint = command[-1]
+            if "/git/ref/tags/" in endpoint:
+                if not tag and release_state != "published":
+                    raise ActionError(
+                        "Command failed: gh api\n\ngh: Not Found (HTTP 404)"
+                    )
+                return {"ref": "refs/tags/1.2.3"}
+            if "/commits/refs%2Ftags%2F" in endpoint:
+                return {"sha": tag_sha}
+            if "/releases/123/assets" in endpoint:
+                return [list(assets.values())]
+            if "/commits/" in endpoint:
+                return {"sha": commit_sha}
+            raise AssertionError(f"Unexpected command: {command}")
         raise AssertionError(f"Unexpected command: {command}")
 
     def fake_run(
@@ -106,12 +128,39 @@ def mock_gh(
         capture: bool = False,
         env: dict[str, str] | None = None,
     ) -> str:
+        nonlocal release_state
         calls.append(command)
         notes.extend(
             arg.removeprefix("--notes=")
             for arg in command
             if arg.startswith("--notes=")
         )
+        if command[1:3] == ["release", "create"]:
+            release_state = "draft"
+            notes_index = next(
+                i for i, arg in enumerate(command) if arg.startswith("--notes=")
+            )
+            for filename in command[notes_index + 1 :]:
+                path = Path(filename)
+                assets[path.name] = {
+                    "name": path.name,
+                    "state": "uploaded",
+                    "digest": create_release_module.file_digest(path),
+                }
+        elif command[1:3] == ["release", "upload"]:
+            for filename in command[6:]:
+                path = Path(filename)
+                assets[path.name] = {
+                    "name": path.name,
+                    "state": "uploaded",
+                    "digest": create_release_module.file_digest(path),
+                }
+        elif command[1:3] == ["release", "edit"] and "--draft=false" in command:
+            release_state = "published"
+        elif command[1:3] == ["release", "verify"]:
+            pass
+        elif command[1:3] == ["release", "verify-asset"]:
+            pass
         return ""
 
     monkeypatch.setattr(create_release_module, "run_json", fake_run_json)
@@ -229,16 +278,21 @@ def test_create_release_creates_draft_with_artifacts_and_publishes(
 
     create_release(release_args(tmp_path, artifacts_directory="dist"))
 
-    assert calls[0][:5] == ["gh", "release", "create", "1.2.3", "--draft"]
-    assert calls[0][-2:] == [
-        "dist/example-1.2.3-py3-none-any.whl",
-        "dist/example-1.2.3.tar.gz",
-    ]
-    assert calls[0][5:9] == [
+    assert calls[0] == [
+        "gh",
+        "release",
+        "create",
+        "1.2.3",
+        "--draft",
+        "--repo",
+        "conda/example",
         "--target",
         "a" * 40,
         "--title",
         "1.2.3",
+        f"--notes={NOTES}",
+        "dist/example-1.2.3-py3-none-any.whl",
+        "dist/example-1.2.3.tar.gz",
     ]
     assert notes == [NOTES]
     assert calls[1] == [
@@ -246,7 +300,30 @@ def test_create_release_creates_draft_with_artifacts_and_publishes(
         "release",
         "edit",
         "1.2.3",
+        "--repo",
+        "conda/example",
         "--draft=false",
+    ]
+    assert calls[2] == ["gh", "release", "verify", "1.2.3", "--repo", "conda/example"]
+    assert calls[3:] == [
+        [
+            "gh",
+            "release",
+            "verify-asset",
+            "1.2.3",
+            "dist/example-1.2.3-py3-none-any.whl",
+            "--repo",
+            "conda/example",
+        ],
+        [
+            "gh",
+            "release",
+            "verify-asset",
+            "1.2.3",
+            "dist/example-1.2.3.tar.gz",
+            "--repo",
+            "conda/example",
+        ],
     ]
     assert output.read_text(encoding="utf-8") == (
         "version=1.2.3\n"
@@ -267,15 +344,18 @@ def test_create_release_publishes_without_artifacts(
 
     assert calls[0][:5] == ["gh", "release", "create", "1.2.3", "--draft"]
     assert calls[0][-1].startswith("--notes=")
-    assert len(calls[0]) == 10
+    assert len(calls[0]) == 12
     assert notes
-    assert calls[-1] == [
+    assert calls[1] == [
         "gh",
         "release",
         "edit",
         "1.2.3",
+        "--repo",
+        "conda/example",
         "--draft=false",
     ]
+    assert calls[2] == ["gh", "release", "verify", "1.2.3", "--repo", "conda/example"]
 
 
 def test_create_release_updates_existing_draft(
@@ -292,15 +372,27 @@ def test_create_release_updates_existing_draft(
 
     create_release(release_args(tmp_path, artifacts_directory="dist"))
 
-    assert calls[0][:3] == ["gh", "release", "edit"]
-    assert "--draft" not in calls[0]
+    assert calls[0] == [
+        "gh",
+        "release",
+        "edit",
+        "1.2.3",
+        "--repo",
+        "conda/example",
+        "--target",
+        "a" * 40,
+        "--title",
+        "1.2.3",
+        f"--notes={NOTES}",
+    ]
     assert notes == [NOTES]
     assert calls[1] == [
         "gh",
         "release",
         "upload",
         "1.2.3",
-        "--clobber",
+        "--repo",
+        "conda/example",
         "dist/example-1.2.3.tar.gz",
     ]
     assert calls[2] == [
@@ -308,8 +400,41 @@ def test_create_release_updates_existing_draft(
         "release",
         "edit",
         "1.2.3",
+        "--repo",
+        "conda/example",
         "--draft=false",
     ]
+    assert calls[3] == ["gh", "release", "verify", "1.2.3", "--repo", "conda/example"]
+    assert calls[4] == [
+        "gh",
+        "release",
+        "verify-asset",
+        "1.2.3",
+        "dist/example-1.2.3.tar.gz",
+        "--repo",
+        "conda/example",
+    ]
+
+
+def test_create_release_rejects_draft_target_for_different_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    write_merged_pr_event(tmp_path, monkeypatch)
+    calls, _ = mock_gh(
+        monkeypatch,
+        state="draft",
+        commit_sha="b" * 40,
+        target_commitish="not-the-merge-commit",
+    )
+
+    with pytest.raises(
+        ActionError, match="Draft release 1.2.3 targets a different commit"
+    ):
+        create_release(release_args(tmp_path))
+
+    assert not calls
 
 
 def test_create_release_noops_when_already_published(
@@ -321,26 +446,27 @@ def test_create_release_noops_when_already_published(
     write_merged_pr_event(tmp_path, monkeypatch)
     output = tmp_path / "outputs"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
-    calls, _ = mock_gh(monkeypatch, state="published")
+    calls, _ = mock_gh(monkeypatch, state="published", tag_sha="a" * 40)
 
     create_release(release_args(tmp_path))
 
-    assert not calls
+    assert calls == [["gh", "release", "verify", "1.2.3", "--repo", "conda/example"]]
     assert (
-        "Release 1.2.3 is already published. Nothing to do." in capsys.readouterr().out
+        "Release 1.2.3 is already published and matches these files."
+        in capsys.readouterr().out
     )
     assert "version=1.2.3\n" in output.read_text(encoding="utf-8")
 
 
-def test_create_release_rejects_existing_tag_without_release(
+def test_create_release_rejects_tag_for_different_commit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     write_merged_pr_event(tmp_path, monkeypatch)
-    calls, _ = mock_gh(monkeypatch, tag=True)
+    calls, _ = mock_gh(monkeypatch, tag=True, tag_sha="b" * 40)
 
-    with pytest.raises(ActionError, match="Tag 1.2.3 already exists"):
+    with pytest.raises(ActionError, match="Tag 1.2.3 points to a different commit"):
         create_release(release_args(tmp_path))
 
     assert not calls
@@ -396,9 +522,12 @@ def test_resolve_artifacts_rejects_empty_directory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "dist").mkdir()
+    dist_dir = "dist"
+    (tmp_path / dist_dir).mkdir()
 
-    with pytest.raises(ActionError, match="Artifacts directory is empty"):
+    with pytest.raises(
+        ActionError, match=f"Artifacts directory contains no files: {dist_dir}"
+    ):
         resolve_artifacts("dist")
 
 
@@ -421,7 +550,18 @@ def test_main_publishes_release(
         == 0
     )
 
-    assert calls[-1][-1] == "--draft=false"
+    assert calls[-2:] == [
+        [
+            "gh",
+            "release",
+            "edit",
+            "1.2.3",
+            "--repo",
+            "conda/example",
+            "--draft=false",
+        ],
+        ["gh", "release", "verify", "1.2.3", "--repo", "conda/example"],
+    ]
 
 
 @pytest.mark.parametrize("event_path", [None, "missing.json"])
@@ -474,7 +614,7 @@ def test_create_release_updates_draft_without_artifacts(
 
     create_release(release_args(tmp_path))
 
-    assert [command[2] for command in calls] == ["edit", "edit"]
+    assert [command[2] for command in calls] == ["edit", "edit", "verify"]
 
 
 def test_release_notes_does_not_match_a_longer_version() -> None:
