@@ -1,0 +1,52 @@
+name: Create Release
+description: Publish a GitHub release for a merged release PR and create its version tag.
+branding:
+  icon: tag
+  color: green
+
+inputs:
+  changelog-path:
+    description: Changelog file to read the release notes from.
+    default: CHANGELOG.md
+  branch-prefix:
+    description: Prefix of the release PR branch that names the version to release.
+    default: release-notes-
+  artifacts-directory:
+    description: >-
+      Directory holding the files to attach to the release. Leave empty when
+      the release has no files.
+    default: ''
+  token:
+    description: >-
+      GitHub token with `contents: write` permissions to create the
+      release and its tag (required).
+    required: true
+
+outputs:
+  version:
+    description: Released version, taken from the merged release PR branch.
+    value: ${{ steps.release.outputs.version }}
+  commit:
+    description: Merge commit SHA the release is created from.
+    value: ${{ steps.release.outputs.commit }}
+  release-url:
+    description: URL of the release.
+    value: ${{ steps.release.outputs.release-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create Release
+      id: release
+      shell: bash
+      run: >
+        python "$GITHUB_ACTION_PATH/create_release.py"
+        --changelog-path "$INPUT_CHANGELOG_PATH"
+        --branch-prefix "$INPUT_BRANCH_PREFIX"
+        --artifacts-directory "$INPUT_ARTIFACTS_DIRECTORY"
+      env:
+        PYTHONPATH: ${{ github.action_path }}/..
+        GH_TOKEN: ${{ inputs.token }}
+        INPUT_CHANGELOG_PATH: ${{ inputs.changelog-path }}
+        INPUT_BRANCH_PREFIX: ${{ inputs.branch-prefix }}
+        INPUT_ARTIFACTS_DIRECTORY: ${{ inputs.artifacts-directory }}
