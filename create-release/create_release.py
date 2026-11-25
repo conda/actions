@@ -44,11 +44,11 @@ def create_release(args: Namespace) -> None:
     artifacts = resolve_artifacts(args.artifacts_directory)
     digests = {artifact.name: file_digest(artifact) for artifact in artifacts}
     release = get_release(version)
-    verify_source(version, commit, release)
     if release is not None and not release["isDraft"]:
         verify_published(release, version, commit, artifacts, digests)
         print(f"Release {version} is already published and matches these files.")
     else:
+        verify_source(version, commit, release)
         changelog = Path(args.changelog_path)
         if not changelog.is_file():
             raise ActionError(f"Changelog file does not exist: {changelog}")
